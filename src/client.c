@@ -38,14 +38,14 @@ void main_coro(mco_coro* co) {
 
   // Alice seed
   Str A_seed_str = str_from_c(A_seed_hex);
-  CHECK(A_seed_str.len == 64, "got length %" PRIu64, A_seed_str.len);
+  CHECK(A_seed_str.len == 64, "got length %d", (int)A_seed_str.len);
   CryptoSeed A_seed;
   sodium_hex2bin((u8*)&A_seed, sizeof(A_seed), (char*)A_seed_str.buf, A_seed_str.len, 0, 0, 0);
   pcrypt(A_seed);
 
   // Bob seed
   Str B_seed_str = str_from_c(B_seed_hex);
-  CHECK(B_seed_str.len == 64, "got length %" PRIu64, B_seed_str.len);
+  CHECK(B_seed_str.len == 64, "got length %d", (int)B_seed_str.len);
   CryptoSeed B_seed;
   sodium_hex2bin((u8*)&B_seed, sizeof(B_seed), (char*)B_seed_str.buf, B_seed_str.len, 0, 0, 0);
   pcrypt(B_seed);
@@ -57,7 +57,6 @@ void main_coro(mco_coro* co) {
   // Bob init
   CryptoUserState B_sec;
   CHECK(crypto_seed_new_user(&B_seed, &B_sec) == 0);
-  CryptoUserPState* B_pub = &B_sec.pub;
 
   // Alice's message to Bob
   Str A_msg_buf;
@@ -66,7 +65,7 @@ void main_coro(mco_coro* co) {
     printf("plaintxt=%.*s\n", (int)plaintxt.len, plaintxt.buf);
     A_msg_buf.len = crypto_x3dh_first_msg_len(plaintxt.len);
     A_msg_buf.buf = malloc(A_msg_buf.len);
-    CHECK(crypto_x3dh_first_msg(&A_sec, B_pub, plaintxt, &A_msg_buf) == 0);
+    CHECK(crypto_x3dh_first_msg(&A_sec, &B_sec.pub, plaintxt, &A_msg_buf) == 0);
   }
 
   phex("msg", A_msg_buf.buf, A_msg_buf.len);
@@ -84,6 +83,9 @@ void main_coro(mco_coro* co) {
     CHECK(crypto_x3dh_first_msg_recv(&B_sec, header, ciphertxt, &plaintxt) == 0);
 
     printf("decrypted=%.*s\n", (int)plaintxt.len, plaintxt.buf);
+    CHECK(plaintxt.len == strlen(A_to_B_message));
+    CHECK(sodium_memcmp(plaintxt.buf, A_to_B_message, strlen(A_to_B_message)) == 0);
+
     free(plaintxt.buf);
   }
 
@@ -122,11 +124,14 @@ void mco_dealloc(void* ptr, size_t size, void* udata) {
 int main(int argc, char** argv) {
   LOG("hello");
 
+  // libsodium init
   CHECK(crypto_init() == 0);
 
+  // libuv init
   uv_loop_t loop;
   uv_loop_init(&loop);
 
+  // coro init
   MainCoroCtx ctx = { argc, argv, &loop };
   mco_desc desc = mco_desc_init(main_coro, 1 << 21);  // 2MiB main stack
   desc.allocator_data = &ctx;
@@ -134,17 +139,18 @@ int main(int argc, char** argv) {
   desc.dealloc_cb = mco_dealloc;
   desc.user_data = &ctx;
   mco_coro* co;
-  mco_result res = mco_create(&co, &desc);
-  CHECK(res == MCO_SUCCESS);
-  res = mco_resume(co);
-  CHECK(res == MCO_SUCCESS);
+  CHECK(mco_create(&co, &desc) == MCO_SUCCESS);
 
-  uv_run(&loop, UV_RUN_DEFAULT);
-  uv_loop_close(&loop);
+  // run
+  CHECK(mco_resume(co) == MCO_SUCCESS);
+  if (mco_status(co) == MCO_SUSPENDED) uv_run(&loop, UV_RUN_DEFAULT);
 
+  // coro deinit
   CHECK(mco_status(co) == MCO_DEAD);
-  res = mco_destroy(co);
-  CHECK(res == MCO_SUCCESS);
+  CHECK(mco_destroy(co) == MCO_SUCCESS);
+
+  // libuv deinit
+  uv_loop_close(&loop);
 
   LOG("goodbye");
   return 0;
