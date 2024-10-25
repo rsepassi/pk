@@ -1,56 +1,66 @@
 CC = zig cc
+export CC
+
 CFLAGS += -std=c99 -Wall -Werror -DDEBUG
 
+# src/
 HDRS = $(wildcard src/*.h)
 SRCS = $(wildcard src/*.c)
 OBJS = $(addprefix build/, $(notdir $(SRCS:.c=.o)))
+
+# test/
 TEST_SRCS = $(wildcard test/*.c)
 TESTS = $(addprefix build/, $(TEST_SRCS:.c=.ok))
+TEST_FLAGS = \
+		`PKG_CONFIG_PATH=vendor/unity pkg-config --define-variable=prefix=vendor/unity --cflags unity` \
+		`PKG_CONFIG_PATH=vendor/unity pkg-config --define-variable=prefix=vendor/unity --libs unity`
 
+# vendor/
+DEPS = libsodium libuv arena minicoro
 DEPS_CFLAGS = \
 		`PKG_CONFIG_PATH=vendor/libsodium pkg-config --define-variable=prefix=vendor/libsodium --cflags sodium` \
 		`PKG_CONFIG_PATH=vendor/minicoro pkg-config --define-variable=prefix=vendor/minicoro --cflags minicoro` \
 		`PKG_CONFIG_PATH=vendor/libuv pkg-config --define-variable=prefix=vendor/libuv --cflags uv`
-
 DEPS_LDFLAGS = \
 		`PKG_CONFIG_PATH=vendor/libsodium pkg-config --define-variable=prefix=vendor/libsodium --libs sodium` \
 		`PKG_CONFIG_PATH=vendor/minicoro pkg-config --define-variable=prefix=vendor/minicoro --libs minicoro` \
 		`PKG_CONFIG_PATH=vendor/libuv pkg-config --define-variable=prefix=vendor/libuv --libs uv`
 
-TEST_FLAGS = \
-		`PKG_CONFIG_PATH=vendor/unity pkg-config --define-variable=prefix=vendor/unity --cflags unity` \
-		`PKG_CONFIG_PATH=vendor/unity pkg-config --define-variable=prefix=vendor/unity --libs unity`
+BUILD_DEPS = $(HDRS) Makefile build/.mk
 
-build/client: $(OBJS)
-	make deps
+# compile the client executable
+build/client: $(OBJS) $(BUILD_DEPS)
+	$(MAKE) deps
 	$(CC) -o $@ $(CFLAGS) $(OBJS) $(DEPS_LDFLAGS) -lc
 
-build/%.o: src/%.c $(HDRS) Makefile build/.mk
-	make deps
+# compile a src file
+build/%.o: src/%.c $(BUILD_DEPS)
+	$(MAKE) deps
 	$(CC) -c $(CFLAGS) -o $@ $(DEPS_CFLAGS) $<
-
-build/.mk:
-	mkdir -p build/test
-	touch build/.mk
 
 .PHONY: test
 test:
-	make $(TESTS)
+	$(MAKE) $(TESTS)
 
-build/test/%: test/%.c $(HDRS) Makefile build/.mk
-	make deps
-	make -C vendor/unity
-	$(CC) $(CFLAGS) -o $@ $(DEPS_CFLAGS) $(DEPS_LDFLAGS) $(TEST_FLAGS) $<
-
+# execute a test
 build/test/%.ok: build/test/%
 	./$< && touch $@
 
-.PHONY: deps
-deps:
-	make -C vendor/libsodium
-	make -C vendor/libuv
-	make -C vendor/arena
-	make -C vendor/minicoro
+# compile a test executable
+build/test/%: test/%.c $(BUILD_DEPS)
+	$(MAKE) deps
+	$(MAKE) -C vendor/unity
+	$(CC) $(CFLAGS) -o $@ $(DEPS_CFLAGS) $(DEPS_LDFLAGS) $(TEST_FLAGS) $<
+
+.PHONY: deps $(DEPS)
+deps: $(DEPS)
+$(DEPS):
+	$(MAKE) -C vendor/$@
+
+# create the build directory
+build/.mk:
+	mkdir -p build/test
+	touch build/.mk
 
 .PHONY: clean
 clean:
@@ -58,9 +68,9 @@ clean:
 
 .PHONY: clean-all
 clean-all:
-	make clean
-	make -C vendor/libsodium clean
-	make -C vendor/libuv clean
-	make -C vendor/arena clean
-	make -C vendor/minicoro clean
-	make -C vendor/unity clean
+	$(MAKE) clean
+	$(MAKE) -C vendor/libsodium clean
+	$(MAKE) -C vendor/libuv clean
+	$(MAKE) -C vendor/arena clean
+	$(MAKE) -C vendor/minicoro clean
+	$(MAKE) -C vendor/unity clean
