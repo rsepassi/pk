@@ -15,7 +15,7 @@ DEPS_LDFLAGS = \
 		`PKG_CONFIG_PATH=vendor/minicoro pkg-config --define-variable=prefix=vendor/minicoro --libs minicoro` \
 		`PKG_CONFIG_PATH=vendor/libuv pkg-config --define-variable=prefix=vendor/libuv --libs uv`
 
-build/client: $(OBJS) build/.keep
+build/client: $(OBJS) build/.mk
 	make deps
 	$(CC) -o $@ $(CFLAGS) $(OBJS) $(DEPS_LDFLAGS) -lc
 
@@ -23,9 +23,9 @@ build/%.o: src/%.c $(HDRS) Makefile
 	make deps
 	$(CC) -c $(CFLAGS) -o $@ $(DEPS_CFLAGS) $<
 
-build/.keep:
-	mkdir build
-	touch build/.keep
+build/.mk:
+	mkdir -p build
+	touch build/.mk
 
 .PHONY: deps
 deps:
