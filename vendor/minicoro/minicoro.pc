@@ -1,0 +1,5 @@
+Name: minicoro
+Version: ff5321d
+Description: asymmetric coroutines for C
+Libs: ${prefix}/libminicoro.a
+Cflags: -I${prefix}
