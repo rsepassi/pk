@@ -1,0 +1,5 @@
+Name: unity
+Version: c546414
+Description: C unit testing
+Libs: ${prefix}/libunity.a
+Cflags: -I${prefix}/include
