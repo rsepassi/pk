@@ -1,41 +1,39 @@
-CC = zig cc
-export CC
+export CC := zig cc
+export PATH := scripts:$(PATH)
 
 CFLAGS += -std=c99 -Wall -Werror -DDEBUG
 
 # src/
-HDRS = $(wildcard src/*.h)
-SRCS = $(wildcard src/*.c)
-OBJS = $(addprefix build/, $(notdir $(SRCS:.c=.o)))
+HDRS := $(wildcard src/*.h)
+SRCS := $(wildcard src/*.c)
+OBJS := $(addprefix build/, $(notdir $(SRCS:.c=.o)))
 
 # test/
-TEST_SRCS = $(wildcard test/*.c)
-TESTS = $(addprefix build/, $(TEST_SRCS:.c=.ok))
-TEST_FLAGS = \
-		`PKG_CONFIG_PATH=vendor/unity pkg-config --define-variable=prefix=vendor/unity --cflags unity` \
-		`PKG_CONFIG_PATH=vendor/unity pkg-config --define-variable=prefix=vendor/unity --libs unity`
+TEST_SRCS := $(wildcard test/*.c)
+TESTS := $(addprefix build/, $(TEST_SRCS:.c=.ok))
+TEST_FLAGS := \
+		`need-cflags vendor/unity` \
+		`need-libs vendor/unity`
 
 # vendor/
-DEPS = libsodium libuv arena minicoro
-DEPS_CFLAGS = \
-		`PKG_CONFIG_PATH=vendor/libsodium pkg-config --define-variable=prefix=vendor/libsodium --cflags sodium` \
-		`PKG_CONFIG_PATH=vendor/minicoro pkg-config --define-variable=prefix=vendor/minicoro --cflags minicoro` \
-		`PKG_CONFIG_PATH=vendor/libuv pkg-config --define-variable=prefix=vendor/libuv --cflags uv`
-DEPS_LDFLAGS = \
-		`PKG_CONFIG_PATH=vendor/libsodium pkg-config --define-variable=prefix=vendor/libsodium --libs sodium` \
-		`PKG_CONFIG_PATH=vendor/minicoro pkg-config --define-variable=prefix=vendor/minicoro --libs minicoro` \
-		`PKG_CONFIG_PATH=vendor/libuv pkg-config --define-variable=prefix=vendor/libuv --libs uv`
+DEPS := libsodium libuv arena minicoro
+DEPS_CFLAGS := \
+		`need-cflags vendor/libsodium sodium` \
+		`need-cflags vendor/minicoro` \
+		`need-cflags vendor/libuv uv`
+DEPS_LDFLAGS := \
+		`need-libs vendor/libsodium sodium` \
+		`need-libs vendor/minicoro` \
+		`need-libs vendor/libuv uv`
 
-BUILD_DEPS = $(HDRS) Makefile build/.mk
+BUILD_DEPS := $(HDRS) Makefile build/.mk
 
 # compile the client executable
-build/client: $(OBJS) $(BUILD_DEPS)
-	$(MAKE) deps
+build/client: $(OBJS) $(BUILD_DEPS) deps
 	$(CC) -o $@ $(CFLAGS) $(OBJS) $(DEPS_LDFLAGS) -lc
 
 # compile a src file
 build/%.o: src/%.c $(BUILD_DEPS)
-	$(MAKE) deps
 	$(CC) -c $(CFLAGS) -o $@ $(DEPS_CFLAGS) $<
 
 .PHONY: test
@@ -47,14 +45,16 @@ build/test/%.ok: build/test/%
 	./$< && touch $@
 
 # compile a test executable
-build/test/%: test/%.c $(BUILD_DEPS)
-	$(MAKE) deps
-	$(MAKE) -C vendor/unity
+build/test/%: test/%.c $(BUILD_DEPS) deps unity
 	$(CC) $(CFLAGS) -o $@ $(DEPS_CFLAGS) $(DEPS_LDFLAGS) $(TEST_FLAGS) $<
 
 .PHONY: deps $(DEPS)
 deps: $(DEPS)
 $(DEPS):
+	$(MAKE) -C vendor/$@
+
+.PHONY: unity
+unity:
 	$(MAKE) -C vendor/$@
 
 # create the build directory

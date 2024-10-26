@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+
+dir=$1
+lib=${2:-$(basename $dir)}
+
+PKG_CONFIG_PATH=$dir pkg-config --define-variable=prefix=$dir --cflags $lib
