@@ -1,0 +1,46 @@
+#!/usr/bin/env sh
+
+name=$1
+
+rm -rf lib/$name
+
+mkdir lib/$name
+cd lib/$name
+mkdir src include
+cat <<EOF > include/$name.h
+#pragma once
+
+// Header
+void hello(void);
+EOF
+cat <<EOF > src/$name.c
+#include "$name.h"
+
+// Source
+void hello(void) {}
+EOF
+
+# The Makefile must use tabs
+cat <<EOF > Makefile
+HDRS := \$(wildcard include/*.h)
+SRCS := \$(wildcard src/*.c) \$(wildcard src/*.h)
+OBJS := \$(SRCS:.c=.o)
+
+lib$name.a: \$(OBJS) Makefile
+	\$(AR) rcs \$@ \$(OBJS)
+	touch .build
+
+%.o: %.c \$(HDRS) Makefile
+	\$(CC) -c \$(CFLAGS) -Iinclude -o \$@ \$<
+
+clean:
+	rm -f *.a src/*.o .build
+EOF
+
+cat <<EOF > $name.pc
+Name: $name
+Version: 0.0.1
+Description: <none>
+Libs: \${prefix}/lib$name.a
+Cflags: -I\${prefix}/include
+EOF
