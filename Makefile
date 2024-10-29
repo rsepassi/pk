@@ -1,8 +1,8 @@
 export CC := zig cc
 export AR := zig ar
-export PATH := scripts:$(PATH)
-
-CFLAGS += -std=c99 -Wall -Werror -DDEBUG
+export PATH := $(CURDIR)/scripts:$(PATH)
+export ROOTDIR := $(CURDIR)
+export CFLAGS += -std=c99 -Wall -Werror -O2
 
 # src/
 HDRS := $(wildcard src/*.h)
@@ -17,7 +17,7 @@ TEST_FLAGS := \
 		`need-libs vendor/unity`
 
 # lib/ vendor/
-LIB_DEPS := getpass
+LIB_DEPS := getpass cbase uvco
 VENDOR_DEPS := libsodium libuv arena minicoro lmdb argparse
 DEPS := $(LIB_DEPS) $(VENDOR_DEPS)
 
@@ -31,6 +31,8 @@ DEP_FILES := $(LIB_DEP_FILES) $(VENDOR_DEP_FILES)
 
 DEPS_CFLAGS := \
 		`need-cflags lib/getpass` \
+		`need-cflags lib/cbase` \
+		`need-cflags lib/uvco` \
 		`need-cflags vendor/libsodium sodium` \
 		`need-cflags vendor/lmdb` \
 		`need-cflags vendor/argparse` \
@@ -38,6 +40,8 @@ DEPS_CFLAGS := \
 		`need-cflags vendor/libuv uv`
 DEPS_LDFLAGS := \
 		`need-libs lib/getpass` \
+		`need-libs lib/cbase` \
+		`need-libs lib/uvco` \
 		`need-libs vendor/libsodium sodium` \
 		`need-libs vendor/lmdb` \
 		`need-libs vendor/argparse` \

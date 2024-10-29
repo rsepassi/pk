@@ -6,15 +6,18 @@
 
 // lib
 #include "getpass.h"
-
-// src
+#include "uvco.h"
 #include "log.h"
 #include "stdtypes.h"
 
+// src
 #include "crypto.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 #define MAX_PW_LEN 2048
+
+// Global event loop
+uv_loop_t* loop;
 
 // Some constant data
 char *A_to_B_message = "hello world";
@@ -44,7 +47,7 @@ int demo_kv(int argc, const char **argv) {
   MDB_val user_key;
   MDB_val user_val;
   {
-    CHECK(argc >= 4, "must specify get or put along with a key");
+    CHECK(argc >= 4, "usage: demo-kv kvfolder {get,put} key [value]");
     user_key.mv_data = (void*)argv[3];
     user_key.mv_size = strlen(user_key.mv_data);
     if (!strcmp(argv[2], "get")) {
@@ -60,7 +63,30 @@ int demo_kv(int argc, const char **argv) {
     }
     (void)cmd;
   }
-  
+
+  // Open/create KV
+  MDB_env* kv;
+  MDB_dbi db;
+  MDB_txn* txn;
+  MDB_txn* rtxn;
+  {
+    const char* kv_path = argv[1];
+    LOG("kv=%s", kv_path);
+
+    // Check that directory exists
+    uv_fs_t req;
+    CHECK0(uvco_fs_stat(loop, &req, kv_path), "kv path must be a directory: %s", kv_path);
+    CHECK(S_ISDIR(req.statbuf.st_mode), "kv path must be a directory: %s", kv_path);
+    uv_fs_req_cleanup(&req);
+
+    mode_t kv_mode = S_IRUSR | S_IWUSR | S_IRGRP; // rw-r-----
+    CHECK0(mdb_env_create(&kv));
+    CHECK0(mdb_env_open(kv, kv_path, MDB_NOLOCK, kv_mode));
+    CHECK0(mdb_txn_begin(kv, 0, 0, &txn));
+    CHECK0(mdb_dbi_open(txn, 0, MDB_CREATE, &db));
+    CHECK0(mdb_txn_commit(txn));
+  }
+
   // Ask for password
   char* pw = malloc(MAX_PW_LEN);
   sodium_mlock(pw, MAX_PW_LEN);
@@ -74,22 +100,6 @@ int demo_kv(int argc, const char **argv) {
       pw = "asdfasdf";
       pw_len = strlen(pw);
     }
-  }
-
-  // Open/create KV
-  MDB_env* kv;
-  MDB_dbi db;
-  MDB_txn* txn;
-  MDB_txn* rtxn;
-  {
-    const char* kv_path = argv[1];
-    LOG("kv=%s", kv_path);
-    mode_t kv_mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH; // rw-r--r--
-    CHECK0(mdb_env_create(&kv));
-    CHECK0(mdb_env_open(kv, kv_path, MDB_NOLOCK, kv_mode));
-    CHECK0(mdb_txn_begin(kv, 0, 0, &txn));
-    CHECK0(mdb_dbi_open(txn, 0, MDB_CREATE, &db));
-    CHECK0(mdb_txn_commit(txn));
   }
 
   // If it's a fresh db:
@@ -106,6 +116,7 @@ int demo_kv(int argc, const char **argv) {
     int rc = mdb_get(rtxn, db, &salt_key, &salt_val);
     mdb_txn_reset(rtxn);
     if (rc == MDB_NOTFOUND) {
+      LOG("fresh kv store");
       u8 pwhash_and_salt[crypto_pwhash_SALTBYTES + crypto_pwhash_STRBYTES];
 
       // Create a random salt
@@ -118,7 +129,7 @@ int demo_kv(int argc, const char **argv) {
       CHECK0(crypto_pwhash_str((char*)(pwhash_and_salt + crypto_pwhash_SALTBYTES), pw, pw_len, opslimit, memlimit));
 
       // Insert in kv
-      salt_val.mv_size = sizeof(pwhash_and_salt);
+      salt_val.mv_size = crypto_pwhash_SALTBYTES + crypto_pwhash_STRBYTES;
       salt_val.mv_data = pwhash_and_salt;
       CHECK0(mdb_txn_begin(kv, 0, 0, &txn));
       CHECK0(mdb_put(txn, db, &salt_key, &salt_val, 0));
@@ -301,7 +312,6 @@ static struct cmd_struct commands[] = {
 typedef struct {
   int argc;
   const char **argv;
-  uv_loop_t *loop;
 } MainCoroCtx;
 
 void coro_exit(u8 code) {
@@ -343,19 +353,19 @@ void main_coro(mco_coro *co) {
 }
 
 #define MAIN_STACK_SIZE 1 << 21
-u8 main_stack[MAIN_STACK_SIZE];
 
-void *main_stack_alloc(size_t size, void *udata) {
+void* mco_alloc(size_t size, void *udata) {
   MainCoroCtx *ctx = (MainCoroCtx *)udata;
   (void)ctx;
   (void)size;
-  return main_stack;
+  return calloc(1, size);
 }
 
 void mco_dealloc(void *ptr, size_t size, void *udata) {
   MainCoroCtx *ctx = (MainCoroCtx *)udata;
   (void)ctx;
-  (void)ptr;
+  (void)size;
+  return free(ptr);
 }
 
 int main(int argc, const char **argv) {
@@ -365,14 +375,15 @@ int main(int argc, const char **argv) {
   CHECK(crypto_init() == 0);
 
   // libuv init
-  uv_loop_t loop;
-  uv_loop_init(&loop);
+  loop = malloc(sizeof(uv_loop_t));
+  CHECK(loop);
+  uv_loop_init(loop);
 
   // coro init
-  MainCoroCtx ctx = {argc, argv, &loop};
+  MainCoroCtx ctx = {argc, argv};
   mco_desc desc = mco_desc_init(main_coro, MAIN_STACK_SIZE);
   desc.allocator_data = &ctx;
-  desc.alloc_cb = main_stack_alloc;
+  desc.alloc_cb = mco_alloc;
   desc.dealloc_cb = mco_dealloc;
   desc.user_data = &ctx;
   mco_coro *co;
@@ -381,7 +392,7 @@ int main(int argc, const char **argv) {
   // run
   CHECK(mco_resume(co) == MCO_SUCCESS);
   if (mco_status(co) == MCO_SUSPENDED)
-    uv_run(&loop, UV_RUN_DEFAULT);
+    uv_run(loop, UV_RUN_DEFAULT);
 
   u8 rc = 0;
   if (mco_get_storage_size(co) > 0) mco_pop(co, &rc, 1);
@@ -391,7 +402,8 @@ int main(int argc, const char **argv) {
   CHECK(mco_destroy(co) == MCO_SUCCESS);
 
   // libuv deinit
-  uv_loop_close(&loop);
+  uv_loop_close(loop);
+  free(loop);
 
   LOG("goodbye (code=%d)", rc);
   return rc;
