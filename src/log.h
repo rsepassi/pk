@@ -17,6 +17,7 @@
     if (!(x)) { LOG("check failed: (%s) " fmt, #x, ##__VA_ARGS__); exit(1); } \
     } while (0)
 #define CHECK(x, ...) CHECK_(x, "" __VA_ARGS__)
+#define CHECK0(x, ...) CHECK(((x) == 0), ##__VA_ARGS__)
 
 #ifdef DEBUG
 #define DCHECK(x, ...) CHECK(x, ##__VA_ARGS__)
