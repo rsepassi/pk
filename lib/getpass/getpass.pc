@@ -1,0 +1,5 @@
+Name: getpass
+Version: 1.0.0
+Description: portable getpass
+Libs: ${prefix}/libgetpass.a
+Cflags: -I${prefix}/include
