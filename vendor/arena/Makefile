@@ -1,7 +1,8 @@
 libarena.a:
 	$(CC) -c $(CFLAGS) arena.c
 	$(AR) rcs $@ arena.o
+	touch .build
 
 .PHONY: clean
 clean:
-	rm -f libarena.a arena.o
+	rm -f *.a *.o .build

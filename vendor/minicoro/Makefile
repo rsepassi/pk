@@ -1,7 +1,8 @@
 libminicoro.a:
 	$(CC) -c $(CFLAGS) minicoro.c
 	$(AR) rcs $@ minicoro.o
+	touch .build
 
 .PHONY: clean
 clean:
-	rm -f minicoro.o libminicoro.a
+	rm -f *.o *.a .build
