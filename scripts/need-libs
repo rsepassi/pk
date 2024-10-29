@@ -3,4 +3,9 @@
 dir=$1
 lib=${2:-$(basename $dir)}
 
+if [ -n "$ROOTDIR" ]
+then
+  dir=$ROOTDIR/$dir
+fi
+
 PKG_CONFIG_PATH=$dir pkg-config --define-variable=prefix=$dir --libs $lib
