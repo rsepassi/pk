@@ -1,4 +1,5 @@
 export CC := zig cc
+export AR := zig ar
 export PATH := scripts:$(PATH)
 
 CFLAGS += -std=c99 -Wall -Werror -DDEBUG
@@ -15,21 +16,38 @@ TEST_FLAGS := \
 		`need-cflags vendor/unity` \
 		`need-libs vendor/unity`
 
-# vendor/
-DEPS := libsodium libuv arena minicoro
+# lib/ vendor/
+LIB_DEPS := getpass
+VENDOR_DEPS := libsodium libuv arena minicoro lmdb argparse
+DEPS := $(LIB_DEPS) $(VENDOR_DEPS)
+
+LIB_DEPS_CLEAN := $(addsuffix -clean, $(LIB_DEPS))
+VENDOR_DEPS_CLEAN := $(addsuffix -clean, $(VENDOR_DEPS))
+DEPS_CLEAN := $(LIB_DEPS_CLEAN) $(VENDOR_DEPS_CLEAN)
+
+LIB_DEP_FILES := $(addprefix lib/, $(addsuffix /.build, $(LIB_DEPS)))
+VENDOR_DEP_FILES := $(addprefix vendor/, $(addsuffix /.build, $(VENDOR_DEPS)))
+DEP_FILES := $(LIB_DEP_FILES) $(VENDOR_DEP_FILES)
+
 DEPS_CFLAGS := \
+		`need-cflags lib/getpass` \
 		`need-cflags vendor/libsodium sodium` \
+		`need-cflags vendor/lmdb` \
+		`need-cflags vendor/argparse` \
 		`need-cflags vendor/minicoro` \
 		`need-cflags vendor/libuv uv`
 DEPS_LDFLAGS := \
+		`need-libs lib/getpass` \
 		`need-libs vendor/libsodium sodium` \
+		`need-libs vendor/lmdb` \
+		`need-libs vendor/argparse` \
 		`need-libs vendor/minicoro` \
 		`need-libs vendor/libuv uv`
 
-BUILD_DEPS := $(HDRS) Makefile build/.mk
+BUILD_DEPS = $(HDRS) Makefile build/.mk $(DEP_FILES)
 
 # compile the client executable
-build/client: $(OBJS) $(BUILD_DEPS) deps
+build/client: $(OBJS) $(BUILD_DEPS)
 	$(CC) -o $@ $(CFLAGS) $(OBJS) $(DEPS_LDFLAGS) -lc
 
 # compile a src file
@@ -45,13 +63,15 @@ build/test/%.ok: build/test/%
 	./$< && touch $@
 
 # compile a test executable
-build/test/%: test/%.c $(BUILD_DEPS) deps unity
+build/test/%: test/%.c $(BUILD_DEPS) | unity
 	$(CC) $(CFLAGS) -o $@ $(DEPS_CFLAGS) $(DEPS_LDFLAGS) $(TEST_FLAGS) $<
 
-.PHONY: deps $(DEPS)
-deps: $(DEPS)
-$(DEPS):
+$(LIB_DEPS):
+	$(MAKE) -C lib/$@
+$(VENDOR_DEPS):
 	$(MAKE) -C vendor/$@
+$(LIB_DEP_FILES): $(LIB_DEPS)
+$(VENDOR_DEP_FILES): $(VENDOR_DEPS)
 
 .PHONY: unity
 unity:
@@ -66,11 +86,9 @@ build/.mk:
 clean:
 	rm -rf build
 
-.PHONY: clean-all
-clean-all:
-	$(MAKE) clean
-	$(MAKE) -C vendor/libsodium clean
-	$(MAKE) -C vendor/libuv clean
-	$(MAKE) -C vendor/arena clean
-	$(MAKE) -C vendor/minicoro clean
-	$(MAKE) -C vendor/unity clean
+.PHONY: clean-all $(DEPS_CLEAN)
+clean-all: clean $(DEPS_CLEAN)
+$(LIB_DEPS_CLEAN):
+	$(MAKE) -C lib/$(@:-clean=) clean
+$(VENDOR_DEPS_CLEAN):
+	$(MAKE) -C vendor/$(@:-clean=) clean

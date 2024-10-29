@@ -2,4 +2,6 @@ build/
 zig-out/
 .zig-cache/
 *.o
+*.obj
 *.a
+*.build
