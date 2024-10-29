@@ -1,0 +1,5 @@
+Name: base58
+Version: 0.1.4
+Description: Bitcoin's base58 encoding
+Libs: ${prefix}/libbase58.a
+Cflags: -I${prefix}/include
