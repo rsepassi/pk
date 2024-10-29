@@ -1,0 +1,5 @@
+Name: argparse
+Version: 682d452
+Description: cli argument parsing
+Libs: ${prefix}/libargparse.a
+Cflags: -I${prefix}/include
