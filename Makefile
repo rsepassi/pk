@@ -16,24 +16,27 @@ TEST_FLAGS := \
 		`need-cflags vendor/unity` \
 		`need-libs vendor/unity`
 
-# lib/ vendor/
-LIB_DEPS := getpass cbase uvco
-VENDOR_DEPS := libsodium libuv arena minicoro lmdb argparse
-DEPS := $(LIB_DEPS) $(VENDOR_DEPS)
+# deps lib/ vendor/
+DEPS := \
+		lib/getpass \
+		lib/cbase \
+		lib/uvco \
+		vendor/libsodium \
+		vendor/tai \
+		vendor/libuv \
+		vendor/arena \
+		vendor/minicoro \
+		vendor/lmdb \
+		vendor/argparse
 
-LIB_DEPS_CLEAN := $(addsuffix -clean, $(LIB_DEPS))
-VENDOR_DEPS_CLEAN := $(addsuffix -clean, $(VENDOR_DEPS))
-DEPS_CLEAN := $(LIB_DEPS_CLEAN) $(VENDOR_DEPS_CLEAN)
-
-LIB_DEP_FILES := $(addprefix lib/, $(addsuffix /.build, $(LIB_DEPS)))
-VENDOR_DEP_FILES := $(addprefix vendor/, $(addsuffix /.build, $(VENDOR_DEPS)))
-DEP_FILES := $(LIB_DEP_FILES) $(VENDOR_DEP_FILES)
+DEPS_CLEAN := $(addsuffix -clean, $(DEPS))
 
 DEPS_CFLAGS := \
 		`need-cflags lib/getpass` \
 		`need-cflags lib/cbase` \
 		`need-cflags lib/uvco` \
 		`need-cflags vendor/libsodium sodium` \
+		`need-cflags vendor/tai` \
 		`need-cflags vendor/lmdb` \
 		`need-cflags vendor/argparse` \
 		`need-cflags vendor/minicoro` \
@@ -43,12 +46,13 @@ DEPS_LDFLAGS := \
 		`need-libs lib/cbase` \
 		`need-libs lib/uvco` \
 		`need-libs vendor/libsodium sodium` \
+		`need-libs vendor/tai` \
 		`need-libs vendor/lmdb` \
 		`need-libs vendor/argparse` \
 		`need-libs vendor/minicoro` \
 		`need-libs vendor/libuv uv`
 
-BUILD_DEPS = $(HDRS) Makefile build/.mk $(DEP_FILES)
+BUILD_DEPS = $(HDRS) Makefile build/.mk | deps
 
 # compile the client executable
 build/client: $(OBJS) $(BUILD_DEPS)
@@ -70,12 +74,10 @@ build/test/%.ok: build/test/%
 build/test/%: test/%.c $(BUILD_DEPS) | unity
 	$(CC) $(CFLAGS) -o $@ $(DEPS_CFLAGS) $(DEPS_LDFLAGS) $(TEST_FLAGS) $<
 
-$(LIB_DEPS):
-	$(MAKE) -C lib/$@
-$(VENDOR_DEPS):
-	$(MAKE) -C vendor/$@
-$(LIB_DEP_FILES): $(LIB_DEPS)
-$(VENDOR_DEP_FILES): $(VENDOR_DEPS)
+.PHONY: deps $(DEPS)
+deps: $(DEPS)
+$(DEPS):
+	$(MAKE) -C $@
 
 .PHONY: unity
 unity:

@@ -1,5 +1,5 @@
-HDRS := $(wildcard include/*.h)
-SRCS := $(wildcard src/*.c) $(wildcard src/*.h)
+HDRS := $(wildcard include/*.h) $(wildcard src/*.h)
+SRCS := $(wildcard src/*.c)
 OBJS := $(SRCS:.c=.o)
 
 DEPS := lib/cbase vendor/libuv vendor/minicoro
@@ -8,11 +8,11 @@ DEPS_CFLAGS := \
 		`need-cflags vendor/libuv uv` \
 		`need-cflags vendor/minicoro`
 
-libuvco.a: $(OBJS) deps Makefile
+libuvco.a: $(OBJS) Makefile | deps
 	$(AR) rcs $@ $(OBJS)
 	touch .build
 
-%.o: %.c $(HDRS) deps Makefile
+%.o: %.c $(HDRS) Makefile | deps
 	$(CC) -c $(CFLAGS) -Iinclude $(DEPS_CFLAGS) -o $@ $<
 
 .PHONY: deps $(DEPS)
