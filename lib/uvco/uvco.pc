@@ -1,0 +1,5 @@
+Name: uvco
+Version: 0.0.1
+Description: <none>
+Libs: ${prefix}/libuvco.a
+Cflags: -I${prefix}/include
