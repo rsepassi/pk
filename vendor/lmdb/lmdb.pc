@@ -1,0 +1,5 @@
+Name: lmdb
+Version: 0.9.70
+Description: kv store
+Libs: ${prefix}/liblmdb.a
+Cflags: -I${prefix}/include
