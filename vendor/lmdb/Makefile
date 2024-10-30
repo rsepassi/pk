@@ -3,7 +3,7 @@ SRCS := $(wildcard src/*.c)
 OBJS := $(SRCS:.c=.o)
 
 src/%.o: src/%.c Makefile
-	$(CC) -c -Iinclude $(CFLAGS) -o $@ $<
+	$(CC) -c -Iinclude $(CFLAGS) -Wno-unused-but-set-variable -o $@ $<
 
 liblmdb.a: $(OBJS) Makefile
 	$(AR) rcs $@ $(OBJS)
