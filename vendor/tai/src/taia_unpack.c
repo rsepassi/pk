@@ -20,3 +20,20 @@ struct taia *t;
   x <<= 8; x += (unsigned char) s[3];
   t->nano = x;
 }
+
+void tain_unpack(s,t)
+char *s;
+struct taia *t;
+{
+  unsigned long x;
+
+  tai_unpack(s,&t->sec);
+  s += 8;
+
+  t->atto = 0;
+  x = (unsigned char) s[0];
+  x <<= 8; x += (unsigned char) s[1];
+  x <<= 8; x += (unsigned char) s[2];
+  x <<= 8; x += (unsigned char) s[3];
+  t->nano = x;
+}

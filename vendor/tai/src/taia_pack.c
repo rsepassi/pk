@@ -20,3 +20,19 @@ struct taia *t;
   s[1] = x & 255; x >>= 8;
   s[0] = x;
 }
+
+void tain_pack(s,t)
+char *s;
+struct taia *t;
+{
+  unsigned long x;
+
+  tai_pack(s,&t->sec);
+  s += 8;
+
+  x = t->nano;
+  s[3] = x & 255; x >>= 8;
+  s[2] = x & 255; x >>= 8;
+  s[1] = x & 255; x >>= 8;
+  s[0] = x;
+}
