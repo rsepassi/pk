@@ -1,5 +1,5 @@
-HDRS := $(wildcard include/*.h)
-SRCS := $(wildcard src/*.c) $(wildcard src/*.h)
+HDRS := $(wildcard include/*.h) $(wildcard src/*.h)
+SRCS := $(wildcard src/*.c)
 OBJS := $(SRCS:.c=.o)
 
 libcbase.a: $(OBJS) Makefile
