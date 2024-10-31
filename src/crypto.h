@@ -17,9 +17,23 @@ typedef struct { u8 bytes[crypto_sign_BYTES]; } CryptoSig;
 typedef struct { u8 bytes[crypto_kx_SEEDBYTES]; } CryptoKxSeed;
 typedef struct { u8 bytes[crypto_kx_PUBLICKEYBYTES]; } CryptoKxPK;
 typedef struct { u8 bytes[crypto_kx_SECRETKEYBYTES]; } CryptoKxSK;
+typedef struct {
+  CryptoKxPK pk;
+  CryptoKxSK sk;
+} CryptoKxKeypair;
 typedef struct { u8 bytes[crypto_kx_SESSIONKEYBYTES]; } CryptoKxTx;
 
 typedef struct { u8 bytes[crypto_secretbox_MACBYTES]; } CryptoAuthTag;
+
+
+
+
+
+
+
+// X3DH first draft
+// ============================================================================
+
 
 typedef struct {
   CryptoSignPK sign;
