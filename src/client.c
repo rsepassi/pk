@@ -931,7 +931,8 @@ int demo_kv(int argc, const char **argv) {
   u8 salt[crypto_pwhash_SALTBYTES];
   {
     CHECK0(mdb_txn_begin(kv, 0, MDB_RDONLY, &rtxn));
-    MDB_val salt_key = {6, "__salthash"};
+    char* salt_str = "__salthash";
+    MDB_val salt_key = {strlen(salt_str), salt_str};
     MDB_val salt_val;
     int rc = mdb_get(rtxn, db, &salt_key, &salt_val);
     mdb_txn_reset(rtxn);
