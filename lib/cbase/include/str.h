@@ -9,6 +9,8 @@ typedef struct {
   uint8_t* buf;
 } Str;
 
+typedef Str Bytes;
+
 static inline Str str_from_c(char* buf) {
   return (Str){.len = strlen(buf), .buf = (uint8_t*)buf};
 }
