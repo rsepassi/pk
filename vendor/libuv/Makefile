@@ -1,5 +1,5 @@
 zig-out/lib/libuv.a:
-	zig build
+	zig build -Doptimize=ReleaseFast
 	touch .build
 
 clean:
