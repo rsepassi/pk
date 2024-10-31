@@ -2,7 +2,7 @@ export CC := zig cc
 export AR := zig ar
 export PATH := $(CURDIR)/scripts:$(PATH)
 export ROOTDIR := $(CURDIR)
-export CFLAGS += -std=c99 -Wall -Werror -O2
+export CFLAGS += -std=c99 -Wall -Werror -O2 -g
 
 # src/
 HDRS := $(wildcard src/*.h)
@@ -27,6 +27,7 @@ DEPS := \
 		vendor/arena \
 		vendor/minicoro \
 		vendor/lmdb \
+		vendor/base58 \
 		vendor/argparse
 
 DEPS_CLEAN := $(addsuffix -clean, $(DEPS))
@@ -37,6 +38,7 @@ DEPS_CFLAGS := \
 		`need-cflags lib/uvco` \
 		`need-cflags vendor/libsodium sodium` \
 		`need-cflags vendor/tai` \
+		`need-cflags vendor/base58` \
 		`need-cflags vendor/lmdb` \
 		`need-cflags vendor/argparse` \
 		`need-cflags vendor/minicoro` \
@@ -47,6 +49,7 @@ DEPS_LDFLAGS := \
 		`need-libs lib/uvco` \
 		`need-libs vendor/libsodium sodium` \
 		`need-libs vendor/tai` \
+		`need-libs vendor/base58` \
 		`need-libs vendor/lmdb` \
 		`need-libs vendor/argparse` \
 		`need-libs vendor/minicoro` \
@@ -92,9 +95,9 @@ build/.mk:
 clean:
 	rm -rf build
 
-.PHONY: clean-all $(DEPS_CLEAN)
-clean-all: clean $(DEPS_CLEAN)
-$(LIB_DEPS_CLEAN):
-	$(MAKE) -C lib/$(@:-clean=) clean
-$(VENDOR_DEPS_CLEAN):
-	$(MAKE) -C vendor/$(@:-clean=) clean
+.PHONY: clean-all $(DEPS_CLEAN) unity-clean
+clean-all: clean $(DEPS_CLEAN) unity-clean
+$(DEPS_CLEAN):
+	$(MAKE) -C $(@:-clean=) clean
+unity-clean:
+	$(MAKE) -C vendor/unity clean

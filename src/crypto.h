@@ -19,6 +19,8 @@ typedef struct { u8 bytes[crypto_kx_PUBLICKEYBYTES]; } CryptoKxPK;
 typedef struct { u8 bytes[crypto_kx_SECRETKEYBYTES]; } CryptoKxSK;
 typedef struct { u8 bytes[crypto_kx_SESSIONKEYBYTES]; } CryptoKxTx;
 
+typedef struct { u8 bytes[crypto_secretbox_MACBYTES]; } CryptoAuthTag;
+
 typedef struct {
   CryptoSignPK sign;
   CryptoKxPK kx;
