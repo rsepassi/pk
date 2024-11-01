@@ -1,6 +1,7 @@
 #include "allocator.h"
 
 #include <stdlib.h>
+#include <mm_malloc.h>
 
 static int alloc_libc(void* ctx, Bytes* buf, usize sz, usize align) {
   bool exists = buf->buf && buf->len > 0;
