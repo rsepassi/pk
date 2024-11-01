@@ -1,39 +1,44 @@
-// NIK is a Wireguard-like Noise IK implementation.
+// NIK is a Noise IK implementation.
+// WIP, see TODO below.
 //
-// See https://www.wireguard.com/papers/wireguard.pdf
-// Copied at doc/wireguard.pdf
+// Implementation based on Wireguard's Noise IK construction:
+// * https://www.wireguard.com/protocol/
+// * https://www.wireguard.com/papers/wireguard.pdf
+//   Copied at doc/wireguard.pdf
 //
 // Differences from the Wireguard implementation:
-// * In HandshakeMsg1, We use msg.static := AEAD(k, 0, Hash(S_pub_i), H_i)
+// * In HandshakeMsg1, we use msg.static := AEAD(k, 0, Hash(S_pub_i), H_i)
 //   (instead of AEAD(k, 0, S_pub_i, H_i)), as suggested by Donenfeld in the
 //   Wireguard technical paper.
 // * We use blake2b (instead of blake2s) as hash function.
-// * The optional 256-bit symmetric encryption key is always 0. This may
-//   change in the future.
 //
 // The low-level API does no dynamic memory allocation.
-// libsodium provides all cryptographic primitives.
+// libsodium provides all cryptographic primitives, except for HMAC
+// which is constructed from libsodium's blake2b. See hmac_blake2b in nik.c
 //
-// Implementation is not yet complete.
-// TODO:
-// * Track sender/receiver ids
-// * Set header->receiver in nik_msg_send
-// * Check header->receiver in nik_msg_recv
-// * Check header->counter in nik_msg_recv
-// * Fill in mac1, mac2
-// * Implement CookieReply message
-// * Rm msg1 from NIK_InitiatorHandshakeRequest, it should be thrown out after
-//   sending it. It needs to keep sender and ephemeral pk.
-// * High-level API
+// Impl TODO:
+// * mac2 + CookieReply message
+// * Allow providing 256-bit PSK
+// * High-level API, state management
+//   * Timers, limits
+//   * Counter history and validation
+//   * Handshake reset
+//   * Keepalives
+//   * etc
+//
+// Optimization TODO:
+// * Precompute initial chaining key and hash state (per peer)
 
 #include "crypto.h"
 
-typedef int NIK_Status;
-#define NIK_OK 0
-#define NIK_Status_HandshakeRefresh 8
-
 #define NIK_CHAIN_SZ 32
 #define NIK_TIMESTAMP_SZ 12
+
+typedef enum {
+  NIK_OK = 0,
+  NIK_Error,
+  NIK_Status_HandshakeRefresh,
+} NIK_Status;
 
 // NIK Message types
 typedef enum {
@@ -93,13 +98,16 @@ typedef struct {
   CryptoKxSK *sk;
 } NIK_Keys;
 
-// Per-peer transfer keys
+// Per-peer transfer state
 typedef struct {
   CryptoKxTx send;
-  u64 send_n;
   CryptoKxTx recv;
+  u64 send_n;
   u64 recv_n;
-} NIK_TxKeys;
+  u32 sender;
+  u32 receiver;
+  u64 recv_max_counter;
+} NIK_TxState;
 
 typedef struct {
   NIK_Keys *keys;
@@ -107,40 +115,40 @@ typedef struct {
 } NIK_HandshakeKeys;
 
 typedef struct {
-  u8 C[NIK_CHAIN_SZ];
-  crypto_generichash_blake2b_state H;
-  CryptoKxSK E;
+  u32 sender;
+  u32 receiver;
+  u8 chaining_key[NIK_CHAIN_SZ];
+  crypto_generichash_blake2b_state hash;
+  CryptoKxSK ephemeral_sk;
+  CryptoKxPK ephemeral_pk;
 } NIK_HandshakeState;
 
-typedef struct {
-  NIK_HandshakeMsg1 *msg1;
-  NIK_HandshakeMsg2 *msg2;
-  NIK_HandshakeKeys keys;
-} NIK_InitiatorHandshakeRequest;
-
-typedef struct {
-  NIK_HandshakeMsg1 *msg;
-  NIK_HandshakeKeys keys;
-} NIK_ResponderHandshakeRequest;
-
 // Low-level handshake API
-NIK_Status nik_handshake_init(const NIK_InitiatorHandshakeRequest *req,
+// Initiator sends HandshakeMsg1
+NIK_Status nik_handshake_init(const NIK_HandshakeKeys keys,
                               NIK_HandshakeState *state,
                               NIK_HandshakeMsg1 *msg);
-NIK_Status nik_handshake_init_check(const NIK_ResponderHandshakeRequest *req,
+// Responder checks HandshakeMsg1
+NIK_Status nik_handshake_init_check(const NIK_HandshakeKeys keys,
+                                    const NIK_HandshakeMsg1 *msg,
                                     NIK_HandshakeState *state);
-NIK_Status nik_handshake_respond(const NIK_ResponderHandshakeRequest *req,
+// Responder sends HandshakeMsg2
+NIK_Status nik_handshake_respond(const NIK_HandshakeKeys keys,
+                                 const NIK_HandshakeMsg1 *msg1,
                                  NIK_HandshakeState *state,
-                                 NIK_HandshakeMsg2 *msg);
-NIK_Status nik_handshake_respond_check(const NIK_InitiatorHandshakeRequest *req,
+                                 NIK_HandshakeMsg2 *msg2);
+// Initiator checks HandshakeMsg2
+NIK_Status nik_handshake_respond_check(const NIK_HandshakeKeys keys,
+                                       const NIK_HandshakeMsg2 *msg,
                                        NIK_HandshakeState *state);
-NIK_Status nik_handshake_final(NIK_HandshakeState *state, NIK_TxKeys *keys,
+// Handshake is finalized and TxState populated
+NIK_Status nik_handshake_final(NIK_HandshakeState *state, NIK_TxState *keys,
                                bool initiator);
 
 // Low-level send/recv API
 u64 nik_sendmsg_sz(u64 len);
-NIK_Status nik_msg_send(NIK_TxKeys *keys, Bytes payload, Bytes send);
-NIK_Status nik_msg_recv(NIK_TxKeys *keys, Bytes *msg);
+NIK_Status nik_msg_send(NIK_TxState *state, Bytes payload, Bytes send);
+NIK_Status nik_msg_recv(NIK_TxState *state, Bytes *msg);
 
 // High-level API
 

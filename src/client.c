@@ -16,7 +16,6 @@
 #include "stdtypes.h"
 #include "uvco.h"
 
-
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 #define MAX_PW_LEN 2048
 
@@ -84,74 +83,90 @@ int demo_nik(int argc, const char **argv) {
   LOG("i2r");
   NIK_HandshakeState state_i;
   NIK_HandshakeKeys hkeys_i = {&keys_i, keys_r.pk};
-  NIK_InitiatorHandshakeRequest req = {0, 0, hkeys_i};
   NIK_HandshakeMsg1 msg1;
-  CHECK0(nik_handshake_init(&req, &state_i, &msg1));
-  phex("IC", state_i.C, NIK_CHAIN_SZ);
+  CHECK0(nik_handshake_init(hkeys_i, &state_i, &msg1));
+  phex("IC", state_i.chaining_key, NIK_CHAIN_SZ);
 
   // R
   LOG("i2r check");
   NIK_HandshakeState state_r;
   NIK_HandshakeKeys hkeys_r = {&keys_r, keys_i.pk};
-  NIK_ResponderHandshakeRequest rreq = {&msg1, hkeys_r};
-  CHECK0(nik_handshake_init_check(&rreq, &state_r));
-  phex("RC", state_r.C, NIK_CHAIN_SZ);
+  CHECK0(nik_handshake_init_check(hkeys_r, &msg1, &state_r));
+  phex("RC", state_r.chaining_key, NIK_CHAIN_SZ);
 
   // R
   LOG("r2i");
   NIK_HandshakeMsg2 msg2;
-  CHECK0(nik_handshake_respond(&rreq, &state_r, &msg2));
-  phex("RC", state_r.C, NIK_CHAIN_SZ);
+  CHECK0(nik_handshake_respond(hkeys_r, &msg1, &state_r, &msg2));
+  phex("RC", state_r.chaining_key, NIK_CHAIN_SZ);
 
   // I
   LOG("r2i check");
-  NIK_InitiatorHandshakeRequest ireq = {&msg1, &msg2, hkeys_i};
-  CHECK0(nik_handshake_respond_check(&ireq, &state_i));
-  phex("IC", state_i.C, NIK_CHAIN_SZ);
+  CHECK0(nik_handshake_respond_check(hkeys_i, &msg2, &state_i));
+  phex("IC", state_i.chaining_key, NIK_CHAIN_SZ);
 
   // I
   LOG("i derive");
-  NIK_TxKeys tx_i;
+  NIK_TxState tx_i;
   CHECK0(nik_handshake_final(&state_i, &tx_i, true));
 
   // R
   LOG("r derive");
-  NIK_TxKeys tx_r;
+  NIK_TxState tx_r;
   CHECK0(nik_handshake_final(&state_r, &tx_r, false));
 
   // Check that I and R have the same transfer keys
   phex("tx", (u8 *)&tx_i, sizeof(tx_i));
   CHECK0(sodium_memcmp(&tx_i.send, &tx_r.recv, sizeof(tx_i.send)));
   CHECK0(sodium_memcmp(&tx_i.recv, &tx_r.send, sizeof(tx_i.send)));
+  CHECK(tx_i.send_n == 0);
+  CHECK(tx_i.recv_n == 0);
+  CHECK(tx_r.send_n == 0);
+  CHECK(tx_r.recv_n == 0);
+  CHECK(tx_r.recv_max_counter == 0);
+  CHECK(tx_i.sender == tx_r.receiver);
+  CHECK(tx_i.receiver == tx_r.sender);
 
   // I: Send a message
   Str payload = str_from_c("hello!");
-  LOG("send: %.*s", (int)payload.len, payload.buf);
-  u64 send_sz = nik_sendmsg_sz(payload.len);
-  Str send_msg = {.len = send_sz, .buf = malloc(send_sz)};
-  CHECK(send_msg.buf);
-  CHECK0(nik_msg_send(&tx_i, payload, send_msg));
+  Str send_msg;
+  {
+    LOG("send: %.*s", (int)payload.len, payload.buf);
+    u64 send_sz = nik_sendmsg_sz(payload.len);
+    send_msg = (Str){.len = send_sz, .buf = malloc(send_sz)};
+    CHECK(send_msg.buf);
+    CHECK0(nik_msg_send(&tx_i, payload, send_msg));
+  }
 
   // R: Receive a message
-  CHECK0(nik_msg_recv(&tx_r, &send_msg));
-  LOG("recv: %.*s", (int)send_msg.len, send_msg.buf);
-  CHECK(str_eq(payload, send_msg));
-
+  {
+    CHECK0(nik_msg_recv(&tx_r, &send_msg));
+    LOG("recv: %.*s", (int)send_msg.len, send_msg.buf);
+    CHECK(str_eq(payload, send_msg));
+  }
   free(send_msg.buf);
 
-  // todo:
-  // cookies: mac1, mac2
-  // pick out exactly what's needed from msg1 and msg2
-  //  + zero out E pub
-  // counter checks
-  //   We use a sliding window to keep track of received message counters, in
-  //   which we keep track of the greatest counter received, as well as a
-  //   window of prior messages received, checked only after having verified
-  //   the authentication tag, using the algorithm detailed by appendix C of
-  //   RFC2401 [14] or by RFC6479 [26], which uses a larger bitmap while
-  //   avoiding bitshifts, enabling more extreme packet reordering that may
-  //   occur on multi-core systems.
-  // Timers
+  // I: Send another
+  payload = str_from_c("ahoy!");
+  {
+    LOG("send: %.*s", (int)payload.len, payload.buf);
+    u64 send_sz = nik_sendmsg_sz(payload.len);
+    send_msg = (Str){.len = send_sz, .buf = malloc(send_sz)};
+    CHECK0(nik_msg_send(&tx_i, payload, send_msg));
+  }
+
+  // R: Receive another
+  {
+    CHECK0(nik_msg_recv(&tx_r, &send_msg));
+    LOG("recv: %.*s", (int)send_msg.len, send_msg.buf);
+    CHECK(str_eq(payload, send_msg));
+  }
+
+  CHECK(tx_i.send_n == 2);
+  CHECK(tx_i.recv_n == 0);
+  CHECK(tx_r.send_n == 0);
+  CHECK(tx_r.recv_n == 2);
+  CHECK(tx_r.recv_max_counter == 1);
 
   return 0;
 }
