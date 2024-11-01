@@ -1,7 +1,7 @@
 HDRS := $(wildcard include/*.h) $(wildcard src/*.h)
 SRCS := $(wildcard src/*.c)
 OBJS := $(SRCS:.c=.o)
-CFLAGS := -std=c89
+CFLAGS := -std=c89 -Wno-deprecated-non-prototype -Wno-return-type
 
 libtai.a: $(OBJS) Makefile
 	$(AR) rcs $@ $(OBJS)
