@@ -24,7 +24,6 @@ DEPS := \
 		vendor/libsodium \
 		vendor/tai \
 		vendor/libuv \
-		vendor/arena \
 		vendor/minicoro \
 		vendor/lmdb \
 		vendor/base58 \
