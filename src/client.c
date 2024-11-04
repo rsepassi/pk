@@ -9,6 +9,7 @@
 #include "minicoro.h"
 #include "taia.h"
 #include "uv.h"
+#include "mimalloc.h"
 
 // lib
 #include "getpass.h"
@@ -482,12 +483,31 @@ int demo_b58(int argc, const char **argv) {
   return 0;
 }
 
+int demo_mimalloc(int argc, const char **argv) {
+  // MIMALLOC_SHOW_STATS=1
+  mi_option_enable(mi_option_show_stats);
+
+  {
+    void* p = mi_malloc(1024);
+    mi_free(p);
+  }
+
+  {
+    mi_heap_t* h = mi_heap_new();
+    void* p = mi_heap_malloc(h, 16);
+    (void)p;
+    mi_heap_destroy(h);
+  }
+  return 0;
+}
+
 static const char *const usages[] = {
     "pk [options] [cmd] [args]\n\n    Commands:"
     "\n      - demo-x3dh"
     "\n      - demo-kv"
     "\n      - demo-nik"
     "\n      - demo-b58",
+    "\n      - demo-mimalloc",
     NULL,
 };
 
@@ -501,6 +521,7 @@ static struct cmd_struct commands[] = {
     {"demo-kv", demo_kv},
     {"demo-nik", demo_nik},
     {"demo-b58", demo_b58},
+    {"demo-mimalloc", demo_mimalloc},
 };
 
 typedef struct {

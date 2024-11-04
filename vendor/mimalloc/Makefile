@@ -1,3 +1,6 @@
+# https://github.com/microsoft/mimalloc
+# https://microsoft.github.io/mimalloc/
+
 HDRS := $(wildcard include/*.h) $(wildcard src/*.h)
 SRCS := \
 	src/alloc-aligned.c \
@@ -18,7 +21,6 @@ SRCS := \
 	src/prim/prim.c
 OBJS := $(SRCS:.c=.o)
 CFLAGS += -Wall -Werror -fvisibility=hidden -ftls-model=local-dynamic
-
 
 libmimalloc.a: $(OBJS) Makefile
 	$(AR) rcs $@ $(OBJS)
