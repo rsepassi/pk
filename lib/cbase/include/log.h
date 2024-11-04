@@ -12,6 +12,7 @@
 
 #define LOG(fmt, ...) LOG_(I, stderr, fmt, ##__VA_ARGS__)
 #define LOGE(fmt, ...) LOG_(E, stderr, fmt, ##__VA_ARGS__)
+#define LOGS(s) LOG("%s=%.*s", #s, (int)(s).len, (s).buf)
 
 #define CHECK_(x, fmt, ...) do { \
     if (!(x)) { LOG("check failed: (%s) " fmt, #x, ##__VA_ARGS__); exit(1); } \
