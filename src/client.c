@@ -1,24 +1,27 @@
 // src
-#include "nik.h"
 #include "crypto.h"
+#include "nik.h"
 
 // vendor deps
 #include "argparse.h"
 #include "libbase58.h"
 #include "lmdb.h"
-#include "minicoro.h"
-#include "taia.h"
-#include "uv.h"
 #include "mimalloc.h"
+#include "minicoro.h"
+#include "uv.h"
 
 // lib
 #include "getpass.h"
 #include "log.h"
 #include "stdtypes.h"
+#include "taia.h"
 #include "uvco.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 #define MAX_PW_LEN 2048
+
+#define NS_PER_MS 1000000ULL
+#define MS_PER_SEC 1000ULL
 
 // Global event loop
 uv_loop_t *loop;
@@ -58,6 +61,142 @@ int nik_keys_kx_from_seed(const CryptoSeed *seed, CryptoKxKeypair *out) {
   return 0;
 }
 
+u64 nik_sysnow(void *ctx) {
+  struct taia ts;
+  taia_now(&ts);
+  u64 now = (ts.sec.x * MS_PER_SEC) + (ts.nano / NS_PER_MS);
+  return now;
+}
+
+void nik_syssleep(void *ctx, u64 sleep) { uvco_sleep(loop, sleep); }
+
+typedef struct {
+  char *name;
+  Bytes buf;
+  bool ready;
+} NikChannel;
+
+void nik_syssend(void *ctx, Bytes buf) {
+  NikChannel *chan = (NikChannel *)ctx;
+  LOG("syssend ->%s len=%d", chan->name, (int)buf.len);
+  CHECK(!chan->ready);
+  chan->buf.buf = realloc(chan->buf.buf, buf.len);
+  memcpy(chan->buf.buf, buf.buf, buf.len);
+  chan->buf.len = buf.len;
+  chan->ready = true;
+}
+
+typedef struct {
+  NikChannel chan_a;
+  NikChannel chan_b;
+  NIK_Cxn cxn_a;
+  NIK_Cxn cxn_b;
+} DemoCxn;
+
+void nik_msgxchg(mco_coro *co) {
+  DemoCxn *ctx = (DemoCxn *)mco_get_user_data(co);
+  while (1) {
+    uvco_sleep(loop, 200);
+    u64 now = nik_sysnow(NULL);
+
+    if (ctx->chan_a.ready) {
+      LOG("message arrived on A");
+      ctx->chan_a.ready = false;
+      NIK_Status status = nik_cxn_recv(&ctx->cxn_a, &ctx->chan_a.buf, now);
+      CHECK(status == NIK_OK || status == NIK_Status_InternalMsg);
+      if (status == NIK_OK) {
+        LOGS(ctx->chan_a.buf);
+      }
+    }
+    if (ctx->chan_b.ready) {
+      LOG("message arrived on B");
+      ctx->chan_b.ready = false;
+      NIK_Status status = nik_cxn_recv(&ctx->cxn_b, &ctx->chan_b.buf, now);
+      CHECK(status == NIK_OK || status == NIK_Status_InternalMsg);
+      if (status == NIK_OK) {
+        LOGS(ctx->chan_b.buf);
+      }
+    }
+  }
+}
+
+int demo_nikcxn(int argc, const char **argv) {
+  CryptoKxKeypair kx_keys_i;
+  {
+    Str A_seed_str = str_from_c(A_seed_hex);
+    CryptoSeed A_seed;
+    sodium_hex2bin((u8 *)&A_seed, sizeof(A_seed), (char *)A_seed_str.buf,
+                   A_seed_str.len, 0, 0, 0);
+    CHECK0(nik_keys_kx_from_seed(&A_seed, &kx_keys_i));
+  }
+
+  CryptoKxKeypair kx_keys_r;
+  {
+    Str B_seed_str = str_from_c(B_seed_hex);
+    CryptoSeed B_seed;
+    sodium_hex2bin((u8 *)&B_seed, sizeof(B_seed), (char *)B_seed_str.buf,
+                   B_seed_str.len, 0, 0, 0);
+    CHECK0(nik_keys_kx_from_seed(&B_seed, &kx_keys_r));
+  }
+
+  NIK_Keys keys_i = {&kx_keys_i.pk, &kx_keys_i.sk};
+  NIK_Keys keys_r = {&kx_keys_r.pk, &kx_keys_r.sk};
+  NIK_HandshakeKeys hkeys_i = {&keys_i, keys_r.pk};
+  NIK_HandshakeKeys hkeys_r = {&keys_r, keys_i.pk};
+
+  DemoCxn ctx = {0};
+  ctx.chan_a.name = "a";
+  ctx.chan_b.name = "b";
+
+  NIK_CxnSys sys_a = {
+      .userctx = &ctx.chan_b,
+      .now = nik_sysnow,
+      .sleep = nik_syssleep,
+      .send = nik_syssend,
+  };
+  NIK_CxnSys sys_b = sys_a;
+  sys_b.userctx = &ctx.chan_a;
+
+  nik_cxn_init(&ctx.cxn_a, hkeys_i, sys_a);
+  nik_cxn_init(&ctx.cxn_b, hkeys_r, sys_b);
+
+  Str payload_a = str_from_c("hello from A!");
+  Str payload_b = str_from_c("hello from B!");
+  u64 send_sz = nik_sendmsg_sz(payload_a.len);
+  Str send_a = (Str){send_sz, malloc(send_sz)};
+  Str send_b = (Str){send_sz, malloc(send_sz)};
+
+  {
+    mco_desc desc = mco_desc_init(nik_msgxchg, 0);
+    desc.user_data = &ctx;
+    mco_coro *xchg_co;
+    CHECK(mco_create(&xchg_co, &desc) == MCO_SUCCESS);
+    CHECK(mco_resume(xchg_co) == MCO_SUCCESS);
+  }
+
+  u64 i = 0;
+  while (true) {
+    LOG("tick");
+    uvco_sleep(loop, 1000);
+    u64 now = nik_sysnow(NULL);
+    {
+      LOG("message send from A");
+      NIK_Status status = nik_cxn_send(&ctx.cxn_a, payload_a, send_a, now);
+      LOG("a->: status=%d", status);
+      CHECK0(status);
+    }
+    if (i % 5 == 2) {
+      LOG("message send from B");
+      NIK_Status status = nik_cxn_send(&ctx.cxn_b, payload_b, send_b, now);
+      LOG("b->: status=%d", status);
+      CHECK0(status);
+    }
+    ++i;
+  }
+
+  return 0;
+}
+
 int demo_nik(int argc, const char **argv) {
   CryptoKxKeypair kx_keys_i;
   {
@@ -82,42 +221,45 @@ int demo_nik(int argc, const char **argv) {
 
   // I
   LOG("i2r");
-  NIK_HandshakeState state_i;
+  NIK_Handshake state_i;
   NIK_HandshakeKeys hkeys_i = {&keys_i, keys_r.pk};
   NIK_HandshakeMsg1 msg1;
-  CHECK0(nik_handshake_init(hkeys_i, &state_i, &msg1));
+  CHECK0(nik_handshake_init(&state_i, hkeys_i, &msg1));
   phex("IC", state_i.chaining_key, NIK_CHAIN_SZ);
 
   // R
   LOG("i2r check");
-  NIK_HandshakeState state_r;
+  NIK_Handshake state_r;
   NIK_HandshakeKeys hkeys_r = {&keys_r, keys_i.pk};
-  CHECK0(nik_handshake_init_check(hkeys_r, &msg1, &state_r));
+  CHECK0(nik_handshake_init_check(&state_r, hkeys_r, &msg1));
   phex("RC", state_r.chaining_key, NIK_CHAIN_SZ);
 
   // R
   LOG("r2i");
   NIK_HandshakeMsg2 msg2;
-  CHECK0(nik_handshake_respond(hkeys_r, &msg1, &state_r, &msg2));
+  CHECK0(nik_handshake_respond(&state_r, &msg1, &msg2));
   phex("RC", state_r.chaining_key, NIK_CHAIN_SZ);
 
   // I
   LOG("r2i check");
-  CHECK0(nik_handshake_respond_check(hkeys_i, &msg2, &state_i));
+  CHECK0(nik_handshake_respond_check(&state_i, &msg2));
   phex("IC", state_i.chaining_key, NIK_CHAIN_SZ);
+
+  u64 now = 0;
 
   // I
   LOG("i derive");
-  NIK_TxState tx_i;
-  CHECK0(nik_handshake_final(&state_i, &tx_i, true));
+  NIK_Session tx_i;
+  CHECK0(nik_handshake_final(&state_i, &tx_i, now));
 
   // R
   LOG("r derive");
-  NIK_TxState tx_r;
-  CHECK0(nik_handshake_final(&state_r, &tx_r, false));
+  NIK_Session tx_r;
+  CHECK0(nik_handshake_final(&state_r, &tx_r, now));
 
   // Check that I and R have the same transfer keys
-  phex("tx", (u8 *)&tx_i, sizeof(tx_i));
+  phex("tx.send", (u8 *)&tx_i.send, sizeof(tx_i.send));
+  phex("tx.recv", (u8 *)&tx_i.recv, sizeof(tx_i.recv));
   CHECK0(sodium_memcmp(&tx_i.send, &tx_r.recv, sizeof(tx_i.send)));
   CHECK0(sodium_memcmp(&tx_i.recv, &tx_r.send, sizeof(tx_i.send)));
   CHECK(tx_i.send_n == 0);
@@ -136,12 +278,12 @@ int demo_nik(int argc, const char **argv) {
     u64 send_sz = nik_sendmsg_sz(payload.len);
     send_msg = (Str){.len = send_sz, .buf = malloc(send_sz)};
     CHECK(send_msg.buf);
-    CHECK0(nik_msg_send(&tx_i, payload, send_msg));
+    CHECK0(nik_msg_send(&tx_i, payload, send_msg, now));
   }
 
   // R: Receive a message
   {
-    CHECK0(nik_msg_recv(&tx_r, &send_msg));
+    CHECK0(nik_msg_recv(&tx_r, &send_msg, now));
     LOG("recv: %.*s", (int)send_msg.len, send_msg.buf);
     CHECK(str_eq(payload, send_msg));
   }
@@ -153,12 +295,16 @@ int demo_nik(int argc, const char **argv) {
     LOG("send: %.*s", (int)payload.len, payload.buf);
     u64 send_sz = nik_sendmsg_sz(payload.len);
     send_msg = (Str){.len = send_sz, .buf = malloc(send_sz)};
-    CHECK0(nik_msg_send(&tx_i, payload, send_msg));
+    CHECK0(nik_msg_send(&tx_i, payload, send_msg, now));
+
+    // Check that the session is invalid if 180s has passed
+    CHECK(nik_msg_send(&tx_i, payload, send_msg, now + (180 * 1000)) ==
+          NIK_Status_SessionExpired);
   }
 
   // R: Receive another
   {
-    CHECK0(nik_msg_recv(&tx_r, &send_msg));
+    CHECK0(nik_msg_recv(&tx_r, &send_msg, now));
     LOG("recv: %.*s", (int)send_msg.len, send_msg.buf);
     CHECK(str_eq(payload, send_msg));
   }
@@ -167,7 +313,7 @@ int demo_nik(int argc, const char **argv) {
   CHECK(tx_i.recv_n == 0);
   CHECK(tx_r.send_n == 0);
   CHECK(tx_r.recv_n == 2);
-  CHECK(tx_r.recv_max_counter == 1);
+  CHECK(tx_r.recv_max_counter == 2);
 
   return 0;
 }
@@ -244,7 +390,7 @@ int demo_kv(int argc, const char **argv) {
   u8 salt[crypto_pwhash_SALTBYTES];
   {
     CHECK0(mdb_txn_begin(kv, 0, MDB_RDONLY, &rtxn));
-    char* salt_str = "__salthash";
+    char *salt_str = "__salthash";
     MDB_val salt_key = {strlen(salt_str), salt_str};
     MDB_val salt_val;
     int rc = mdb_get(rtxn, db, &salt_key, &salt_val);
@@ -488,13 +634,13 @@ int demo_mimalloc(int argc, const char **argv) {
   mi_option_enable(mi_option_show_stats);
 
   {
-    void* p = mi_malloc(1024);
+    void *p = mi_malloc(1024);
     mi_free(p);
   }
 
   {
-    mi_heap_t* h = mi_heap_new();
-    void* p = mi_heap_malloc(h, 16);
+    mi_heap_t *h = mi_heap_new();
+    void *p = mi_heap_malloc(h, 16);
     (void)p;
     mi_heap_destroy(h);
   }
@@ -506,6 +652,7 @@ static const char *const usages[] = {
     "\n      - demo-x3dh"
     "\n      - demo-kv"
     "\n      - demo-nik"
+    "\n      - demo-nikcxn"
     "\n      - demo-b58",
     "\n      - demo-mimalloc",
     NULL,
@@ -517,11 +664,12 @@ struct cmd_struct {
 };
 
 static struct cmd_struct commands[] = {
-    {"demo-x3dh", demo_x3dh},
-    {"demo-kv", demo_kv},
-    {"demo-nik", demo_nik},
-    {"demo-b58", demo_b58},
-    {"demo-mimalloc", demo_mimalloc},
+    {"demo-x3dh", demo_x3dh},         //
+    {"demo-kv", demo_kv},             //
+    {"demo-nik", demo_nik},           //
+    {"demo-nikcxn", demo_nikcxn},     //
+    {"demo-b58", demo_b58},           //
+    {"demo-mimalloc", demo_mimalloc}, //
 };
 
 typedef struct {

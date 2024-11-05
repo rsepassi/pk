@@ -20,11 +20,6 @@
 // * mac2 + CookieReply message
 // * Allow providing 256-bit PSK
 // * High-level API, state management
-//   * Timers, limits
-//   * Counter history and validation
-//   * Handshake reset
-//   * Keepalives
-//   * etc
 //
 // Optimization TODO:
 // * Precompute initial chaining key and hash state (per peer)
@@ -34,10 +29,21 @@
 #define NIK_CHAIN_SZ 32
 #define NIK_TIMESTAMP_SZ 12
 
+#define NIK_LIMIT_REKEY_AFTER_MESSAGES (UINT64_C(1) << 60)
+#define NIK_LIMIT_REJECT_AFTER_MESSAGES (UINT64_MAX - (UINT64_C(1) << 13) - 1)
+#define NIK_LIMIT_REKEY_AFTER_SECS 120
+#define NIK_LIMIT_REJECT_AFTER_SECS 180
+#define NIK_LIMIT_REKEY_ATTEMPT_SECS 90
+#define NIK_LIMIT_REKEY_TIMEOUT_SECS 5
+#define NIK_LIMIT_KEEPALIVE_TIMEOUT_SECS 10
+
 typedef enum {
   NIK_OK = 0,
   NIK_Error,
-  NIK_Status_HandshakeRefresh,
+  NIK_Status_SessionRekeyTimer,
+  NIK_Status_SessionRekeyMaxmsg,
+  NIK_Status_SessionExpired,
+  NIK_Status_InternalMsg,
 } NIK_Status;
 
 // NIK Message types
@@ -98,6 +104,8 @@ typedef struct {
   CryptoKxSK *sk;
 } NIK_Keys;
 
+typedef u64 CounterHistory;
+
 // Per-peer transfer state
 typedef struct {
   CryptoKxTx send;
@@ -107,7 +115,12 @@ typedef struct {
   u32 sender;
   u32 receiver;
   u64 recv_max_counter;
-} NIK_TxState;
+  CounterHistory counter_history;
+  u64 start_time;
+  u64 last_send_time;
+  u64 last_recv_time;
+  bool isinitiator;
+} NIK_Session;
 
 typedef struct {
   NIK_Keys *keys;
@@ -115,60 +128,71 @@ typedef struct {
 } NIK_HandshakeKeys;
 
 typedef struct {
+  NIK_HandshakeKeys keys;
   u32 sender;
   u32 receiver;
   u8 chaining_key[NIK_CHAIN_SZ];
   crypto_generichash_blake2b_state hash;
   CryptoKxSK ephemeral_sk;
   CryptoKxPK ephemeral_pk;
-} NIK_HandshakeState;
+  bool initiator;
+} NIK_Handshake;
 
 // Low-level handshake API
 // Initiator sends HandshakeMsg1
-NIK_Status nik_handshake_init(const NIK_HandshakeKeys keys,
-                              NIK_HandshakeState *state,
+NIK_Status nik_handshake_init(NIK_Handshake *state,
+                              const NIK_HandshakeKeys keys,
                               NIK_HandshakeMsg1 *msg);
 // Responder checks HandshakeMsg1
-NIK_Status nik_handshake_init_check(const NIK_HandshakeKeys keys,
-                                    const NIK_HandshakeMsg1 *msg,
-                                    NIK_HandshakeState *state);
+NIK_Status nik_handshake_init_check(NIK_Handshake *state,
+                                    const NIK_HandshakeKeys keys,
+                                    const NIK_HandshakeMsg1 *msg);
 // Responder sends HandshakeMsg2
-NIK_Status nik_handshake_respond(const NIK_HandshakeKeys keys,
+NIK_Status nik_handshake_respond(NIK_Handshake *state,
                                  const NIK_HandshakeMsg1 *msg1,
-                                 NIK_HandshakeState *state,
                                  NIK_HandshakeMsg2 *msg2);
 // Initiator checks HandshakeMsg2
-NIK_Status nik_handshake_respond_check(const NIK_HandshakeKeys keys,
-                                       const NIK_HandshakeMsg2 *msg,
-                                       NIK_HandshakeState *state);
-// Handshake is finalized and TxState populated
-NIK_Status nik_handshake_final(NIK_HandshakeState *state, NIK_TxState *keys,
-                               bool initiator);
+NIK_Status nik_handshake_respond_check(NIK_Handshake *state,
+                                       const NIK_HandshakeMsg2 *msg);
+// Handshake is finalized and Session populated
+NIK_Status nik_handshake_final(NIK_Handshake *state, NIK_Session *session,
+                               u64 now);
 
 // Low-level send/recv API
 u64 nik_sendmsg_sz(u64 len);
-NIK_Status nik_msg_send(NIK_TxState *state, Bytes payload, Bytes send);
-NIK_Status nik_msg_recv(NIK_TxState *state, Bytes *msg);
+NIK_Status nik_msg_send(NIK_Session *session, Bytes payload, Bytes send,
+                        u64 now);
+NIK_Status nik_msg_recv(NIK_Session *session, Bytes *msg, u64 now);
 
-// High-level API
+// Persistent key-rotating kept-alive connection between 2 peers
+
+// CxnSys provides the system functionality that the Cxn needs.
+typedef struct {
+  void *userctx;
+  u64 (*now)(void *userctx);
+  void (*sleep)(void *userctx, u64 timeout);
+  void (*send)(void *userctx, Bytes timeout);
+} NIK_CxnSys;
 
 typedef struct {
-  Allocator alloc;
-  const NIK_Keys *keys;
-} NIK;
+  NIK_HandshakeKeys keys;
+  NIK_CxnSys sys;
 
-// Initialize NIK.
-NIK_Status nik_init(NIK *nik, Allocator alloc, const NIK_Keys *keys);
+  NIK_Session current;
+  NIK_Session prev;
+  u64 handshake_initiated_time;
+  NIK_Handshake handshake;
+  NIK_MsgHeader keepalive;
+  u64 rekey_deadline;
+  void *keepalive_coro;
+  void *rekey_coro;
+  void *rekey_waiter;
+  u64 last_handshake_sent;
+  bool cancelled;
+  bool failed;
+} NIK_Cxn;
 
-// Send payload to peer.
-//
-// send must have len nik_sendmsg_sz(payload.len).
-// send will be populated with the message.
-NIK_Status nik_send(NIK *nik, const CryptoKxPK *peer, const Bytes payload,
-                    Bytes send);
-
-// Receive message.
-//
-// peer will be populated with the key of the peer who sent the message.
-// recvd will be populated with the message.
-NIK_Status nik_recv(NIK *nik, CryptoKxPK *peer, Str *recvd);
+void nik_cxn_init(NIK_Cxn *cxn, NIK_HandshakeKeys keys, NIK_CxnSys sys);
+void nik_cxn_deinit(NIK_Cxn *cxn);
+NIK_Status nik_cxn_recv(NIK_Cxn *cxn, Bytes *send, u64 now);
+NIK_Status nik_cxn_send(NIK_Cxn *cxn, Bytes payload, Bytes send, u64 now);

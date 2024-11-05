@@ -4,36 +4,49 @@
 
 #include "stdtypes.h"
 
-typedef struct { u8 bytes[32]; } CryptoSeed;
+typedef struct {
+  u8 bytes[32];
+} CryptoSeed;
 
-typedef struct { u8 bytes[crypto_sign_SEEDBYTES]; } CryptoSignSeed;
-typedef struct { u8 bytes[crypto_sign_PUBLICKEYBYTES]; } CryptoSignPK;
+typedef struct {
+  u8 bytes[crypto_sign_SEEDBYTES];
+} CryptoSignSeed;
+typedef struct {
+  u8 bytes[crypto_sign_PUBLICKEYBYTES];
+} CryptoSignPK;
 typedef struct {
   CryptoSignSeed seed;
   CryptoSignPK pk;
 } CryptoSignSK;
-typedef struct { u8 bytes[crypto_sign_BYTES]; } CryptoSig;
+typedef struct {
+  u8 bytes[crypto_sign_BYTES];
+} CryptoSig;
 
-typedef struct { u8 bytes[crypto_kx_SEEDBYTES]; } CryptoKxSeed;
-typedef struct { u8 bytes[crypto_kx_PUBLICKEYBYTES]; } CryptoKxPK;
-typedef struct { u8 bytes[crypto_kx_SECRETKEYBYTES]; } CryptoKxSK;
+typedef struct {
+  u8 bytes[crypto_kx_SEEDBYTES];
+} CryptoKxSeed;
+typedef struct {
+  u8 bytes[crypto_kx_PUBLICKEYBYTES];
+} CryptoKxPK;
+typedef struct {
+  u8 bytes[crypto_kx_SECRETKEYBYTES];
+} CryptoKxSK;
 typedef struct {
   CryptoKxPK pk;
   CryptoKxSK sk;
 } CryptoKxKeypair;
-typedef struct { u8 bytes[crypto_kx_SESSIONKEYBYTES]; } CryptoKxTx;
+typedef struct {
+  u8 bytes[crypto_kx_SESSIONKEYBYTES];
+} CryptoKxTx;
 
-typedef struct { u8 bytes[crypto_secretbox_MACBYTES]; } CryptoAuthTag;
+typedef struct {
+  u8 bytes[crypto_secretbox_MACBYTES];
+} CryptoAuthTag;
 
-
-
-
-
-
+#define CryptoBytes(x) ((Bytes){sizeof(x), (u8 *)&(x)})
 
 // X3DH first draft
 // ============================================================================
-
 
 typedef struct {
   CryptoSignPK sign;
@@ -78,15 +91,20 @@ typedef struct {
 u8 crypto_init(void);
 
 // Creates a CryptoUserState suitable for X3DH given a seed
-u8 crypto_seed_new_user(const CryptoSeed* seed, CryptoUserState* user);
+u8 crypto_seed_new_user(const CryptoSeed *seed, CryptoUserState *user);
 
 // How long a plaintxt buffer needs to be for a given ciphertxt len
 u64 crypto_plaintxt_len(u64 ciphertxt_len);
 
 // A -> B
 u64 crypto_x3dh_first_msg_len(u64 plaintxt_len);
-u8 crypto_x3dh_first_msg(const CryptoUserState* A, const CryptoUserPState* B, const Str plaintxt, Str* out);
+u8 crypto_x3dh_first_msg(const CryptoUserState *A, const CryptoUserPState *B,
+                         const Str plaintxt, Str *out);
 
 // B <- A
-u8 crypto_x3dh_first_msg_parse(const Str msg, CryptoX3DHFirstMessageHeader** header, Str* ciphertxt);
-u8 crypto_x3dh_first_msg_recv(const CryptoUserState* B, const CryptoX3DHFirstMessageHeader* header, Str ciphertxt, Str* plaintxt);
+u8 crypto_x3dh_first_msg_parse(const Str msg,
+                               CryptoX3DHFirstMessageHeader **header,
+                               Str *ciphertxt);
+u8 crypto_x3dh_first_msg_recv(const CryptoUserState *B,
+                              const CryptoX3DHFirstMessageHeader *header,
+                              Str ciphertxt, Str *plaintxt);
