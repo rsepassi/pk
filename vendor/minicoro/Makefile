@@ -1,4 +1,4 @@
-libminicoro.a:
+libminicoro.a: minicoro.c minicoro.h Makefile
 	$(CC) -c $(CFLAGS) minicoro.c
 	$(AR) rcs $@ minicoro.o
 	touch .build
