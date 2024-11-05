@@ -25,6 +25,7 @@ extern int taia_less();
 extern void taia_pack(char *s, struct taia *t);
 extern void taia_unpack();
 
+#define TAIN_PACK 12
 extern void tain_pack(char *s, struct taia *t);
 extern void tain_unpack();
 
