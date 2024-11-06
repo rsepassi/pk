@@ -10,6 +10,7 @@ typedef struct {
 } Str;
 
 typedef Str Bytes;
+#define BytesZero ((Bytes){0, 0})
 
 static inline Str str_from_c(char* buf) {
   return (Str){.len = strlen(buf), .buf = (uint8_t*)buf};
