@@ -1,3 +1,4 @@
+#pragma once
 // NIK is a Noise IK implementation.
 // WIP, see TODO below.
 //
@@ -44,6 +45,7 @@ typedef enum {
   NIK_Status_SessionRekeyMaxmsg,
   NIK_Status_SessionExpired,
   NIK_Status_InternalMsg,
+  NIK_Status_MsgReady,
 } NIK_Status;
 
 // NIK Message types
@@ -163,36 +165,3 @@ u64 nik_sendmsg_sz(u64 len);
 NIK_Status nik_msg_send(NIK_Session *session, Bytes payload, Bytes send,
                         u64 now);
 NIK_Status nik_msg_recv(NIK_Session *session, Bytes *msg, u64 now);
-
-// Persistent key-rotating kept-alive connection between 2 peers
-
-// CxnSys provides the system functionality that the Cxn needs.
-typedef struct {
-  void *userctx;
-  u64 (*now)(void *userctx);
-  void (*sleep)(void *userctx, u64 timeout);
-  void (*send)(void *userctx, Bytes timeout);
-} NIK_CxnSys;
-
-typedef struct {
-  NIK_HandshakeKeys keys;
-  NIK_CxnSys sys;
-
-  NIK_Session current;
-  NIK_Session prev;
-  u64 handshake_initiated_time;
-  NIK_Handshake handshake;
-  NIK_MsgHeader keepalive;
-  u64 rekey_deadline;
-  void *keepalive_coro;
-  void *rekey_coro;
-  void *rekey_waiter;
-  u64 last_handshake_sent;
-  bool cancelled;
-  bool failed;
-} NIK_Cxn;
-
-void nik_cxn_init(NIK_Cxn *cxn, NIK_HandshakeKeys keys, NIK_CxnSys sys);
-void nik_cxn_deinit(NIK_Cxn *cxn);
-NIK_Status nik_cxn_recv(NIK_Cxn *cxn, Bytes *send, u64 now);
-NIK_Status nik_cxn_send(NIK_Cxn *cxn, Bytes payload, Bytes send, u64 now);

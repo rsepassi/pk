@@ -242,7 +242,7 @@ NIK_Status nik_handshake_respond(NIK_Handshake *state,
 
     // AEAD(K, 0, e, H_r)
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
-    //u8 *empty = 0;
+    // u8 *empty = 0;
     LOG("pre");
     u8 dummy_ptr[1];
     u8 *empty = dummy_ptr;
@@ -505,9 +505,9 @@ NIK_Status nik_handshake_respond_check(NIK_Handshake *state,
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
     u8 dummy_ptr[1];
     u8 *empty = dummy_ptr;
-    u8* mempty = (u8 *)&msg->empty;
-    if (crypto_aead_chacha20poly1305_decrypt_detached(
-            0, 0, empty, 0, mempty, H, sizeof(H), zero_nonce, K))
+    u8 *mempty = (u8 *)&msg->empty;
+    if (crypto_aead_chacha20poly1305_decrypt_detached(0, 0, empty, 0, mempty, H,
+                                                      sizeof(H), zero_nonce, K))
       return 1;
     LOG("post");
   }
@@ -751,18 +751,6 @@ NIK_Status nik_msg_send(NIK_Session *session, Str payload, Str send, u64 now) {
 
   session->last_send_time = now;
 
-  if (session->isinitiator) {
-    if (deadline_expired(now, session->start_time,
-                         NIK_LIMIT_REKEY_AFTER_SECS * MS_PER_SEC)) {
-      DLOG("send session rekey timer");
-      return NIK_Status_SessionRekeyTimer;
-    }
-
-    if ((session->send_n + session->recv_n) >= NIK_LIMIT_REKEY_AFTER_MESSAGES) {
-      DLOG("send session rekey maxmsg");
-      return NIK_Status_SessionRekeyMaxmsg;
-    }
-  }
   return 0;
 }
 
@@ -815,20 +803,5 @@ NIK_Status nik_msg_recv(NIK_Session *session, Str *msg, u64 now) {
   session->last_recv_time = now;
 
   msg->len = payload_len;
-
-  if (session->isinitiator) {
-    if (deadline_expired(now, session->start_time,
-                         (NIK_LIMIT_REJECT_AFTER_SECS -
-                          NIK_LIMIT_KEEPALIVE_TIMEOUT_SECS -
-                          NIK_LIMIT_REKEY_TIMEOUT_SECS) *
-                             MS_PER_SEC)) {
-      DLOG("recv session rekey timer");
-      return NIK_Status_SessionRekeyTimer;
-    }
-    if ((session->send_n + session->recv_n) >= NIK_LIMIT_REKEY_AFTER_MESSAGES) {
-      DLOG("recv session rekey maxmsg");
-      return NIK_Status_SessionRekeyMaxmsg;
-    }
-  }
   return 0;
 }

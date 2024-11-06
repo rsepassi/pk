@@ -1,6 +1,7 @@
 // src
 #include "crypto.h"
 #include "nik.h"
+#include "nik_cxn.h"
 
 // vendor deps
 #include "argparse.h"
@@ -61,63 +62,7 @@ int nik_keys_kx_from_seed(const CryptoSeed *seed, CryptoKxKeypair *out) {
   return 0;
 }
 
-u64 nik_sysnow(void *ctx) {
-  struct taia ts;
-  taia_now(&ts);
-  u64 now = (ts.sec.x * MS_PER_SEC) + (ts.nano / NS_PER_MS);
-  return now;
-}
-
-void nik_syssleep(void *ctx, u64 sleep) { uvco_sleep(loop, sleep); }
-
-typedef struct {
-  char *name;
-  Bytes buf;
-  bool ready;
-} NikChannel;
-
-void nik_syssend(void *ctx, Bytes buf) {
-  NikChannel *chan = (NikChannel *)ctx;
-  LOG("syssend ->%s len=%d", chan->name, (int)buf.len);
-  CHECK(!chan->ready);
-  chan->buf.buf = realloc(chan->buf.buf, buf.len);
-  memcpy(chan->buf.buf, buf.buf, buf.len);
-  chan->buf.len = buf.len;
-  chan->ready = true;
-}
-
-typedef struct {
-  NikChannel chan_a;
-  NikChannel chan_b;
-  NIK_Cxn cxn_a;
-  NIK_Cxn cxn_b;
-} DemoCxn;
-
-void nik_msgxchg(mco_coro *co) {
-  DemoCxn *ctx = (DemoCxn *)mco_get_user_data(co);
-  while (1) {
-    uvco_sleep(loop, 200);
-    u64 now = nik_sysnow(NULL);
-
-    if (ctx->chan_a.ready) {
-      LOG("message arrived on A");
-      ctx->chan_a.ready = false;
-      NIK_Status status = nik_cxn_recv(&ctx->cxn_a, &ctx->chan_a.buf, now);
-      CHECK(status == NIK_OK || status == NIK_Status_InternalMsg);
-      if (status == NIK_OK) {
-        LOGS(ctx->chan_a.buf);
-      }
-    }
-    if (ctx->chan_b.ready) {
-      LOG("message arrived on B");
-      ctx->chan_b.ready = false;
-      NIK_Status status = nik_cxn_recv(&ctx->cxn_b, &ctx->chan_b.buf, now);
-      CHECK(status == NIK_OK || status == NIK_Status_InternalMsg);
-      if (status == NIK_OK) {
-        LOGS(ctx->chan_b.buf);
-      }
-    }
-  }
+void CxnCb(NIK_Cxn* cxn, void* userdata, NIK_Cxn_Event e, Bytes data) {
 }
 
 int demo_nikcxn(int argc, const char **argv) {
@@ -141,58 +86,24 @@ int demo_nikcxn(int argc, const char **argv) {
 
   NIK_Keys keys_i = {&kx_keys_i.pk, &kx_keys_i.sk};
   NIK_Keys keys_r = {&kx_keys_r.pk, &kx_keys_r.sk};
-  NIK_HandshakeKeys hkeys_i = {&keys_i, keys_r.pk};
-  NIK_HandshakeKeys hkeys_r = {&keys_r, keys_i.pk};
+  NIK_HandshakeKeys hkeys_A = {&keys_i, keys_r.pk};
+  NIK_HandshakeKeys hkeys_B = {&keys_r, keys_i.pk};
 
-  DemoCxn ctx = {0};
-  ctx.chan_a.name = "a";
-  ctx.chan_b.name = "b";
+  NIK_Cxn cxn_A;
+  u64 ctx_A;
+  nik_cxn_init(&cxn_A, hkeys_A, CxnCb, &ctx_A);
 
-  NIK_CxnSys sys_a = {
-      .userctx = &ctx.chan_b,
-      .now = nik_sysnow,
-      .sleep = nik_syssleep,
-      .send = nik_syssend,
-  };
-  NIK_CxnSys sys_b = sys_a;
-  sys_b.userctx = &ctx.chan_a;
+  NIK_Cxn cxn_B;
+  u64 ctx_B;
+  nik_cxn_init(&cxn_B, hkeys_B, CxnCb, &ctx_B);
 
-  nik_cxn_init(&ctx.cxn_a, hkeys_i, sys_a);
-  nik_cxn_init(&ctx.cxn_b, hkeys_r, sys_b);
+  u64 now = 1;
+  u64 delay_A = nik_cxn_get_next_wait_delay(&cxn_A, now);
+  LOG("delay_A %" PRIu64, delay_A);
+  LOG("start %" PRIu64, cxn_A.current.start_time);
 
-  Str payload_a = str_from_c("hello from A!");
-  Str payload_b = str_from_c("hello from B!");
-  u64 send_sz = nik_sendmsg_sz(payload_a.len);
-  Str send_a = (Str){send_sz, malloc(send_sz)};
-  Str send_b = (Str){send_sz, malloc(send_sz)};
-
-  {
-    mco_desc desc = mco_desc_init(nik_msgxchg, 0);
-    desc.user_data = &ctx;
-    mco_coro *xchg_co;
-    CHECK(mco_create(&xchg_co, &desc) == MCO_SUCCESS);
-    CHECK(mco_resume(xchg_co) == MCO_SUCCESS);
-  }
-
-  u64 i = 0;
-  while (true) {
-    LOG("tick");
-    uvco_sleep(loop, 1000);
-    u64 now = nik_sysnow(NULL);
-    {
-      LOG("message send from A");
-      NIK_Status status = nik_cxn_send(&ctx.cxn_a, payload_a, send_a, now);
-      LOG("a->: status=%d", status);
-      CHECK0(status);
-    }
-    if (i % 5 == 2) {
-      LOG("message send from B");
-      NIK_Status status = nik_cxn_send(&ctx.cxn_b, payload_b, send_b, now);
-      LOG("b->: status=%d", status);
-      CHECK0(status);
-    }
-    ++i;
-  }
+  nik_cxn_deinit(&cxn_A);
+  nik_cxn_deinit(&cxn_B);
 
   return 0;
 }
@@ -653,7 +564,7 @@ static const char *const usages[] = {
     "\n      - demo-kv"
     "\n      - demo-nik"
     "\n      - demo-nikcxn"
-    "\n      - demo-b58",
+    "\n      - demo-b58"
     "\n      - demo-mimalloc",
     NULL,
 };
@@ -664,9 +575,9 @@ struct cmd_struct {
 };
 
 static struct cmd_struct commands[] = {
-    {"demo-x3dh", demo_x3dh},         //
-    {"demo-kv", demo_kv},             //
-    {"demo-nik", demo_nik},           //
+    {"demo-x3dh", demo_x3dh}, //
+    {"demo-kv", demo_kv},     //
+    {"demo-nik", demo_nik},   //
     {"demo-nikcxn", demo_nikcxn},     //
     {"demo-b58", demo_b58},           //
     {"demo-mimalloc", demo_mimalloc}, //
