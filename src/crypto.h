@@ -40,6 +40,9 @@ typedef struct {
 } CryptoKxTx;
 
 typedef struct {
+  u8 bytes[crypto_secretbox_KEYBYTES];
+} CryptoPSK;
+typedef struct {
   u8 bytes[crypto_secretbox_MACBYTES];
 } CryptoAuthTag;
 

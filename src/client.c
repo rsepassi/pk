@@ -62,7 +62,8 @@ int nik_keys_kx_from_seed(const CryptoSeed *seed, CryptoKxKeypair *out) {
   return 0;
 }
 
-void CxnCb(NIK_Cxn* cxn, void* userdata, NIK_Cxn_Event e, Bytes data) {
+void CxnCb(NIK_Cxn *cxn, void *userdata, NIK_Cxn_Event e, Bytes data, u64 now) {
+  LOGS(data);
 }
 
 int demo_nikcxn(int argc, const char **argv) {
@@ -84,24 +85,221 @@ int demo_nikcxn(int argc, const char **argv) {
     CHECK0(nik_keys_kx_from_seed(&B_seed, &kx_keys_r));
   }
 
-  NIK_Keys keys_i = {&kx_keys_i.pk, &kx_keys_i.sk};
-  NIK_Keys keys_r = {&kx_keys_r.pk, &kx_keys_r.sk};
-  NIK_HandshakeKeys hkeys_A = {&keys_i, keys_r.pk};
-  NIK_HandshakeKeys hkeys_B = {&keys_r, keys_i.pk};
+  NIK_Keys hkeys_A = {&kx_keys_i.pk, &kx_keys_i.sk, &kx_keys_r.pk};
+  NIK_Keys hkeys_B = {&kx_keys_r.pk, &kx_keys_r.sk, &kx_keys_i.pk};
 
   NIK_Cxn cxn_A;
   u64 ctx_A;
-  nik_cxn_init(&cxn_A, hkeys_A, CxnCb, &ctx_A);
-
   NIK_Cxn cxn_B;
   u64 ctx_B;
-  nik_cxn_init(&cxn_B, hkeys_B, CxnCb, &ctx_B);
+  LOG("cxn_A=%p", &cxn_A);
+  LOG("cxn_B=%p", &cxn_B);
 
+  Bytes zero = BytesZero;
+  u64 maxdelay = UINT64_MAX;
   u64 now = 1;
-  u64 delay_A = nik_cxn_get_next_wait_delay(&cxn_A, now);
-  LOG("delay_A %" PRIu64, delay_A);
-  LOG("start %" PRIu64, cxn_A.current.start_time);
 
+  // Initialize A as initiator
+  nik_cxn_init(&cxn_A, hkeys_A, CxnCb, &ctx_A);
+
+  // I2R
+  Bytes hs1;
+  {
+    // A enqueues message
+    Bytes msg1 = str_from_c("hi from A");
+    nik_cxn_enqueue(&cxn_A, msg1);
+    LOG("A initiates handshake");
+    ++now;
+    u64 delay_A = nik_cxn_get_next_wait_delay(&cxn_A, now, maxdelay);
+    CHECK(delay_A == 0);
+    CHECK(nik_cxn_outgoing(&cxn_A, &hs1, now) == NIK_Cxn_Status_MsgReady);
+    CHECK0(nik_cxn_outgoing(&cxn_A, &zero, now));
+  }
+
+  // R2I
+  Bytes hs2;
+  {
+    LOG("B responds to handshake");
+    CHECK(hs1.len == sizeof(NIK_HandshakeMsg1));
+    NIK_HandshakeMsg1 *msg1 = (NIK_HandshakeMsg1 *)hs1.buf;
+    NIK_Handshake hs;
+    CHECK0(nik_handshake_init_check(&hs, hkeys_B, msg1));
+    nik_cxn_init_responder(&cxn_B, hkeys_B, &hs, msg1, CxnCb, &ctx_B, now);
+    LOGB(CryptoBytes(cxn_B.next.send));
+    LOGB(CryptoBytes(cxn_B.next.recv));
+    CHECK0(cxn_B.current_start_time);
+    CHECK0(nik_cxn_get_next_wait_delay(&cxn_B, now, maxdelay));
+    CHECK(nik_cxn_outgoing(&cxn_B, &hs2, now) == NIK_Cxn_Status_MsgReady);
+    CHECK0(nik_cxn_outgoing(&cxn_B, &zero, now));
+    CHECK(cxn_B.handshake_state == NIK_CxnHState_R_DataWait);
+  }
+  free(hs1.buf);
+
+  // Data msg
+  Bytes data;
+  {
+    // Delivering the handshake response finalizes the handshake and triggers
+    // the message to be delivered.
+    LOG("A finalizes handshake");
+    ++now;
+    nik_cxn_incoming(&cxn_A, hs2, now);
+
+    LOGB(CryptoBytes(cxn_A.current.send));
+    LOGB(CryptoBytes(cxn_A.current.recv));
+    CHECK0(sodium_memcmp(&cxn_A.current.send, &cxn_B.next.recv,
+                         sizeof(cxn_A.current.send)));
+    CHECK0(sodium_memcmp(&cxn_A.current.recv, &cxn_B.next.send,
+                         sizeof(cxn_A.current.send)));
+    CHECK(cxn_A.handshake_state == NIK_CxnHState_Null);
+    CHECK0(nik_cxn_get_next_wait_delay(&cxn_A, now, maxdelay));
+
+    LOG("A sends message");
+    CHECK(nik_cxn_outgoing(&cxn_A, &data, now) == NIK_Cxn_Status_MsgReady);
+    CHECK0(nik_cxn_outgoing(&cxn_A, &zero, now));
+  }
+  free(hs2.buf);
+
+  // Data msg incoming
+  {
+    // The delivery of the first data message finalizes B's handshake
+    LOG("B receives message");
+    ++now;
+    CHECK(cxn_B.handshake_state == NIK_CxnHState_R_DataWait);
+    nik_cxn_incoming(&cxn_B, data, now);
+    CHECK(cxn_B.handshake_state == NIK_CxnHState_Null);
+    CHECK0(sodium_memcmp(&cxn_A.current.send, &cxn_B.current.recv,
+                         sizeof(cxn_A.current.send)));
+    CHECK0(sodium_memcmp(&cxn_A.current.recv, &cxn_B.current.send,
+                         sizeof(cxn_A.current.send)));
+  }
+  free(data.buf);
+
+  // Keepalive
+  Bytes keepalive;
+  {
+    u64 delay = nik_cxn_get_next_wait_delay(&cxn_B, now, maxdelay);
+    now += delay;
+    LOG("B sends keepalive after %dms", (int)delay);
+    CHECK0(nik_cxn_get_next_wait_delay(&cxn_B, now, maxdelay));
+    CHECK(nik_cxn_outgoing(&cxn_B, &keepalive, now) == NIK_Cxn_Status_MsgReady);
+    CHECK0(nik_cxn_outgoing(&cxn_B, &zero, now));
+    CHECK(keepalive.buf[0] == NIK_Msg_Keepalive);
+  }
+
+  u64 rekey_delay = (NIK_LIMIT_REKEY_TIMEOUT_SECS + NIK_LIMIT_KEEPALIVE_TIMEOUT_SECS) * 1000;
+  {
+    nik_cxn_incoming(&cxn_A, keepalive, now);
+    CHECK0(nik_cxn_outgoing(&cxn_A, &zero, now));
+    // Next delay is for rekey
+    CHECK(nik_cxn_get_next_wait_delay(&cxn_A, now, UINT64_MAX) == rekey_delay);
+  }
+  free(keepalive.buf);
+
+  // Trigger a key rotation
+  {
+    LOG("Trigger key rotation");
+    // Both are put into StartWait
+    now += rekey_delay;
+    CHECK0(nik_cxn_get_next_wait_delay(&cxn_A, now, UINT64_MAX));
+    CHECK0(nik_cxn_get_next_wait_delay(&cxn_B, now, UINT64_MAX));
+    CHECK(cxn_A.handshake_state == NIK_CxnHState_I_StartWait);
+    CHECK(cxn_B.handshake_state == NIK_CxnHState_I_StartWait);
+
+    // Determine which one has the shorter jitter timeout
+    u64 delay_A = cxn_A.handshake.initiator.handshake_start_time;
+    u64 delay_B = cxn_B.handshake.initiator.handshake_start_time;
+    u64 delay = MIN(delay_A, delay_B);
+    NIK_Cxn* initiator = delay == delay_A ? &cxn_A : &cxn_B;
+    NIK_Cxn* responder = delay == delay_A ? &cxn_B : &cxn_A;
+    now += delay;
+
+    LOG("Initiator sends handshake");
+    CHECK(nik_cxn_outgoing(initiator, &hs1, now) == NIK_Cxn_Status_MsgReady);
+    CHECK(initiator->handshake_state == NIK_CxnHState_I_R2IWait);
+    LOG("Responder receives handshake");
+    nik_cxn_incoming(responder, hs1, now);
+    CHECK(responder->handshake_state == NIK_CxnHState_R_R2IReady);
+    LOG("Responder responds");
+    CHECK(nik_cxn_outgoing(responder, &hs2, now) == NIK_Cxn_Status_MsgReady);
+    LOG("Initiator finalizes");
+    nik_cxn_incoming(initiator, hs2, now);
+    CHECK(responder->handshake_state == NIK_CxnHState_R_DataWait);
+    CHECK(initiator->handshake_state == NIK_CxnHState_Null);
+
+    LOG("Initiator sends data");
+    nik_cxn_enqueue(initiator, str_from_c("complete"));
+    CHECK(nik_cxn_outgoing(initiator, &data, now) == NIK_Cxn_Status_MsgReady);
+    LOG("Responder finalizes");
+    nik_cxn_incoming(responder, data, now);
+    CHECK(responder->handshake_state == NIK_CxnHState_Null);
+
+    free(hs1.buf);
+    free(hs2.buf);
+    free(data.buf);
+  }
+
+  //
+  //   // Trigger a key rotation
+  //   {
+  //     u64 rekey = now + (NIK_LIMIT_REKEY_AFTER_SECS - 20) * 1000;
+  //     Bytes msg;
+  //     while (now < rekey) {
+  //       LOG("tick");
+  //       LOG("A=%d B=%d", cxn_A.key_rotation.state, cxn_B.key_rotation.state);
+  //
+  //       now += 10 * 1000;
+  //       u64 delay = nik_cxn_get_next_wait_delay(&cxn_A, now, maxdelay);
+  //       now += delay;
+  //
+  //       NIK_Cxn_Status status;
+  //       while ((status = nik_cxn_outgoing(&cxn_A, &msg, now)) ==
+  //              NIK_Cxn_Status_MsgReady) {
+  //         LOG("->B type=%d", msg.buf[0]);
+  //         nik_cxn_incoming(&cxn_B, msg, now);
+  //       }
+  //       CHECK0(status);
+  //       while ((status = nik_cxn_outgoing(&cxn_B, &msg, now)) ==
+  //              NIK_Cxn_Status_MsgReady) {
+  //         LOG("->A type=%d", msg.buf[0]);
+  //         nik_cxn_incoming(&cxn_A, msg, now);
+  //       }
+  //       CHECK0(status);
+  //     }
+  //     u64 delay = nik_cxn_get_next_wait_delay(&cxn_A, now, maxdelay);
+  //     CHECK(cxn_A.key_rotation.state == NIK_KR_I_StartWait);
+  //     now += delay; // jitter
+  //     CHECK0(nik_cxn_get_next_wait_delay(&cxn_A, now, maxdelay));
+  //     CHECK(cxn_A.key_rotation.state == NIK_KR_I_I2RReady);
+  //     CHECK(nik_cxn_outgoing(&cxn_A, &hs1, now) == NIK_Cxn_Status_MsgReady);
+  //     CHECK0(nik_cxn_outgoing(&cxn_A, &zero, now));
+  //   }
+  //
+  //   // Messages should still go through even with old keys
+  //   {
+  //     Bytes msg = str_from_c("mid rotation");
+  //     CHECK0(nik_cxn_get_next_wait_delay(&cxn_B, now, maxdelay));
+  //     Bytes buf;
+  //     CHECK(nik_cxn_outgoing(&cxn_B, &buf, now) == NIK_Cxn_Status_MsgReady);
+  //     CHECK(buf.buf[0] == NIK_Msg_Keepalive);
+  //     CHECK0(nik_cxn_outgoing(&cxn_B, &zero, now));
+  //     nik_cxn_enqueue(&cxn_B, msg, now);
+  //     CHECK(nik_cxn_outgoing(&cxn_B, &data, now) == NIK_Cxn_Status_MsgReady);
+  //   }
+  //
+  //   // Complete the key rotation
+  //   {
+  //     ++now;
+  //     LOG("%d", cxn_B.key_rotation.state);
+  //     CHECK(cxn_B.key_rotation.state == NIK_KR_Null);
+  //     nik_cxn_incoming(&cxn_B, hs1, now);
+  //     CHECK(cxn_B.key_rotation.state == NIK_KR_R_R2IReady);
+  //     CHECK(nik_cxn_outgoing(&cxn_B, &hs2, now) == NIK_Cxn_Status_MsgReady);
+  //     nik_cxn_incoming(&cxn_A, hs2, now);
+  //     CHECK(cxn_A.key_rotation.current.start_time == now);
+  //   }
+  //
+  //   // Verify that the mid-rotation message still decrypts
+  //
   nik_cxn_deinit(&cxn_A);
   nik_cxn_deinit(&cxn_B);
 
@@ -127,28 +325,28 @@ int demo_nik(int argc, const char **argv) {
     CHECK0(nik_keys_kx_from_seed(&B_seed, &kx_keys_r));
   }
 
-  NIK_Keys keys_i = {&kx_keys_i.pk, &kx_keys_i.sk};
-  NIK_Keys keys_r = {&kx_keys_r.pk, &kx_keys_r.sk};
+  u32 id_i = 1;
+  u32 id_r = 2;
+  NIK_Keys hkeys_A = {&kx_keys_i.pk, &kx_keys_i.sk, &kx_keys_r.pk};
+  NIK_Keys hkeys_B = {&kx_keys_r.pk, &kx_keys_r.sk, &kx_keys_i.pk};
 
   // I
   LOG("i2r");
   NIK_Handshake state_i;
-  NIK_HandshakeKeys hkeys_i = {&keys_i, keys_r.pk};
   NIK_HandshakeMsg1 msg1;
-  CHECK0(nik_handshake_init(&state_i, hkeys_i, &msg1));
+  CHECK0(nik_handshake_init(&state_i, hkeys_A, id_i, &msg1));
   phex("IC", state_i.chaining_key, NIK_CHAIN_SZ);
 
   // R
   LOG("i2r check");
   NIK_Handshake state_r;
-  NIK_HandshakeKeys hkeys_r = {&keys_r, keys_i.pk};
-  CHECK0(nik_handshake_init_check(&state_r, hkeys_r, &msg1));
+  CHECK0(nik_handshake_init_check(&state_r, hkeys_B, &msg1));
   phex("RC", state_r.chaining_key, NIK_CHAIN_SZ);
 
   // R
   LOG("r2i");
   NIK_HandshakeMsg2 msg2;
-  CHECK0(nik_handshake_respond(&state_r, &msg1, &msg2));
+  CHECK0(nik_handshake_respond(&state_r, id_r, &msg1, &msg2));
   phex("RC", state_r.chaining_key, NIK_CHAIN_SZ);
 
   // I
@@ -156,17 +354,15 @@ int demo_nik(int argc, const char **argv) {
   CHECK0(nik_handshake_respond_check(&state_i, &msg2));
   phex("IC", state_i.chaining_key, NIK_CHAIN_SZ);
 
-  u64 now = 0;
-
   // I
   LOG("i derive");
   NIK_Session tx_i;
-  CHECK0(nik_handshake_final(&state_i, &tx_i, now));
+  CHECK0(nik_handshake_final(&state_i, &tx_i));
 
   // R
   LOG("r derive");
   NIK_Session tx_r;
-  CHECK0(nik_handshake_final(&state_r, &tx_r, now));
+  CHECK0(nik_handshake_final(&state_r, &tx_r));
 
   // Check that I and R have the same transfer keys
   phex("tx.send", (u8 *)&tx_i.send, sizeof(tx_i.send));
@@ -177,7 +373,7 @@ int demo_nik(int argc, const char **argv) {
   CHECK(tx_i.recv_n == 0);
   CHECK(tx_r.send_n == 0);
   CHECK(tx_r.recv_n == 0);
-  CHECK(tx_r.recv_max_counter == 0);
+  CHECK(tx_r.counter_max == 0);
   CHECK(tx_i.sender == tx_r.receiver);
   CHECK(tx_i.receiver == tx_r.sender);
 
@@ -189,12 +385,12 @@ int demo_nik(int argc, const char **argv) {
     u64 send_sz = nik_sendmsg_sz(payload.len);
     send_msg = (Str){.len = send_sz, .buf = malloc(send_sz)};
     CHECK(send_msg.buf);
-    CHECK0(nik_msg_send(&tx_i, payload, send_msg, now));
+    CHECK0(nik_msg_send(&tx_i, payload, send_msg));
   }
 
   // R: Receive a message
   {
-    CHECK0(nik_msg_recv(&tx_r, &send_msg, now));
+    CHECK0(nik_msg_recv(&tx_r, &send_msg));
     LOG("recv: %.*s", (int)send_msg.len, send_msg.buf);
     CHECK(str_eq(payload, send_msg));
   }
@@ -206,16 +402,12 @@ int demo_nik(int argc, const char **argv) {
     LOG("send: %.*s", (int)payload.len, payload.buf);
     u64 send_sz = nik_sendmsg_sz(payload.len);
     send_msg = (Str){.len = send_sz, .buf = malloc(send_sz)};
-    CHECK0(nik_msg_send(&tx_i, payload, send_msg, now));
-
-    // Check that the session is invalid if 180s has passed
-    CHECK(nik_msg_send(&tx_i, payload, send_msg, now + (180 * 1000)) ==
-          NIK_Status_SessionExpired);
+    CHECK0(nik_msg_send(&tx_i, payload, send_msg));
   }
 
   // R: Receive another
   {
-    CHECK0(nik_msg_recv(&tx_r, &send_msg, now));
+    CHECK0(nik_msg_recv(&tx_r, &send_msg));
     LOG("recv: %.*s", (int)send_msg.len, send_msg.buf);
     CHECK(str_eq(payload, send_msg));
   }
@@ -224,7 +416,7 @@ int demo_nik(int argc, const char **argv) {
   CHECK(tx_i.recv_n == 0);
   CHECK(tx_r.send_n == 0);
   CHECK(tx_r.recv_n == 2);
-  CHECK(tx_r.recv_max_counter == 2);
+  CHECK(tx_r.counter_max == 2);
 
   return 0;
 }
@@ -575,9 +767,9 @@ struct cmd_struct {
 };
 
 static struct cmd_struct commands[] = {
-    {"demo-x3dh", demo_x3dh}, //
-    {"demo-kv", demo_kv},     //
-    {"demo-nik", demo_nik},   //
+    {"demo-x3dh", demo_x3dh},         //
+    {"demo-kv", demo_kv},             //
+    {"demo-nik", demo_nik},           //
     {"demo-nikcxn", demo_nikcxn},     //
     {"demo-b58", demo_b58},           //
     {"demo-mimalloc", demo_mimalloc}, //

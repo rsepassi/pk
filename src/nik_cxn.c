@@ -1,11 +1,7 @@
-// TODO:
-// rm CHECKs
-// Timer cancellation
-// should last_send/recv times be on the Cxn or on the Session?
-// zeroing stuff out in the key rotation
-// what to do on kr_fail
-// TODO: if the message doesn't authenticate, we're still overwriting Handshake
-// state
+// TODO: unless it's already been acted upon!
+// if (cxn->current.send_n >= NIK_LIMIT_REKEY_AFTER_MESSAGES)
+// Lifetime for enqueue payload
+// If both A and B initiate a handshake simultaneously what happens?
 #include "nik_cxn.h"
 
 #include "log.h"
@@ -14,6 +10,7 @@
 #define JITTER_SECS 10
 
 #define MS_PER_SEC 1000
+#define REKEY_AFTER_MS (NIK_LIMIT_REKEY_AFTER_SECS * MS_PER_SEC)
 #define REKEY_ATTEMPT_MS (NIK_LIMIT_REKEY_ATTEMPT_SECS * MS_PER_SEC)
 #define REKEY_TIMEOUT_MS (NIK_LIMIT_REKEY_TIMEOUT_SECS * MS_PER_SEC)
 #define KEEPALIVE_MS (NIK_LIMIT_KEEPALIVE_TIMEOUT_SECS * MS_PER_SEC)
@@ -21,6 +18,38 @@
 #define JITTER_MS (JITTER_SECS * MS_PER_SEC)
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
+#define MAX(x, y) ((x) > (y) ? (x) : (y))
+
+typedef struct {
+  u64 keepalive;
+  u64 startwait;
+  u64 responsewait;
+  u64 reconnect;
+  u64 expiration;
+} TimerDelays;
+
+static inline u64 outgoingq_sz(NIK_Cxn *cxn) {
+  return (cxn->outgoing_head < cxn->outgoing_next)
+             ? cxn->outgoing_next - cxn->outgoing_head
+             : cxn->outgoing_head - cxn->outgoing_next;
+}
+
+static inline NIK_Cxn_Status outgoingq_enq(NIK_Cxn *cxn, Bytes payload) {
+  if ((outgoingq_sz(cxn) + 1) >= NIK_LIMIT_MAX_OUTGOING)
+    return NIK_Cxn_Status_QFull;
+  cxn->outgoing[cxn->outgoing_next] = payload;
+  cxn->outgoing_next = (cxn->outgoing_next + 1) % NIK_LIMIT_MAX_OUTGOING;
+  return 0;
+}
+
+static inline Bytes outgoingq_deq(NIK_Cxn *cxn) {
+  if (cxn->outgoing_head == cxn->outgoing_next)
+    return BytesZero;
+  Bytes out = cxn->outgoing[cxn->outgoing_head];
+  cxn->outgoing[cxn->outgoing_head] = BytesZero;
+  cxn->outgoing_head = (cxn->outgoing_head + 1) % NIK_LIMIT_MAX_OUTGOING;
+  return out;
+}
 
 static inline u64 deadline_delay(u64 now, u64 start, u64 timeout) {
   u64 deadline = start + timeout;
@@ -31,300 +60,432 @@ static inline bool deadline_expired(u64 now, u64 start, u64 timeout) {
   return deadline_delay(now, start, timeout) == 0;
 }
 
-static inline bool keepalive_required(NIK_Cxn *cxn, u64 now) {
-  u64 ka_delay = UINT64_MAX;
-  if (cxn->current.recv_n > 0)
-    ka_delay = deadline_delay(now, cxn->current.last_send_time, KEEPALIVE_MS);
-  return ka_delay == 0;
+static inline bool session_expired(NIK_Cxn *cxn, u64 now) {
+  NIK_Session *session = &cxn->current;
+  return ((session->send_n + session->recv_n) >=
+              NIK_LIMIT_REJECT_AFTER_MESSAGES ||
+          deadline_expired(now, cxn->current_start_time, REJECT_MS));
 }
 
-static void kr_init_wait(NIK_Cxn *cxn, u64 now) {
-  if (cxn->key_rotation.state != NIK_KR_Null)
-    return;
+static inline u64 keepalive_delay(NIK_Cxn *cxn, u64 now) {
+  // If we have received a data message, but have not since sent back a data
+  // message nor a keepalive, send a keepalive KEEPALIVE_MS after the last sent
+  // data message.
+  return (
+             // have received a data message
+             cxn->last_recv_time > 0 &&
+             // haven't sent a data message since the last recv'd msg
+             cxn->last_recv_time > cxn->last_send_time &&
+             // haven't sent a keepalive since the last recv'd msg
+             cxn->last_recv_time > cxn->last_keepalive_send_time)
+             // send a keepalive after KEEPALIVE_MS
+             ? deadline_delay(now, cxn->last_send_time, KEEPALIVE_MS)
+             : UINT64_MAX;
+}
 
-  u64 delay = deadline_delay(now, cxn->key_rotation.handshake_sent_time,
-                             REKEY_TIMEOUT_MS);
+#define DELAY_FMT(x) (int)(x)
+static inline void debug_log_timers(TimerDelays delays) {
+  DLOG("TimerDelays(startwait=%d, reconnect=%d, responsewait=%d, "
+       "expiration=%d, keepalive=%d)",
+       DELAY_FMT(delays.startwait), DELAY_FMT(delays.reconnect),
+       DELAY_FMT(delays.responsewait), DELAY_FMT(delays.expiration),
+       DELAY_FMT(delays.keepalive));
+}
+
+void timer_delays(NIK_Cxn *cxn, u64 now, TimerDelays *delays) {
+  // 1. Keepalive
+  delays->keepalive = keepalive_delay(cxn, now);
+  // 2. Delayed handshake initiation
+  delays->startwait =
+      (cxn->handshake_state == NIK_CxnHState_I_StartWait)
+          ? deadline_delay(now, cxn->handshake.initiator.handshake_start_time,
+                           0)
+          : UINT64_MAX;
+  // 3. Handshake initiation retry
+  delays->responsewait =
+      (cxn->handshake_state == NIK_CxnHState_I_R2IWait)
+          ? deadline_delay(now, cxn->last_handshake_init_time, REKEY_TIMEOUT_MS)
+          : UINT64_MAX;
+  // 4. Quiet connection reconnect
+  delays->reconnect = deadline_delay(
+      now, MAX(cxn->current_start_time, MAX(cxn->last_recv_time, cxn->last_keepalive_recv_time)),
+      KEEPALIVE_MS + REKEY_TIMEOUT_MS);
+  // 5. max expiration
+  delays->expiration =
+      deadline_delay(now, cxn->current_start_time, REJECT_MS * 3);
+
+  (void)debug_log_timers;
+}
+
+static void handshake_success(NIK_Cxn *cxn, u64 now) {
+  DLOG("cxn=%p key rotating", cxn);
+  // prev <- current <- next
+  cxn->prev = cxn->current;
+  cxn->current = cxn->next;
+  cxn->current_start_time = now;
+
+  // Reset the key rotation state machine to Null.
+  cxn->handshake_state = 0;
+  sodium_memzero(&cxn->handshake, sizeof(cxn->handshake));
+  sodium_memzero(&cxn->next, sizeof(cxn->next));
+}
+
+static void handshake_response_arrived(NIK_Cxn *cxn, Bytes msg, u64 now) {
+  if (cxn->handshake_state != NIK_CxnHState_I_R2IWait)
+    return;
+  NIK_Handshake handshake = cxn->handshake.initiator.handshake;
+  if (nik_handshake_respond_check(&handshake, (NIK_HandshakeMsg2 *)msg.buf))
+    return;
+  if (nik_handshake_final(&handshake, &cxn->next))
+    return;
+  handshake_success(cxn, now);
+}
+
+static void error(NIK_Cxn *cxn, Bytes err) {
+  cxn->cb(cxn, cxn->userdata, NIK_Cxn_Event_Error, err, 0);
+}
+
+static void handshake_init(NIK_Cxn *cxn) {
+  if (nik_handshake_init(&cxn->handshake.initiator.handshake, cxn->keys,
+                         cxn->id, &cxn->handshake.initiator.msg)) {
+    error(cxn, str_from_c("bad handshake init"));
+    return;
+  }
+
+  cxn->handshake_state = NIK_CxnHState_I_I2RReady;
+}
+
+static void handshake_init_wait(NIK_Cxn *cxn, u64 now) {
   u64 jitter = randombytes_uniform(JITTER_MS);
-  delay += jitter;
-
-  cxn->key_rotation.isinitiator = true;
-  cxn->key_rotation.initiator.handshake_start_time = now + delay;
-  cxn->key_rotation.state = NIK_KR_I_StartWait;
+  u64 throttle =
+      deadline_delay(now, cxn->last_handshake_init_time, REKEY_TIMEOUT_MS);
+  cxn->handshake.initiator.handshake_start_time = now + jitter + throttle;
+  cxn->handshake_state = NIK_CxnHState_I_StartWait;
 }
 
-static void kr_reset(NIK_Cxn *cxn) {
-  cxn->key_rotation.state = NIK_KR_Null;
+static void handshake_respond_checked(NIK_Cxn *cxn, NIK_Handshake *state,
+                                      const NIK_HandshakeMsg1 *msg1, u64 now) {
+  if (nik_handshake_respond(state, cxn->id, msg1,
+                            &cxn->handshake.responder.msg)) {
+    error(cxn, str_from_c("bad handshake response"));
+    return;
+  }
+  if (nik_handshake_final(state, &cxn->next)) {
+    error(cxn, str_from_c("bad handshake response"));
+    return;
+  }
+  cxn->next_start_time = now;
+  cxn->handshake_state = NIK_CxnHState_R_R2IReady;
 }
 
-static void kr_deliver_data(NIK_Cxn *cxn, u64 now) {
-  if (cxn->key_rotation.state != NIK_KR_R_DataWait)
-    return;
-
-  cxn->prev = cxn->current;
-  cxn->current = cxn->key_rotation.new_session;
-
-  kr_reset(cxn);
-}
-
-static void kr_fail(NIK_Cxn *cxn) {
-  CHECK(false, "fail? reset?");
-  kr_reset(cxn);
-}
-
-static void kr_deliver_r2i(NIK_Cxn *cxn, Bytes msg, u64 now) {
-  if (cxn->key_rotation.state != NIK_KR_I_R2IWait)
-    return;
-
-  if (nik_handshake_respond_check(&cxn->key_rotation.handshake,
-                                  (NIK_HandshakeMsg2 *)msg.buf))
-    return;
-
-  if (nik_handshake_final(&cxn->key_rotation.handshake,
-                          &cxn->key_rotation.new_session, now))
-    return;
-
-  cxn->prev = cxn->current;
-  cxn->current = cxn->key_rotation.new_session;
-}
-
-static void kr_deliver_i2r(NIK_Cxn *cxn, Bytes msg, u64 now) {
-  if (cxn->key_rotation.state != NIK_KR_Null)
-    return;
-
+static void handshake_respond(NIK_Cxn *cxn, Bytes msg, u64 now) {
   if (msg.len != sizeof(NIK_HandshakeMsg1))
     return;
-
-  if (nik_handshake_init_check(&cxn->key_rotation.handshake, cxn->keys,
-                               (NIK_HandshakeMsg1 *)msg.buf))
+  NIK_HandshakeMsg1 *msg1 = (NIK_HandshakeMsg1 *)msg.buf;
+  NIK_Handshake handshake;
+  if (nik_handshake_init_check(&handshake, cxn->keys, msg1))
     return;
-
-  if (nik_handshake_respond(&cxn->key_rotation.handshake,
-                            (NIK_HandshakeMsg1 *)msg.buf,
-                            &cxn->key_rotation.responder.msg))
-    return;
-
-  if (nik_handshake_final(&cxn->key_rotation.handshake,
-                          &cxn->key_rotation.new_session, now))
-    return;
-
-  cxn->key_rotation.isinitiator = false;
-  cxn->key_rotation.state = NIK_KR_R_R2IReady;
+  handshake_respond_checked(cxn, &handshake, msg1, now);
 }
 
-static void kr_prep_i2r(NIK_Cxn *cxn, u64 now) {
-  if (nik_handshake_init(&cxn->key_rotation.handshake, cxn->keys,
-                         &cxn->key_rotation.initiator.msg)) {
-    kr_fail(cxn);
-    return;
-  }
-  cxn->key_rotation.isinitiator = true;
-  cxn->key_rotation.state = NIK_KR_I_I2RReady;
+static void handshake_reset(NIK_Cxn *cxn) {
+  cxn->handshake_state = NIK_CxnHState_Null;
 }
 
-static void kr_init(NIK_Cxn *cxn, u64 now) {
-  // Advance from {NIK_KR_Null, NIK_KR_I_StartWait} to NIK_KR_I_I2RReady
-  if (!(cxn->key_rotation.state == NIK_KR_Null ||
-        cxn->key_rotation.state == NIK_KR_I_StartWait))
-    return;
-
-  cxn->key_rotation.initiator.handshake_start_time = now;
-  kr_prep_i2r(cxn, now);
-}
-
-static void kr_expire(NIK_Cxn *cxn, u64 now) {
-  // Advance from NIK_KR_I_R2IWait to {NIK_KR_I_I2RReady,NIK_KR_Error}
-  if (cxn->key_rotation.state != NIK_KR_I_R2IWait)
-    return;
-
-  if (deadline_expired(now, cxn->key_rotation.initiator.handshake_start_time,
-                       REJECT_MS * 3))
-    kr_fail(cxn);
+static void handshake_expire(NIK_Cxn *cxn, u64 now) {
+  if (deadline_expired(now, cxn->last_handshake_init_time, REKEY_ATTEMPT_MS))
+    handshake_reset(cxn);
   else
-    kr_prep_i2r(cxn, now);
+    handshake_init(cxn);
 }
 
-static void advance_time(NIK_Cxn *cxn, u64 now) {
-  // Update timers
-  switch (cxn->key_rotation.state) {
-  // 1. Key rotation initiation delay
-  case NIK_KR_I_StartWait:
-    if (deadline_expired(now, cxn->key_rotation.initiator.handshake_start_time,
-                         0))
-      kr_init(cxn, now);
-    break;
-  // 2. Key rotation retry expiration
-  case NIK_KR_I_R2IWait:
-    if (deadline_expired(now, cxn->key_rotation.handshake_sent_time,
-                         REKEY_TIMEOUT_MS))
-      kr_expire(cxn, now);
-    break;
-  // 3. Keepalive key rotation
-  case NIK_KR_Null:
-    if ((cxn->current.send_n + cxn->current.recv_n) > 0 &&
-        deadline_expired(now, cxn->current.last_recv_time,
-                         KEEPALIVE_MS + REKEY_TIMEOUT_MS))
-      kr_init_wait(cxn, now);
-    break;
-  default:
-    break;
-  }
-}
-
-static void handle_datamsg(NIK_Cxn *cxn, Bytes msg, u64 now) {
-  if (nik_msg_recv(&cxn->current, &msg, now))
-    if (nik_msg_recv(&cxn->prev, &msg, now))
-      return;
-
-  if (cxn->key_rotation.state == NIK_KR_R_DataWait)
-    kr_deliver_data(cxn, now);
-
-  NIK_Session *session = &cxn->current;
-  if (session->isinitiator) {
-    if (deadline_expired(now, session->start_time,
-                         REJECT_MS - KEEPALIVE_MS - REKEY_TIMEOUT_MS)) {
-      DLOG("recv session rekey timer");
-      kr_init_wait(cxn, now);
-    }
-    if ((session->send_n + session->recv_n) >= NIK_LIMIT_REKEY_AFTER_MESSAGES) {
-      DLOG("recv session rekey maxmsg");
-      return kr_init(cxn, now);
-    }
-  }
-
-  // TODO: deliver to user cb
-}
-
-static NIK_Status kr_i2r_send(NIK_Cxn *cxn, Bytes *msg, u64 now) {
+static void handshake_init_send(NIK_Cxn *cxn, Bytes *msg, u64 now) {
+  CHECK(cxn->last_handshake_init_time == 0 ||
+            (now >= cxn->last_handshake_init_time + REKEY_TIMEOUT_MS),
+        "bug: should never have tried sending this often");
   msg->len = sizeof(NIK_HandshakeMsg1);
   msg->buf = malloc(msg->len);
-  memcpy(msg->buf, &cxn->key_rotation.initiator.msg, msg->len);
-  cxn->key_rotation.state = NIK_KR_I_R2IWait;
-  cxn->key_rotation.handshake_sent_time = now;
-  return 0;
+  memcpy(msg->buf, &cxn->handshake.initiator.msg, msg->len);
+  cxn->last_handshake_init_time = now;
+  cxn->handshake_state = NIK_CxnHState_I_R2IWait;
 }
 
-static NIK_Status kr_r2i_send(NIK_Cxn *cxn, Bytes *msg, u64 now) {
+static void handshake_response_send(NIK_Cxn *cxn, Bytes *msg, u64 now) {
   msg->len = sizeof(NIK_HandshakeMsg2);
   msg->buf = malloc(msg->len);
-  memcpy(msg->buf, &cxn->key_rotation.responder.msg, msg->len);
-  cxn->key_rotation.state = NIK_KR_R_DataWait;
+  memcpy(msg->buf, &cxn->handshake.responder.msg, msg->len);
+  cxn->handshake_state = NIK_CxnHState_R_DataWait;
+}
+
+static NIK_Cxn_Status keepalive_send(NIK_Cxn *cxn, Bytes *msg, u64 now) {
+  msg->len = sizeof(NIK_MsgHeader);
+  msg->buf = malloc(msg->len);
+  if (nik_msg_send(&cxn->current, BytesZero, *msg)) {
+    error(cxn, str_from_c("could not create keepalive"));
+    return 1;
+  }
+  msg->buf[0] = NIK_Msg_Keepalive;
   return 0;
 }
 
-static NIK_Status kr_keepalive_send(NIK_Cxn *cxn, Bytes *msg, u64 now) {
-  msg->len = sizeof(NIK_MsgHeader);
-  msg->buf = malloc(msg->len);
-  return nik_msg_send(&cxn->current, BytesZero, *msg, now);
+static void cxn_init(NIK_Cxn *cxn, NIK_Keys keys, NIK_CxnCb cb,
+                     void *userdata) {
+  *cxn = (NIK_Cxn){0};
+  cxn->keys = keys;
+  randombytes_buf((u8 *)&cxn->id, sizeof(cxn->id));
+  cxn->cb = cb;
+  cxn->userdata = userdata;
+  STATIC_CHECK(NIK_LIMIT_MAX_OUTGOING >= 2);
 }
 
-NIK_Status nik_cxn_incoming(NIK_Cxn *cxn, Bytes msg, u64 now) {
-  advance_time(cxn, now);
+static void cxn_expire(NIK_Cxn *cxn) {
+  error(cxn, str_from_c("connection expired"));
 
-  if (msg.len <= 0)
+  sodium_memzero(&cxn->current, sizeof(cxn->current));
+  sodium_memzero(&cxn->prev, sizeof(cxn->prev));
+  sodium_memzero(&cxn->next, sizeof(cxn->next));
+  cxn->current_start_time = 0;
+  cxn->prev_start_time = 0;
+  cxn->next_start_time = 0;
+  cxn->handshake_state = 0;
+  sodium_memzero(&cxn->handshake, sizeof(cxn->handshake));
+  cxn->last_send_time = 0;
+  cxn->last_recv_time = 0;
+  cxn->last_keepalive_send_time = 0;
+  cxn->last_keepalive_recv_time = 0;
+  cxn->last_handshake_init_time = 0;
+  sodium_memzero(&cxn->max_handshake_timestamp,
+                 sizeof(cxn->max_handshake_timestamp));
+}
+
+static void expire_timers(NIK_Cxn *cxn, u64 now) {
+  // If time has passed, check if any timers have expired
+  if (now <= cxn->maxtime)
+    return;
+  cxn->maxtime = now;
+
+  TimerDelays delays;
+  timer_delays(cxn, now, &delays);
+
+  if (delays.startwait == 0)
+    handshake_init(cxn);
+  else if (delays.reconnect == 0)
+    handshake_init_wait(cxn, now);
+  else if (delays.responsewait == 0)
+    handshake_expire(cxn, now);
+
+  if (delays.expiration == 0)
+    cxn_expire(cxn);
+
+  // note keepalive isn't checked here because the keepalive timer expiring
+  // doesn't trigger any state transition.
+}
+
+static inline void log_datasend(NIK_Cxn *cxn, u64 now) {
+  if (now > cxn->last_send_time)
+    cxn->last_send_time = now;
+}
+
+static inline void log_datarecv(NIK_Cxn *cxn, u64 now) {
+  if (now > cxn->last_recv_time)
+    cxn->last_recv_time = now;
+}
+
+static inline void log_keepalivesend(NIK_Cxn *cxn, u64 now) {
+  if (now > cxn->last_keepalive_send_time)
+    cxn->last_keepalive_send_time = now;
+}
+
+static inline void log_keepaliverecv(NIK_Cxn *cxn, u64 now) {
+  if (now > cxn->last_keepalive_recv_time)
+    cxn->last_keepalive_recv_time = now;
+}
+
+// Public API
+// ============================================================================
+
+void nik_cxn_init(NIK_Cxn *cxn, NIK_Keys keys, NIK_CxnCb cb, void *userdata) {
+  cxn_init(cxn, keys, cb, userdata);
+  handshake_init(cxn);
+}
+
+void nik_cxn_init_responder(NIK_Cxn *cxn, NIK_Keys keys, NIK_Handshake *state,
+                            const NIK_HandshakeMsg1 *msg1, NIK_CxnCb cb,
+                            void *userdata, u64 now) {
+  CHECK(now > 0);
+  cxn_init(cxn, keys, cb, userdata);
+  handshake_respond_checked(cxn, state, msg1, now);
+}
+
+void nik_cxn_deinit(NIK_Cxn *cxn) { sodium_memzero(cxn, sizeof(NIK_Cxn)); }
+
+NIK_Cxn_Status nik_cxn_enqueue(NIK_Cxn *cxn, Bytes payload) {
+  if (payload.buf == NULL)
+    return 1;
+  return outgoingq_enq(cxn, payload);
+}
+
+u64 nik_cxn_get_next_wait_delay(NIK_Cxn *cxn, u64 now, u64 maxdelay) {
+  CHECK(now > 0);
+
+  expire_timers(cxn, now);
+
+  // If an outgoing message is ready, the delay is 0.
+
+  // 1. Handshake init
+  if (cxn->handshake_state == NIK_CxnHState_I_I2RReady)
     return 0;
+  // 2. Handshake response
+  if (cxn->handshake_state == NIK_CxnHState_R_R2IReady)
+    return 0;
+  // 3. User send
+  if (cxn->outgoing[cxn->outgoing_head].buf != NULL)
+    return 0;
+
+  // Otherwise, the delay is the minimum of the active timers.
+  TimerDelays delays;
+  timer_delays(cxn, now, &delays);
+  return MIN(maxdelay,                 //
+             MIN(delays.keepalive,     //
+                 MIN(delays.startwait, //
+                     MIN(delays.responsewait, delays.reconnect))));
+}
+
+void nik_cxn_incoming(NIK_Cxn *cxn, Bytes msg, u64 now) {
+  if (session_expired(cxn, now))
+    error(cxn, str_from_c("session expired"));
+
+  expire_timers(cxn, now);
+
+  if (msg.len <= 0) {
+    error(cxn, str_from_c("received empty message"));
+    return;
+  }
 
   NIK_MsgType msgtype = msg.buf[0];
   switch (msgtype) {
   case NIK_Msg_R2I:
-    if (cxn->key_rotation.state == NIK_KR_I_R2IWait)
-      kr_deliver_r2i(cxn, msg, now);
-    break;
+    handshake_response_arrived(cxn, msg, now);
+    return;
   case NIK_Msg_I2R:
-    if (cxn->key_rotation.state == NIK_KR_Null)
-      kr_deliver_i2r(cxn, msg, now);
-    break;
+    handshake_respond(cxn, msg, now);
+    return;
   case NIK_Msg_Data:
-    handle_datamsg(cxn, msg, now);
+  case NIK_Msg_Keepalive:
     break;
   default:
-    break;
+    return;
   }
 
-  return 0;
+  // Receive a data or keepalive message
+
+  // Try decoding and validating the message using the sessions next,
+  // current, prev in order.
+  bool recvd = false;
+  do {
+    if (cxn->handshake_state == NIK_CxnHState_R_DataWait) {
+      if (!nik_msg_recv(&cxn->next, &msg)) {
+        handshake_success(cxn, now);
+        recvd = true;
+        break;
+      }
+    }
+
+    if (!nik_msg_recv(&cxn->current, &msg)) {
+      recvd = true;
+      break;
+    }
+
+    if (!nik_msg_recv(&cxn->prev, &msg)) {
+      recvd = true;
+      break;
+    }
+  } while (0);
+
+  if (!recvd)
+    return;
+
+  NIK_Session *session = &cxn->current;
+  if (session->isinitiator) {
+    if (deadline_expired(now, cxn->current_start_time,
+                         REJECT_MS - KEEPALIVE_MS - REKEY_TIMEOUT_MS)) {
+      DLOG("recv session rekey timer");
+      handshake_init_wait(cxn, now);
+    } else if (session->recv_n >= NIK_LIMIT_REKEY_AFTER_MESSAGES) {
+      DLOG("recv session rekey maxmsg");
+      handshake_init(cxn);
+    }
+  }
+
+  if (msgtype == NIK_Msg_Data) {
+    log_datarecv(cxn, now);
+    cxn->cb(cxn, cxn->userdata, NIK_Cxn_Event_Data, msg, now);
+  } else {
+    log_keepaliverecv(cxn, now);
+  }
+
+  return;
 }
 
-NIK_Status nik_cxn_outgoing(NIK_Cxn *cxn, Bytes *msg, u64 now) {
-  advance_time(cxn, now);
+NIK_Cxn_Status nik_cxn_outgoing(NIK_Cxn *cxn, Bytes *msg, u64 now) {
+  if (session_expired(cxn, now)) {
+    error(cxn, str_from_c("session expired"));
+    return 0;
+  }
 
-  // 4 outgoing message types
+  expire_timers(cxn, now);
+
+  // Ready outgoing messages
+
   // 1. Handshake init
-  if (cxn->key_rotation.state == NIK_KR_I_I2RReady) {
-    if (!kr_i2r_send(cxn, msg, now))
-      return NIK_Status_MsgReady;
+  if (cxn->handshake_state == NIK_CxnHState_I_I2RReady) {
+    handshake_init_send(cxn, msg, now);
+    return NIK_Cxn_Status_MsgReady;
   }
   // 2. Handshake response
-  if (cxn->key_rotation.state == NIK_KR_R_R2IReady) {
-    if (!kr_r2i_send(cxn, msg, now))
-      return NIK_Status_MsgReady;
+  if (cxn->handshake_state == NIK_CxnHState_R_R2IReady) {
+    handshake_response_send(cxn, msg, now);
+    return NIK_Cxn_Status_MsgReady;
   }
+
+  // Keepalives and data messages require an active session
+  if (cxn->current_start_time == 0)
+    return 0;
+
   // 3. Keepalive
-  if (keepalive_required(cxn, now)) {
-    if (!kr_keepalive_send(cxn, msg, now))
-      return NIK_Status_MsgReady;
+  if (keepalive_delay(cxn, now) == 0) {
+    if (!keepalive_send(cxn, msg, now)) {
+      log_keepalivesend(cxn, now);
+      return NIK_Cxn_Status_MsgReady;
+    } else {
+      error(cxn, str_from_c("could not send keepalive"));
+    }
   }
-
-  // TODO:
-  // if (session->isinitiator) {
-  //   if (deadline_expired(now, session->start_time,
-  //                        NIK_LIMIT_REKEY_AFTER_SECS * MS_PER_SEC)) {
-  //     DLOG("send session rekey timer");
-  //     return NIK_Status_SessionRekeyTimer;
-  //   }
-
-  //   if ((session->send_n + session->recv_n) >=
-  //   NIK_LIMIT_REKEY_AFTER_MESSAGES) {
-  //     DLOG("send session rekey maxmsg");
-  //     return NIK_Status_SessionRekeyMaxmsg;
-  //   }
-  // }
 
   // 4. User send
-  // TODO
+  Bytes payload = outgoingq_deq(cxn);
+  if (!payload.buf)
+    return 0;
 
+  msg->len = nik_sendmsg_sz(payload.len);
+  msg->buf = malloc(msg->len);
+  NIK_Status status = nik_msg_send(&cxn->current, payload, *msg);
+  if (status != NIK_OK) {
+    error(cxn, str_from_c("unable to encrypt payload"));
+    goto err;
+  }
+  log_datasend(cxn, now);
+
+  if (cxn->current.isinitiator) {
+    if (deadline_expired(now, cxn->current_start_time, REKEY_AFTER_MS))
+      handshake_init_wait(cxn, now);
+    else if (cxn->current.send_n >= NIK_LIMIT_REKEY_AFTER_MESSAGES)
+      handshake_init(cxn);
+  }
+
+  return NIK_Cxn_Status_MsgReady;
+
+err:
+  free(msg->buf);
   return 0;
 }
-
-u64 nik_cxn_get_next_wait_delay(NIK_Cxn *cxn, u64 now) {
-  // If we have a message to send out, the delay is 0
-  // 4 outgoing message types
-  // 1. Handshake init
-  if (cxn->key_rotation.state == NIK_KR_I_I2RReady)
-    return 0;
-  // 2. Handshake response
-  if (cxn->key_rotation.state == NIK_KR_R_R2IReady)
-    return 0;
-  // 3. Keepalive
-  if (keepalive_required(cxn, now))
-    return 0;
-  // 4. User send
-  // TODO
-
-  // If we don't have a message immediately ready, then we have to wake for
-  // timers. The maximum allowed delay is the minimum across the timers:
-  // 1. Keepalive
-  u64 ka_delay = UINT64_MAX;
-  if (cxn->current.recv_n > 0)
-    ka_delay = deadline_delay(now, cxn->current.last_send_time, KEEPALIVE_MS);
-  // 2. Key rotation initiation delay timer
-  u64 kr_init_delay = UINT64_MAX;
-  if (cxn->key_rotation.state == NIK_KR_I_StartWait)
-    kr_init_delay = deadline_delay(
-        now, cxn->key_rotation.initiator.handshake_start_time, 0);
-  // 3. Key rotation response timeout
-  u64 kr_response_delay = UINT64_MAX;
-  if (cxn->key_rotation.state == NIK_KR_I_R2IWait)
-    kr_response_delay = deadline_delay(
-        now, cxn->key_rotation.handshake_sent_time, REKEY_TIMEOUT_MS);
-
-  return MIN(ka_delay, MIN(kr_init_delay, kr_response_delay));
-}
-
-void nik_cxn_init(NIK_Cxn *cxn, NIK_HandshakeKeys keys, NIK_CxnCb cb,
-                  void *userdata) {
-  *cxn = (NIK_Cxn){0};
-  cxn->keys = keys;
-  cxn->cb = cb;
-  cxn->userdata = userdata;
-}
-
-void nik_cxn_deinit(NIK_Cxn *cxn) { sodium_memzero(cxn, sizeof(NIK_Cxn)); }
