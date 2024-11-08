@@ -4,7 +4,6 @@
 #include "sodium.h"
 #include "taia.h"
 
-#define NIK_CONSTRUCTION "Noise_IKpsk2_25519_ChaChaPoly_BLAKE2b"
 #define NIK_IDENTIFIER "nik WireGuard v1"
 #define NIK_KDF_CTX "wgikkdf1"
 #define NIK_LABEL_MAC1 "mac1----"
@@ -114,17 +113,6 @@ static bool counter_ok(CounterHistory *history, u64 counter, u64 max_seen) {
   return true;
 }
 
-static inline bool deadline_expired(u64 now, u64 start, u64 timeout) {
-  return (now >= (start + timeout));
-}
-
-static bool session_expired(NIK_Session *session, u64 now) {
-  return ((session->send_n + session->recv_n) >=
-              NIK_LIMIT_REJECT_AFTER_MESSAGES ||
-          deadline_expired(now, session->start_time,
-                           (NIK_LIMIT_REJECT_AFTER_SECS * MS_PER_SEC)));
-}
-
 static NIK_Status nik_dh_kdf2(const u8 *C, const CryptoKxPK *pk,
                               const CryptoKxSK *sk, const CryptoKxPK *bob,
                               u8 *T1, u8 *T2, bool initiator) {
@@ -160,15 +148,14 @@ static NIK_Status nik_dh_kdf2(const u8 *C, const CryptoKxPK *pk,
   return 0;
 }
 
-NIK_Status nik_handshake_respond(NIK_Handshake *state,
+NIK_Status nik_handshake_respond(NIK_Handshake *state, u32 id,
                                  const NIK_HandshakeMsg1 *msg1,
                                  NIK_HandshakeMsg2 *msg2) {
   // Second message: Responder to Initiator
   sodium_memzero(msg2, sizeof(NIK_HandshakeMsg2));
   // Set message type
   msg2->type = NIK_Msg_R2I;
-  // Assign random sender id
-  randombytes_buf((u8 *)&msg2->sender, sizeof(msg2->sender));
+  msg2->sender = id;
   state->sender = msg2->sender;
   // Copy receiver
   msg2->receiver = msg1->sender;
@@ -213,10 +200,15 @@ NIK_Status nik_handshake_respond(NIK_Handshake *state,
   u8 T[32] = {0};
   u8 K[32] = {0};
   {
-    u8 Q[32] = {0};
+    STATIC_CHECK(crypto_secretbox_KEYBYTES == 32);
+    u8 Q0[crypto_secretbox_KEYBYTES] = {0};
+    u8 *Q = Q0;
+    if (state->keys.psk)
+      Q = (u8 *)state->keys.psk;
 
     u8 T0[crypto_kdf_KEYBYTES];
-    if (hmac_blake2b(T0, sizeof(T0), C_r, NIK_CHAIN_SZ, Q, sizeof(Q)))
+    if (hmac_blake2b(T0, sizeof(T0), C_r, NIK_CHAIN_SZ, Q,
+                     crypto_secretbox_KEYBYTES))
       return 1;
 
     if (crypto_kdf_derive_from_key(C_r, NIK_CHAIN_SZ, 1, NIK_KDF_CTX, T0))
@@ -243,7 +235,6 @@ NIK_Status nik_handshake_respond(NIK_Handshake *state,
     // AEAD(K, 0, e, H_r)
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
     // u8 *empty = 0;
-    LOG("pre");
     u8 dummy_ptr[1];
     u8 *empty = dummy_ptr;
     u8 *mempty = (u8 *)&msg2->empty;
@@ -251,7 +242,6 @@ NIK_Status nik_handshake_respond(NIK_Handshake *state,
     if (crypto_aead_chacha20poly1305_encrypt_detached(
             empty, mempty, 0, 0, 0, H, sizeof(H), 0, zero_nonce, K))
       return 1;
-    LOG("post");
   }
 
   // H_r := Hash(H_r || msg.empty)
@@ -262,20 +252,18 @@ NIK_Status nik_handshake_respond(NIK_Handshake *state,
   return 0;
 }
 
-NIK_Status nik_handshake_init(NIK_Handshake *state,
-                              const NIK_HandshakeKeys keys,
+NIK_Status nik_handshake_init(NIK_Handshake *state, const NIK_Keys keys, u32 id,
                               NIK_HandshakeMsg1 *msg) {
   // First message: Initiator to Responder
   sodium_memzero(msg, sizeof(NIK_HandshakeMsg1));
   // Set message type
   msg->type = NIK_Msg_I2R;
-  // Assign random sender id
-  randombytes_buf((u8 *)&msg->sender, sizeof(msg->sender));
+  msg->sender = id;
   state->sender = msg->sender;
 
   // Initiator static key
-  CryptoKxPK *S_pub_i = keys.keys->pk;
-  CryptoKxSK *S_priv_i = keys.keys->sk;
+  CryptoKxPK *S_pub_i = keys.pk;
+  CryptoKxSK *S_priv_i = keys.sk;
 
   // Responder static key
   CryptoKxPK *S_pub_r = keys.bob;
@@ -336,7 +324,7 @@ NIK_Status nik_handshake_init(NIK_Handshake *state,
   if (nik_dh_kdf2(C_i, E_pub_i, E_priv_i, S_pub_r, C_i, K, true))
     return 1;
 
-  // msg.static := AEAD(K, 0, Hash(S_pub_i), H_i)
+  // msg.static := AEAD(K, 0, S_pub_i, H_i)
   {
     // Snapshot H_i
     u8 H[32];
@@ -345,19 +333,12 @@ NIK_Status nik_handshake_init(NIK_Handshake *state,
     if (crypto_generichash_blake2b_final(&H_i, H, sizeof(H)))
       return 1;
 
-    // Hash(S_pub_i)
-    u8 H_S_pub_i[sizeof(*S_pub_i)];
-    if (crypto_generichash_blake2b(H_S_pub_i, sizeof(H_S_pub_i), (u8 *)S_pub_i,
-                                   sizeof(*S_pub_i), 0, 0))
-      return 1;
-
-    // AEAD(K, 0, Hash(S_pub_i), H_i)
+    // AEAD(K, 0, S_pub_i, H_i)
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
-    STATIC_CHECK(sizeof(msg->statik) ==
-                 crypto_box_MACBYTES + sizeof(H_S_pub_i));
+    STATIC_CHECK(sizeof(msg->statik) == crypto_box_MACBYTES + sizeof(*S_pub_i));
     if (crypto_aead_chacha20poly1305_encrypt_detached(
-            (u8 *)&msg->statik.key, (u8 *)&msg->statik.tag, 0, H_S_pub_i,
-            sizeof(H_S_pub_i), H, sizeof(H), 0, zero_nonce, K))
+            (u8 *)&msg->statik.key, (u8 *)&msg->statik.tag, 0, (u8 *)S_pub_i,
+            sizeof(*S_pub_i), H, sizeof(H), 0, zero_nonce, K))
       return 1;
   }
 
@@ -465,18 +446,23 @@ NIK_Status nik_handshake_respond_check(NIK_Handshake *state,
                   &msg->ephemeral, C_i, 0, true))
     return 1;
   // C_i := KDF1(C_i, DH(S_priv_i, E_pub_r))
-  if (nik_dh_kdf2(C_i, state->keys.keys->pk, state->keys.keys->sk,
-                  &msg->ephemeral, C_i, 0, true))
+  if (nik_dh_kdf2(C_i, state->keys.pk, state->keys.sk, &msg->ephemeral, C_i, 0,
+                  true))
     return 1;
 
   // (C_i, T, K) := KDF3(C_i, Q);
   u8 T[32] = {0};
   u8 K[32] = {0};
   {
-    u8 Q[32] = {0};
+    STATIC_CHECK(crypto_secretbox_KEYBYTES == 32);
+    u8 Q0[crypto_secretbox_KEYBYTES] = {0};
+    u8 *Q = Q0;
+    if (state->keys.psk)
+      Q = (u8 *)state->keys.psk;
 
     u8 T0[crypto_kdf_KEYBYTES];
-    if (hmac_blake2b(T0, sizeof(T0), C_i, NIK_CHAIN_SZ, Q, sizeof(Q)))
+    if (hmac_blake2b(T0, sizeof(T0), C_i, NIK_CHAIN_SZ, Q,
+                     crypto_secretbox_KEYBYTES))
       return 1;
 
     if (crypto_kdf_derive_from_key(C_i, NIK_CHAIN_SZ, 1, NIK_KDF_CTX, T0))
@@ -501,7 +487,6 @@ NIK_Status nik_handshake_respond_check(NIK_Handshake *state,
       return 1;
 
     // AEAD(K, 0, e, H_i)
-    LOG("pre");
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
     u8 dummy_ptr[1];
     u8 *empty = dummy_ptr;
@@ -509,7 +494,6 @@ NIK_Status nik_handshake_respond_check(NIK_Handshake *state,
     if (crypto_aead_chacha20poly1305_decrypt_detached(0, 0, empty, 0, mempty, H,
                                                       sizeof(H), zero_nonce, K))
       return 1;
-    LOG("post");
   }
 
   // H_i := Hash(H_i || msg.empty)
@@ -520,8 +504,7 @@ NIK_Status nik_handshake_respond_check(NIK_Handshake *state,
   return 0;
 }
 
-NIK_Status nik_handshake_init_check(NIK_Handshake *state,
-                                    const NIK_HandshakeKeys keys,
+NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
                                     const NIK_HandshakeMsg1 *msg) {
   // Responder checks the first message and constructs identical state
   if (msg->type != NIK_Msg_I2R)
@@ -530,8 +513,8 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state,
   state->receiver = msg->sender;
 
   // Responder static key
-  CryptoKxPK *S_pub_r = keys.keys->pk;
-  CryptoKxSK *S_priv_r = keys.keys->sk;
+  CryptoKxPK *S_pub_r = keys.pk;
+  CryptoKxSK *S_priv_r = keys.sk;
 
   // Validate mac1 up front
   // mac1 = MAC(HASH(LABEL_MAC1 || responder.static_public),
@@ -608,7 +591,7 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state,
   if (nik_dh_kdf2(C_i, S_pub_r, S_priv_r, &msg->ephemeral, C_i, K, false))
     return 1;
 
-  // msg.static := AEAD(K, 0, Hash(S_pub_i), H_i)
+  // msg.static := AEAD(K, 0, S_pub_i, H_i)
   {
     // Snapshot H_i
     u8 H[32];
@@ -617,21 +600,15 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state,
     if (crypto_generichash_blake2b_final(&H_i, H, sizeof(H)))
       return 1;
 
-    // Hash(S_pub_i)
-    u8 H_S_pub_i[sizeof(*S_pub_i)];
-    if (crypto_generichash_blake2b(H_S_pub_i, sizeof(H_S_pub_i), (u8 *)S_pub_i,
-                                   sizeof(*S_pub_i), 0, 0))
-      return 1;
-
-    // AEAD(K, 0, Hash(S_pub_i), H_i)
-    u8 H_decrypt[sizeof(H_S_pub_i)];
+    // AEAD(K, 0, S_pub_i, H_i)
+    u8 H_decrypt[sizeof(*S_pub_i)];
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
     if (crypto_aead_chacha20poly1305_decrypt_detached(
             H_decrypt, 0, (u8 *)&msg->statik.key, sizeof(msg->statik.key),
             (u8 *)&msg->statik.tag, H, sizeof(H), zero_nonce, K))
       return 1;
 
-    if (sodium_memcmp(H_decrypt, H_S_pub_i, sizeof(H_S_pub_i)))
+    if (sodium_memcmp(H_decrypt, S_pub_i, sizeof(*S_pub_i)))
       return 1;
   }
 
@@ -673,15 +650,13 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state,
   return 0;
 }
 
-NIK_Status nik_handshake_final(NIK_Handshake *state, NIK_Session *session,
-                               u64 now) {
+NIK_Status nik_handshake_final(NIK_Handshake *state, NIK_Session *session) {
   u8 *C = state->chaining_key;
 
   *session = (NIK_Session){0};
   session->sender = state->sender;
   session->receiver = state->receiver;
   session->isinitiator = state->initiator;
-  session->start_time = now;
 
   CryptoKxTx *send = &session->send;
   CryptoKxTx *recv = &session->recv;
@@ -709,23 +684,19 @@ NIK_Status nik_handshake_final(NIK_Handshake *state, NIK_Session *session,
 
   sodium_memzero(state, sizeof(NIK_Handshake));
 
-  LOGB(CryptoBytes(session->send));
-  LOGB(CryptoBytes(session->recv));
-
   return 0;
 }
 
 u64 nik_sendmsg_sz(u64 len) { return sizeof(NIK_MsgHeader) + len + len % 16; }
 
-NIK_Status nik_msg_send(NIK_Session *session, Str payload, Str send, u64 now) {
-  if (session_expired(session, now)) {
-    DLOG("send session expired");
-    return NIK_Status_SessionExpired;
-  }
+NIK_Status nik_msg_send(NIK_Session *session, Str payload, Str send) {
   if (nik_sendmsg_sz(payload.len) != send.len) {
     DLOG("send bad size");
     return 1;
   }
+
+  if (payload.len > UINT16_MAX)
+    return 1;
 
   sodium_memzero(send.buf, send.len);
 
@@ -749,16 +720,10 @@ NIK_Status nik_msg_send(NIK_Session *session, Str payload, Str send, u64 now) {
     return 1;
   }
 
-  session->last_send_time = now;
-
   return 0;
 }
 
-NIK_Status nik_msg_recv(NIK_Session *session, Str *msg, u64 now) {
-  if (session_expired(session, now)) {
-    DLOG("recv session expired");
-    return NIK_Status_SessionExpired;
-  }
+NIK_Status nik_msg_recv(NIK_Session *session, Str *msg) {
   if (msg->len < sizeof(NIK_MsgHeader)) {
     DLOG("recv bad length");
     return 1;
@@ -768,7 +733,7 @@ NIK_Status nik_msg_recv(NIK_Session *session, Str *msg, u64 now) {
   u8 *crypt = (u8 *)(msg->buf + sizeof(NIK_MsgHeader));
   u64 crypt_len = msg->len - sizeof(NIK_MsgHeader);
 
-  if (header->type != NIK_Msg_Data) {
+  if (!(header->type == NIK_Msg_Data || header->type == NIK_Msg_Keepalive)) {
     DLOG("recv bad type");
     return 1;
   }
@@ -791,16 +756,14 @@ NIK_Status nik_msg_recv(NIK_Session *session, Str *msg, u64 now) {
     return 1;
   }
 
-  if (!counter_ok(&session->counter_history, counter,
-                  session->recv_max_counter)) {
+  if (!counter_ok(&session->counter_history, counter, session->counter_max)) {
     DLOG("recv bad counter");
     return 1;
   }
-  if (counter > session->recv_max_counter)
-    session->recv_max_counter = counter;
+  if (counter > session->counter_max)
+    session->counter_max = counter;
 
   ++session->recv_n;
-  session->last_recv_time = now;
 
   msg->len = payload_len;
   return 0;
