@@ -67,8 +67,8 @@ DEPS_LDFLAGS := \
 
 BUILD_DEPS = $(HDRS) Makefile build/.mk | deps
 
-# compile the client executable
-build/client$(EXE): $(OBJS) $(BUILD_DEPS)
+# compile the cli
+build/cli$(EXE): $(OBJS) $(BUILD_DEPS)
 	$(CC) -o $@ $(CFLAGS) $(OBJS) $(LDFLAGS) $(DEPS_LDFLAGS) -lc
 
 # compile a src file
