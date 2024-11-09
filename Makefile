@@ -5,7 +5,9 @@ export ROOTDIR := $(CURDIR)
 export OPT := -O2
 export ZIG_OPT := ReleaseFast
 include scripts/platform.mk
-export CFLAGS += -std=c99 -Wall -Werror $(OPT) -target $(TARGET)
+export CFLAGS += -std=c99 -nostdinc -nostdinc++ \
+	-Wall -Werror \
+	$(OPT) -target $(TARGET)
 
 # src/
 HDRS := $(wildcard src/*.h)
@@ -67,8 +69,7 @@ BUILD_DEPS = $(HDRS) Makefile build/.mk | deps
 
 # compile the client executable
 build/client$(EXE): $(OBJS) $(BUILD_DEPS)
-	$(CC) -o $@ $(CFLAGS) $(OBJS) $(LDFLAGS) $(DEPS_LDFLAGS) \
-		-lc
+	$(CC) -o $@ $(CFLAGS) $(OBJS) $(LDFLAGS) $(DEPS_LDFLAGS) -lc
 
 # compile a src file
 build/%.$(O): src/%.c $(BUILD_DEPS)
@@ -84,7 +85,7 @@ build/test/%.ok: build/test/%
 
 # compile a test executable
 build/test/%: test/%.c $(BUILD_DEPS) | unity
-	$(CC) $(CFLAGS) -o $@ $(DEPS_CFLAGS) $(DEPS_LDFLAGS) $(TEST_FLAGS) $<
+	$(CC) $(CFLAGS) -o $@ $(DEPS_CFLAGS) $(LDFLAGS) $(DEPS_LDFLAGS) $(TEST_FLAGS) $<
 
 .PHONY: deps $(DEPS)
 deps: $(DEPS)
