@@ -1,4 +1,4 @@
-$(shell libname getpass): src/getpass.c include/getpass.h
+libgetpass.a: src/getpass.c include/getpass.h
 	$(CC) -c $(CFLAGS) -Iinclude $<
 	$(AR) rcs $@ getpass.$(O)
 	touch .build
