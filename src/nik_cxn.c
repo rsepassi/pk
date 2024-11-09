@@ -108,7 +108,9 @@ void timer_delays(NIK_Cxn *cxn, u64 now, TimerDelays *delays) {
           : UINT64_MAX;
   // 4. Quiet connection reconnect
   delays->reconnect = deadline_delay(
-      now, MAX(cxn->current_start_time, MAX(cxn->last_recv_time, cxn->last_keepalive_recv_time)),
+      now,
+      MAX(cxn->current_start_time,
+          MAX(cxn->last_recv_time, cxn->last_keepalive_recv_time)),
       KEEPALIVE_MS + REKEY_TIMEOUT_MS);
   // 5. max expiration
   delays->expiration =

@@ -55,11 +55,11 @@ typedef enum {
 // 3 -> 5: expired
 typedef enum {
   NIK_CxnHState_Null,
-  NIK_CxnHState_I_StartWait,  // triggered, but waiting to initiate
-  NIK_CxnHState_I_I2RReady,   // Handshake init ready to send
-  NIK_CxnHState_I_R2IWait,    // waiting for handshake response
-  NIK_CxnHState_R_R2IReady,   // Handshake response ready to send
-  NIK_CxnHState_R_DataWait,   // responder waiting for first data packet
+  NIK_CxnHState_I_StartWait, // triggered, but waiting to initiate
+  NIK_CxnHState_I_I2RReady,  // Handshake init ready to send
+  NIK_CxnHState_I_R2IWait,   // waiting for handshake response
+  NIK_CxnHState_R_R2IReady,  // Handshake response ready to send
+  NIK_CxnHState_R_DataWait,  // responder waiting for first data packet
 } NIK_Cxn_HandshakeState;
 
 typedef struct {
@@ -127,12 +127,11 @@ struct NIK_Cxn_s {
 
 // Initializes a NIK_Cxn object for the given peer, as initiator or responder.
 // cb will be used to deliver NIK events and messages.
-void nik_cxn_init(NIK_Cxn *cxn, NIK_Keys keys, NIK_CxnCb cb,
-                  void *userdata);
+void nik_cxn_init(NIK_Cxn *cxn, NIK_Keys keys, NIK_CxnCb cb, void *userdata);
 // nik_handshake_init_check must have already been run.
-void nik_cxn_init_responder(NIK_Cxn *cxn, NIK_Keys keys,
-                            NIK_Handshake *state, const NIK_HandshakeMsg1 *msg1,
-                            NIK_CxnCb cb, void *userdata, u64 now);
+void nik_cxn_init_responder(NIK_Cxn *cxn, NIK_Keys keys, NIK_Handshake *state,
+                            const NIK_HandshakeMsg1 *msg1, NIK_CxnCb cb,
+                            void *userdata, u64 now);
 
 // Deinitializes a NIK_Cxn.
 void nik_cxn_deinit(NIK_Cxn *cxn);
