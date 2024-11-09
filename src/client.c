@@ -9,6 +9,7 @@
 #include "lmdb.h"
 #include "mimalloc.h"
 #include "minicoro.h"
+#include "plum/plum.h"
 #include "uv.h"
 
 // lib
@@ -23,6 +24,10 @@
 
 #define NS_PER_MS 1000000ULL
 #define MS_PER_SEC 1000ULL
+
+#ifndef MIN
+#define MIN(x, y) ((x) < (y) ? x : y)
+#endif
 
 // Global event loop
 uv_loop_t *loop;
@@ -186,7 +191,8 @@ int demo_nikcxn(int argc, const char **argv) {
     CHECK(keepalive.buf[0] == NIK_Msg_Keepalive);
   }
 
-  u64 rekey_delay = (NIK_LIMIT_REKEY_TIMEOUT_SECS + NIK_LIMIT_KEEPALIVE_TIMEOUT_SECS) * 1000;
+  u64 rekey_delay =
+      (NIK_LIMIT_REKEY_TIMEOUT_SECS + NIK_LIMIT_KEEPALIVE_TIMEOUT_SECS) * 1000;
   {
     nik_cxn_incoming(&cxn_A, keepalive, now);
     CHECK0(nik_cxn_outgoing(&cxn_A, &zero, now));
@@ -209,8 +215,8 @@ int demo_nikcxn(int argc, const char **argv) {
     u64 delay_A = cxn_A.handshake.initiator.handshake_start_time;
     u64 delay_B = cxn_B.handshake.initiator.handshake_start_time;
     u64 delay = MIN(delay_A, delay_B);
-    NIK_Cxn* initiator = delay == delay_A ? &cxn_A : &cxn_B;
-    NIK_Cxn* responder = delay == delay_A ? &cxn_B : &cxn_A;
+    NIK_Cxn *initiator = delay == delay_A ? &cxn_A : &cxn_B;
+    NIK_Cxn *responder = delay == delay_A ? &cxn_B : &cxn_A;
     now += delay;
 
     LOG("Initiator sends handshake");
@@ -732,6 +738,121 @@ int demo_b58(int argc, const char **argv) {
   return 0;
 }
 
+void alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
+  *buf = uv_buf_init(malloc(suggested_size), suggested_size);
+}
+
+void recv_cb(uv_udp_t *handle, ssize_t nread, const uv_buf_t *buf,
+             const struct sockaddr *addr, unsigned flags) {
+  if (nread == 0 && addr == NULL) {
+    LOG("<EOS>");
+    return;
+  }
+  if (nread < 0) {
+    LOG("error!");
+    free(buf->base);
+    return;
+  }
+  LOG("msg len=%d", (int)nread);
+  LOG("msg %.*s", (int)nread, buf->base);
+  free(buf->base);
+}
+
+void mapping_callback(int id, plum_state_t state,
+                      const plum_mapping_t *mapping) {
+  LOG("map!");
+  CHECK(state == PLUM_STATE_SUCCESS);
+  LOG("External address: %s:%hu\n", mapping->external_host,
+      mapping->external_port);
+}
+
+int demo_multicast(int argc, const char **argv) {
+  bool send = argc > 1 && memcmp(argv[1], "send", 4) == 0;
+
+  LOG("udp init");
+  uv_udp_t udp;
+  CHECK0(uv_udp_init(loop, &udp));
+
+  char *multicast_group = "239.0.0.22";
+  int port = 20000;
+
+  if (send) {
+    struct sockaddr_in myaddr;
+    CHECK0(uv_ip4_addr("0.0.0.0", 0, &myaddr));
+    CHECK0(uv_udp_bind(&udp, (struct sockaddr *)&myaddr, 0));
+
+    struct sockaddr_storage localbind;
+    int len;
+    CHECK0(uv_udp_getsockname(&udp, (struct sockaddr *)&localbind, &len));
+    LOG("addrlen=%d", len);
+    // LOG("addr=%u", ((struct sockaddr_in*)&localbind)->sin_addr.s_addr);
+
+    LOG("udp send");
+    struct sockaddr_in multi_addr;
+    CHECK0(uv_ip4_addr(multicast_group, port, &multi_addr));
+    Str peer_id = str_from_c("mike multicast");
+    uv_buf_t buf = uv_buf_init((char *)peer_id.buf, peer_id.len);
+    CHECK0(uvco_udp_send(loop, &udp, &buf, 1, (struct sockaddr *)&multi_addr));
+    LOG("sent!");
+    uvco_sleep(loop, 1000);
+  } else {
+    struct sockaddr_in myaddr;
+    CHECK0(uv_ip4_addr("0.0.0.0", port, &myaddr));
+
+    CHECK0(uv_udp_bind(&udp, (struct sockaddr *)&myaddr, 0));
+    CHECK0(uv_udp_set_membership(&udp, multicast_group, NULL, UV_JOIN_GROUP));
+
+    LOG("udp recv multicast on %s %d", multicast_group, port);
+    CHECK0(uv_udp_recv_start(&udp, alloc_cb, recv_cb));
+
+    uvco_sleep(loop, 60000);
+    uv_udp_recv_stop(&udp);
+  }
+  return 0;
+}
+
+int demo_holepunch(int argc, const char **argv) {
+
+  // TODO:
+  // Hit discovery server to get peer_addr
+
+  // Hard-coding for now
+  struct sockaddr_in peer_addr;
+  CHECK0(uv_ip4_addr("75.164.165.93", 8087, &peer_addr));
+
+  // Plum
+  plum_config_t config = {0};
+  config.log_level = PLUM_LOG_LEVEL_WARN;
+  plum_init(&config);
+  plum_mapping_t mapping = {0};
+  mapping.protocol = PLUM_IP_PROTOCOL_UDP;
+  mapping.internal_port = 20000;
+  int mapping_id = plum_create_mapping(&mapping, mapping_callback);
+  struct sockaddr_in myaddr;
+  CHECK0(uv_ip4_addr("0.0.0.0", 20000, &myaddr));
+
+  LOG("udp init");
+  uv_udp_t udp;
+  CHECK0(uv_udp_init(loop, &udp));
+
+  LOG("udp send");
+  Str peer_id = str_from_c("mike multicast");
+  uv_buf_t buf = uv_buf_init((char *)peer_id.buf, peer_id.len);
+  CHECK0(uvco_udp_send(loop, &udp, &buf, 1, (struct sockaddr *)&peer_addr));
+  LOG("sent!");
+
+  LOG("udp recv");
+  CHECK0(uv_udp_recv_start(&udp, alloc_cb, recv_cb));
+  uvco_sleep(loop, 60000);
+  uv_udp_recv_stop(&udp);
+
+  plum_destroy_mapping(mapping_id);
+
+  // TODO: Start sending messages to peer address
+
+  return 0;
+}
+
 int demo_mimalloc(int argc, const char **argv) {
   // MIMALLOC_SHOW_STATS=1
   mi_option_enable(mi_option_show_stats);
@@ -757,7 +878,10 @@ static const char *const usages[] = {
     "\n      - demo-nik"
     "\n      - demo-nikcxn"
     "\n      - demo-b58"
-    "\n      - demo-mimalloc",
+    "\n      - demo-mimalloc"
+    "\n      - demo-multicast"
+    "\n      - demo-holepunch" //
+    ,
     NULL,
 };
 
@@ -767,12 +891,14 @@ struct cmd_struct {
 };
 
 static struct cmd_struct commands[] = {
-    {"demo-x3dh", demo_x3dh},         //
-    {"demo-kv", demo_kv},             //
-    {"demo-nik", demo_nik},           //
-    {"demo-nikcxn", demo_nikcxn},     //
-    {"demo-b58", demo_b58},           //
-    {"demo-mimalloc", demo_mimalloc}, //
+    {"demo-x3dh", demo_x3dh},           //
+    {"demo-kv", demo_kv},               //
+    {"demo-nik", demo_nik},             //
+    {"demo-nikcxn", demo_nikcxn},       //
+    {"demo-b58", demo_b58},             //
+    {"demo-mimalloc", demo_mimalloc},   //
+    {"demo-holepunch", demo_holepunch}, //
+    {"demo-multicast", demo_multicast}, //
 };
 
 typedef struct {
@@ -857,6 +983,7 @@ int main(int argc, const char **argv) {
   CHECK(mco_resume(co) == MCO_SUCCESS);
   if (mco_status(co) == MCO_SUSPENDED)
     uv_run(loop, UV_RUN_DEFAULT);
+  LOG("uv loop done");
 
   u8 rc = 0;
   if (mco_get_storage_size(co) > 0)
@@ -867,7 +994,7 @@ int main(int argc, const char **argv) {
   CHECK(mco_destroy(co) == MCO_SUCCESS);
 
   // libuv deinit
-  uv_loop_close(loop);
+  // uv_loop_close(loop);  SEGFAULTS! TODO
   free(loop);
 
   LOG("goodbye (code=%d)", rc);
