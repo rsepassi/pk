@@ -1,8 +1,6 @@
 libminicoro.a: minicoro.c minicoro.h Makefile
-	$(CC) -c $(CFLAGS) minicoro.c
-	$(AR) rcs $@ minicoro.o
+	$(CC) -c $(CFLAGS) minicoro.c -o minicoro.$(O)
+	$(AR) rcs $@ minicoro.$(O)
 	touch .build
 
-.PHONY: clean
-clean:
-	rm -f *.o *.a .build
+include $(ROOTDIR)/scripts/clean.mk

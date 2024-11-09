@@ -1,4 +1,5 @@
 #include "allocator.h"
+#include "log.h"
 
 #include <stdlib.h>
 #include <mm_malloc.h>
@@ -24,6 +25,9 @@ static int alloc_libc(void* ctx, Bytes* buf, usize sz, usize align) {
     return 0;
   }
 
+#ifdef _WIN32
+  CHECK(false, "unsupported");
+#else
   // Aligned alloc
   if (!exists) {
     void* ptr;
@@ -40,6 +44,7 @@ static int alloc_libc(void* ctx, Bytes* buf, usize sz, usize align) {
   free(buf->buf);
   buf->buf = ptr;
   buf->len = sz;
+#endif
 
   return 0;
 }

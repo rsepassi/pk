@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+
+lib=$1
+
+if [ "$TARGET" = "x86_64-windows-gnu" ]
+then
+  echo "$lib.lib"
+else
+  echo "lib$lib.a"
+fi

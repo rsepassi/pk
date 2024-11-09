@@ -1,7 +1,6 @@
 libargparse.a: src/argparse.c | Makefile
 	$(CC) -c $(CFLAGS) -Iinclude src/argparse.c
-	$(AR) rcs $@ argparse.o
+	$(AR) rcs $@ argparse.$(O)
 	touch .build
 
-clean:
-	rm -f *.o *.a .build
+include $(ROOTDIR)/scripts/clean.mk

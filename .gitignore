@@ -4,4 +4,6 @@ zig-out/
 *.o
 *.obj
 *.a
+*.lib
+*.exe
 *.build

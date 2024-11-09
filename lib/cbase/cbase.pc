@@ -1,5 +1,5 @@
 Name: cbase
 Version: 0.0.1
 Description: <none>
-Libs: ${prefix}/libcbase.a
+Libs: -L${prefix} -lcbase
 Cflags: -I${prefix}/include

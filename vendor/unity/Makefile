@@ -1,7 +1,6 @@
 libunity.a: src/unity.c
 	$(CC) $(CFLAGS) -Iinclude -c $<
-	$(AR) rcs $@ unity.o
+	$(AR) rcs $@ unity.$(O)
 	touch .build
 
-clean:
-	rm -f *.a *.o .build
+include $(ROOTDIR)/scripts/clean.mk

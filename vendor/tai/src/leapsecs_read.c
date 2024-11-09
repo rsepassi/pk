@@ -3,9 +3,14 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <unistd.h>
 extern int errno;
 #include "tai.h"
 #include "leapsecs.h"
+
+#ifndef O_NDELAY
+#define O_NDELAY 0
+#endif
 
 struct tai *leapsecs = 0;
 int leapsecs_num = 0;

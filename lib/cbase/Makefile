@@ -1,13 +1,12 @@
 HDRS := $(wildcard include/*.h) $(wildcard src/*.h)
 SRCS := $(wildcard src/*.c)
-OBJS := $(SRCS:.c=.o)
+OBJS := $(SRCS:.c=.$(O))
 
 libcbase.a: $(OBJS) Makefile
 	$(AR) rcs $@ $(OBJS)
 	touch .build
 
-%.o: %.c
+%.$(O): %.c
 	$(CC) -c $(CFLAGS) -Iinclude -o $@ $<
 
-clean:
-	rm -f *.a src/*.o .build
+include $(ROOTDIR)/scripts/clean.mk

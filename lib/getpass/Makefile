@@ -1,7 +1,6 @@
-libgetpass.a: src/getpass.c include/getpass.h
+$(shell libname getpass): src/getpass.c include/getpass.h
 	$(CC) -c $(CFLAGS) -Iinclude $<
-	$(AR) rcs $@ getpass.o
+	$(AR) rcs $@ getpass.$(O)
 	touch .build
 
-clean:
-	rm -f *.a *.o .build
+include $(ROOTDIR)/scripts/clean.mk

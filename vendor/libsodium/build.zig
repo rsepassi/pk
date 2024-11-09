@@ -169,7 +169,7 @@ pub fn build(b: *std.Build) !void {
     }
 
     const static_lib = b.addStaticLibrary(.{
-        .name = if (target.result.isMinGW()) "libsodium-static" else "sodium",
+        .name = "sodium",
         .target = target,
         .optimize = optimize,
     });

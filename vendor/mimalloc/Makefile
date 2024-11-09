@@ -19,15 +19,16 @@ SRCS := \
 	src/segment.c \
 	src/stats.c \
 	src/prim/prim.c
-OBJS := $(SRCS:.c=.o)
-CFLAGS += -Wall -Werror -fvisibility=hidden -ftls-model=local-dynamic
+OBJS := $(SRCS:.c=.$(O))
+CFLAGS += -Wall -Werror -fvisibility=hidden -ftls-model=local-dynamic \
+					-Wno-unknown-pragmas
 
 libmimalloc.a: $(OBJS) Makefile
 	$(AR) rcs $@ $(OBJS)
 	touch .build
 
-%.o: %.c $(HDRS) Makefile
+%.$(O): %.c $(HDRS) Makefile
 	$(CC) -c $(CFLAGS) -Iinclude -o $@ $<
 
-clean:
-	rm -f *.a src/*.o .build
+CLEAN_EXTRAS := src/prim/*.o src/prim/*.obj
+include $(ROOTDIR)/scripts/clean.mk

@@ -2,12 +2,15 @@ export CC := zig cc
 export AR := zig ar
 export PATH := $(CURDIR)/scripts:$(PATH)
 export ROOTDIR := $(CURDIR)
-export CFLAGS += -std=c99 -Wall -Werror -O2 -g
+export OPT := -O2
+export ZIG_OPT := ReleaseFast
+include scripts/platform.mk
+export CFLAGS += -std=c99 -Wall -Werror $(OPT) -target $(TARGET)
 
 # src/
 HDRS := $(wildcard src/*.h)
 SRCS := $(wildcard src/*.c)
-OBJS := $(addprefix build/, $(notdir $(SRCS:.c=.o)))
+OBJS := $(addprefix build/, $(notdir $(SRCS:.c=.$(O))))
 
 # test/
 TEST_SRCS := $(wildcard test/*.c)
@@ -28,6 +31,7 @@ DEPS := \
 		vendor/lmdb \
 		vendor/base58 \
 		vendor/mimalloc \
+		vendor/plum \
 		vendor/argparse
 
 DEPS_CLEAN := $(addsuffix -clean, $(DEPS))
@@ -43,6 +47,7 @@ DEPS_CFLAGS := \
 		`need-cflags vendor/argparse` \
 		`need-cflags vendor/minicoro` \
 		`need-cflags vendor/mimalloc` \
+		`need-cflags vendor/plum` \
 		`need-cflags vendor/libuv uv`
 DEPS_LDFLAGS := \
 		`need-libs lib/getpass` \
@@ -55,16 +60,18 @@ DEPS_LDFLAGS := \
 		`need-libs vendor/argparse` \
 		`need-libs vendor/minicoro` \
 		`need-libs vendor/mimalloc` \
+		`need-libs vendor/plum` \
 		`need-libs vendor/libuv uv`
 
 BUILD_DEPS = $(HDRS) Makefile build/.mk | deps
 
 # compile the client executable
-build/client: $(OBJS) $(BUILD_DEPS)
-	$(CC) -o $@ $(CFLAGS) $(OBJS) $(DEPS_LDFLAGS) -lc
+build/client$(EXE): $(OBJS) $(BUILD_DEPS)
+	$(CC) -o $@ $(CFLAGS) $(OBJS) $(LDFLAGS) $(DEPS_LDFLAGS) \
+		-lc
 
 # compile a src file
-build/%.o: src/%.c $(BUILD_DEPS)
+build/%.$(O): src/%.c $(BUILD_DEPS)
 	$(CC) -c $(CFLAGS) -o $@ $(DEPS_CFLAGS) $<
 
 .PHONY: test

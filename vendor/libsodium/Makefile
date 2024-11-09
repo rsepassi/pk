@@ -1,5 +1,5 @@
 zig-out/lib/libsodium.a:
-	zig build -Doptimize=ReleaseFast
+	zig build -Doptimize=$(ZIG_OPT) -Dtarget=$(TARGET)
 	touch .build
 
 clean:

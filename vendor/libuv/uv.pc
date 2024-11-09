@@ -1,5 +1,5 @@
 Name: libuv
 Version: 1.49.2
 Description: async io
-Libs: ${prefix}/zig-out/lib/libuv.a
+Libs: -L${prefix}/zig-out/lib -luv
 Cflags: -I${prefix}/zig-out/include
