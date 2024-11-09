@@ -34,6 +34,7 @@ DEPS := \
 		vendor/base58 \
 		vendor/mimalloc \
 		vendor/plum \
+		vendor/vterm \
 		vendor/argparse
 
 DEPS_CLEAN := $(addsuffix -clean, $(DEPS))
@@ -50,6 +51,7 @@ DEPS_CFLAGS := \
 		`need-cflags vendor/minicoro` \
 		`need-cflags vendor/mimalloc` \
 		`need-cflags vendor/plum` \
+		`need-cflags vendor/vterm` \
 		`need-cflags vendor/libuv uv`
 DEPS_LDFLAGS := \
 		`need-libs lib/getpass` \
@@ -63,6 +65,7 @@ DEPS_LDFLAGS := \
 		`need-libs vendor/minicoro` \
 		`need-libs vendor/mimalloc` \
 		`need-libs vendor/plum` \
+		`need-libs vendor/vterm` \
 		`need-libs vendor/libuv uv`
 
 BUILD_DEPS = $(HDRS) Makefile build/.mk | deps

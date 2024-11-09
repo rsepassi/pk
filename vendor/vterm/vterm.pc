@@ -1,0 +1,5 @@
+Name: vterm
+Version: 0.3.3
+Description: virtual terminal
+Libs: -L${prefix} -lvterm
+Cflags: -I${prefix}/include

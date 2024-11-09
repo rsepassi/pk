@@ -11,6 +11,7 @@
 #include "minicoro.h"
 #include "plum/plum.h"
 #include "uv.h"
+#include "vterm.h"
 
 // lib
 #include "getpass.h"
@@ -614,6 +615,33 @@ int demo_kv(int argc, const char **argv) {
   return 0;
 }
 
+void vt_cb(const char* s, size_t len, void* user) {
+  LOG("vt(%d)=%.*s", (int)len, (int)len, s);
+}
+
+int demo_vterm(int argc, const char **argv) {
+  int rows = 100;
+  int cols = 80;
+  VTerm* vt = vterm_new(rows, cols);
+  vterm_set_utf8(vt, true);
+
+  VTermScreen *vt_screen = vterm_obtain_screen(vt);
+  vterm_screen_reset(vt_screen, true);
+
+  //VTermState *vt_state = vterm_obtain_state(vt);
+  //vterm_state_reset(vt_state, 1);
+
+  Str txt = str_from_c("hi!");
+  vterm_input_write(vt, (char*)txt.buf, txt.len);
+
+  vterm_output_set_callback(vt, vt_cb, NULL);
+  vterm_keyboard_unichar(vt, 65, 0);
+  vterm_keyboard_key(vt, VTERM_KEY_ENTER, 0);
+
+  vterm_free(vt);
+  return 0;
+}
+
 int demo_x3dh(int argc, const char **argv) {
   // Alice seed
   Str A_seed_str = str_from_c(A_seed_hex);
@@ -873,6 +901,7 @@ int demo_mimalloc(int argc, const char **argv) {
 
 static const char *const usages[] = {
     "pk [options] [cmd] [args]\n\n    Commands:"
+    "\n      - demo-vterm"
     "\n      - demo-x3dh"
     "\n      - demo-kv"
     "\n      - demo-nik"
@@ -891,6 +920,7 @@ struct cmd_struct {
 };
 
 static struct cmd_struct commands[] = {
+    {"demo-vterm", demo_vterm},           //
     {"demo-x3dh", demo_x3dh},           //
     {"demo-kv", demo_kv},               //
     {"demo-nik", demo_nik},             //

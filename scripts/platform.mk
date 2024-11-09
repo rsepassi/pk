@@ -1,6 +1,16 @@
 # Cross-platform support
 
+ifndef OPT
+export OPT := -O2
+else
+export OPT
+endif
+
+ifndef TARGET
 export TARGET := x86_64-linux-musl
+else
+export TARGET
+endif
 
 ifeq ($(TARGET), x86_64-windows-gnu)
 export O := obj
