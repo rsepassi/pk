@@ -4,9 +4,11 @@
 #include "sodium.h"
 #include "taia.h"
 
-#define NIK_IDENTIFIER "nik WireGuard v1"
+#define NIK_IDENTIFIER "nik xos v1"
 #define NIK_KDF_CTX "wgikkdf1"
 #define NIK_LABEL_MAC1 "mac1----"
+
+#define PADDING_MULTIPLE 16
 
 #define MS_PER_SEC 1000
 
@@ -20,7 +22,7 @@
 //
 // ipad = 0x36 repeated
 // opad = 0x5C repeated
-// H(K XOR opad, H(K XOR ipad, text))
+// H(K XOR opad, H(K XOR ipad, input))
 //
 // Based on libsodium/crypto_auth/hmacsha256/auth_hmacsha256.c
 static int hmac_blake2b(u8 *hmac, usize hmac_len, const u8 *key, usize key_len,
@@ -36,6 +38,7 @@ static int hmac_blake2b(u8 *hmac, usize hmac_len, const u8 *key, usize key_len,
   if (crypto_generichash_blake2b_init(&ostate, 0, 0, hmac_len))
     return 1;
 
+  // K = H(K)
   if (key_len > sizeof(khash)) {
     if (crypto_generichash_blake2b(khash, sizeof(khash), key, key_len, 0, 0))
       return 1;
@@ -43,28 +46,34 @@ static int hmac_blake2b(u8 *hmac, usize hmac_len, const u8 *key, usize key_len,
     key_len = sizeof(khash);
   }
 
+  // K XOR ipad
   memset(pad, 0x36, sizeof(pad));
   for (usize i = 0; i < key_len; ++i) {
     pad[i] ^= key[i];
   }
+  // H(K XOR ipad, ...
   if (crypto_generichash_blake2b_update(&istate, pad, sizeof(pad)))
     return 1;
 
+  // K XOR opad
   memset(pad, 0x5c, sizeof(pad));
   for (usize i = 0; i < key_len; ++i) {
     pad[i] ^= key[i];
   }
+  // H(K XOR opad, ...
   if (crypto_generichash_blake2b_update(&ostate, pad, sizeof(pad)))
     return 1;
 
   sodium_memzero(pad, sizeof(pad));
   sodium_memzero(khash, sizeof(khash));
 
+  // H(K XOR ipad, input)
   if (crypto_generichash_blake2b_update(&istate, input, input_len))
     return 1;
   if (crypto_generichash_blake2b_final(&istate, ihash, sizeof(ihash)))
     return 1;
 
+  // H(K XOR opad, H(K XOR ipad, input))
   if (crypto_generichash_blake2b_update(&ostate, ihash, sizeof(ihash)))
     return 1;
   if (crypto_generichash_blake2b_final(&ostate, hmac, hmac_len))
@@ -75,6 +84,8 @@ static int hmac_blake2b(u8 *hmac, usize hmac_len, const u8 *key, usize key_len,
 
 // Keeps a bitmask history of the last 64 messages
 // Based on Appendix C in https://www.rfc-editor.org/rfc/rfc2401.txt
+// TODO: Update to use algorithm in RFC 6479 as in WG-Go:
+//   https://github.com/WireGuard/wireguard-go/blob/master/replay/replay.go
 static bool counter_ok(CounterHistory *history, u64 counter, u64 max_seen) {
   if (counter == 0) {
     DLOG("counter=0");
@@ -148,15 +159,15 @@ static NIK_Status nik_dh_kdf2(const u8 *C, const CryptoKxPK *pk,
   return 0;
 }
 
-NIK_Status nik_handshake_respond(NIK_Handshake *state, u32 id,
+NIK_Status nik_handshake_respond(NIK_Handshake *state, u32 local_idx,
                                  const NIK_HandshakeMsg1 *msg1,
                                  NIK_HandshakeMsg2 *msg2) {
   // Second message: Responder to Initiator
   sodium_memzero(msg2, sizeof(NIK_HandshakeMsg2));
   // Set message type
   msg2->type = NIK_Msg_R2I;
-  msg2->sender = id;
-  state->sender = msg2->sender;
+  msg2->sender = local_idx;
+  state->local_idx = msg2->sender;
   // Copy receiver
   msg2->receiver = msg1->sender;
 
@@ -252,14 +263,14 @@ NIK_Status nik_handshake_respond(NIK_Handshake *state, u32 id,
   return 0;
 }
 
-NIK_Status nik_handshake_init(NIK_Handshake *state, const NIK_Keys keys, u32 id,
+NIK_Status nik_handshake_init(NIK_Handshake *state, const NIK_Keys keys, u32 local_idx,
                               NIK_HandshakeMsg1 *msg) {
   // First message: Initiator to Responder
   sodium_memzero(msg, sizeof(NIK_HandshakeMsg1));
   // Set message type
   msg->type = NIK_Msg_I2R;
-  msg->sender = id;
-  state->sender = msg->sender;
+  msg->sender = local_idx;
+  state->local_idx = msg->sender;
 
   // Initiator static key
   CryptoKxPK *S_pub_i = keys.pk;
@@ -417,9 +428,9 @@ NIK_Status nik_handshake_respond_check(NIK_Handshake *state,
     return 1;
 
   // Check sender id
-  if (state->sender != msg->receiver)
+  if (state->local_idx != msg->receiver)
     return 1;
-  state->receiver = msg->sender;
+  state->remote_idx = msg->sender;
 
   u8 *C_i = state->chaining_key;
   crypto_generichash_blake2b_state *H_state = &state->hash;
@@ -510,7 +521,7 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
   if (msg->type != NIK_Msg_I2R)
     return 1;
 
-  state->receiver = msg->sender;
+  state->remote_idx = msg->sender;
 
   // Responder static key
   CryptoKxPK *S_pub_r = keys.pk;
@@ -654,8 +665,8 @@ NIK_Status nik_handshake_final(NIK_Handshake *state, NIK_Session *session) {
   u8 *C = state->chaining_key;
 
   *session = (NIK_Session){0};
-  session->sender = state->sender;
-  session->receiver = state->receiver;
+  session->local_idx = state->local_idx;
+  session->remote_idx = state->remote_idx;
   session->isinitiator = state->initiator;
 
   CryptoKxTx *send = &session->send;
@@ -687,7 +698,7 @@ NIK_Status nik_handshake_final(NIK_Handshake *state, NIK_Session *session) {
   return 0;
 }
 
-u64 nik_sendmsg_sz(u64 len) { return sizeof(NIK_MsgHeader) + len + len % 16; }
+u64 nik_sendmsg_sz(u64 len) { return sizeof(NIK_MsgHeader) + len + len % PADDING_MULTIPLE; }
 
 NIK_Status nik_msg_send(NIK_Session *session, Str payload, Str send) {
   if (nik_sendmsg_sz(payload.len) != send.len) {
@@ -707,7 +718,7 @@ NIK_Status nik_msg_send(NIK_Session *session, Str payload, Str send) {
   header->payload_len = payload.len;
 
   header->type = NIK_Msg_Data;
-  header->receiver = session->receiver;
+  header->receiver = session->remote_idx;
   header->counter = ++session->send_n;
 
   u8 nonce[crypto_box_NONCEBYTES] = {0};
@@ -737,7 +748,7 @@ NIK_Status nik_msg_recv(NIK_Session *session, Str *msg) {
     DLOG("recv bad type");
     return 1;
   }
-  if (header->receiver != session->sender) {
+  if (header->receiver != session->local_idx) {
     DLOG("recv bad receiver");
     return 1;
   }

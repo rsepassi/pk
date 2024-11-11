@@ -1,0 +1,5 @@
+Name: crypto
+Version: 0.0.1
+Description: <none>
+Libs: -L${prefix} -lcrypto
+Cflags: -I${prefix}/include

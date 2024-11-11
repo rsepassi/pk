@@ -381,8 +381,8 @@ int demo_nik(int argc, const char **argv) {
   CHECK(tx_r.send_n == 0);
   CHECK(tx_r.recv_n == 0);
   CHECK(tx_r.counter_max == 0);
-  CHECK(tx_i.sender == tx_r.receiver);
-  CHECK(tx_i.receiver == tx_r.sender);
+  CHECK(tx_i.local_idx == tx_r.remote_idx);
+  CHECK(tx_i.remote_idx == tx_r.local_idx);
 
   // I: Send a message
   Str payload = str_from_c("hello!");

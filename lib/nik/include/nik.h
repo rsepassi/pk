@@ -94,8 +94,8 @@ typedef struct {
   CryptoKxTx recv;
   u64 send_n;
   u64 recv_n;
-  u32 sender;
-  u32 receiver;
+  u32 local_idx;
+  u32 remote_idx;
   u64 counter_max;
   CounterHistory counter_history;
   bool isinitiator;
@@ -112,8 +112,8 @@ typedef struct {
 // State of an ongoing handshake
 typedef struct {
   NIK_Keys keys;
-  u32 sender;
-  u32 receiver;
+  u32 local_idx;
+  u32 remote_idx;
   u8 chaining_key[NIK_CHAIN_SZ];
   crypto_generichash_blake2b_state hash;
   CryptoKxSK ephemeral_sk;
@@ -123,13 +123,13 @@ typedef struct {
 
 // Low-level handshake API
 // Initiator sends HandshakeMsg1
-NIK_Status nik_handshake_init(NIK_Handshake *state, const NIK_Keys keys, u32 id,
+NIK_Status nik_handshake_init(NIK_Handshake *state, const NIK_Keys keys, u32 local_idx,
                               NIK_HandshakeMsg1 *msg);
 // Responder checks HandshakeMsg1
 NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
                                     const NIK_HandshakeMsg1 *msg);
 // Responder sends HandshakeMsg2
-NIK_Status nik_handshake_respond(NIK_Handshake *state, u32 id,
+NIK_Status nik_handshake_respond(NIK_Handshake *state, u32 local_idx,
                                  const NIK_HandshakeMsg1 *msg1,
                                  NIK_HandshakeMsg2 *msg2);
 // Initiator checks HandshakeMsg2

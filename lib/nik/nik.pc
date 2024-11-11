@@ -1,0 +1,5 @@
+Name: nik
+Version: 0.0.1
+Description: <none>
+Libs: -L${prefix} -lnik
+Cflags: -I${prefix}/include

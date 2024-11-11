@@ -14,6 +14,8 @@
 #define NIK_LIMIT_REKEY_ATTEMPT_SECS 90
 #define NIK_LIMIT_REKEY_TIMEOUT_SECS 5
 #define NIK_LIMIT_KEEPALIVE_TIMEOUT_SECS 10
+// Unused, but kept if/when we implement cookies.
+// #define NIK_LIMIT_COOKIE_REFRESH_SECS 120
 
 typedef enum {
   NIK_Cxn_OK = 0,

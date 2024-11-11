@@ -7,7 +7,7 @@
 #include "log.h"
 #include "sodium.h"
 
-#define JITTER_SECS 10
+#define JITTER_MS 334
 
 #define MS_PER_SEC 1000
 #define REKEY_AFTER_MS (NIK_LIMIT_REKEY_AFTER_SECS * MS_PER_SEC)
@@ -15,7 +15,6 @@
 #define REKEY_TIMEOUT_MS (NIK_LIMIT_REKEY_TIMEOUT_SECS * MS_PER_SEC)
 #define KEEPALIVE_MS (NIK_LIMIT_KEEPALIVE_TIMEOUT_SECS * MS_PER_SEC)
 #define REJECT_MS (NIK_LIMIT_REJECT_AFTER_SECS * MS_PER_SEC)
-#define JITTER_MS (JITTER_SECS * MS_PER_SEC)
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 #define MAX(x, y) ((x) > (y) ? (x) : (y))
