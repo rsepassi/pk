@@ -1,7 +1,10 @@
 #!/usr/bin/env sh
 
+while [ -n "$1" ]
+do
+
 dir=$1
-lib=${2:-$(basename $dir)}
+lib=$(basename $dir)
 
 if [ -n "$ROOTDIR" ]
 then
@@ -9,3 +12,6 @@ then
 fi
 
 PKG_CONFIG_PATH=$dir pkg-config --define-variable=prefix=$dir --cflags $lib
+
+shift
+done
