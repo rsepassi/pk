@@ -12,6 +12,7 @@
 #include "plum/plum.h"
 #include "uv.h"
 #include "vterm.h"
+#include "signal.h"
 
 // lib
 #include "getpass.h"
@@ -19,6 +20,7 @@
 #include "stdtypes.h"
 #include "taia.h"
 #include "uvco.h"
+#include "base64.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 #define MAX_PW_LEN 2048
@@ -245,68 +247,6 @@ int demo_nikcxn(int argc, const char **argv) {
     free(data.buf);
   }
 
-  //
-  //   // Trigger a key rotation
-  //   {
-  //     u64 rekey = now + (NIK_LIMIT_REKEY_AFTER_SECS - 20) * 1000;
-  //     Bytes msg;
-  //     while (now < rekey) {
-  //       LOG("tick");
-  //       LOG("A=%d B=%d", cxn_A.key_rotation.state, cxn_B.key_rotation.state);
-  //
-  //       now += 10 * 1000;
-  //       u64 delay = nik_cxn_get_next_wait_delay(&cxn_A, now, maxdelay);
-  //       now += delay;
-  //
-  //       NIK_Cxn_Status status;
-  //       while ((status = nik_cxn_outgoing(&cxn_A, &msg, now)) ==
-  //              NIK_Cxn_Status_MsgReady) {
-  //         LOG("->B type=%d", msg.buf[0]);
-  //         nik_cxn_incoming(&cxn_B, msg, now);
-  //       }
-  //       CHECK0(status);
-  //       while ((status = nik_cxn_outgoing(&cxn_B, &msg, now)) ==
-  //              NIK_Cxn_Status_MsgReady) {
-  //         LOG("->A type=%d", msg.buf[0]);
-  //         nik_cxn_incoming(&cxn_A, msg, now);
-  //       }
-  //       CHECK0(status);
-  //     }
-  //     u64 delay = nik_cxn_get_next_wait_delay(&cxn_A, now, maxdelay);
-  //     CHECK(cxn_A.key_rotation.state == NIK_KR_I_StartWait);
-  //     now += delay; // jitter
-  //     CHECK0(nik_cxn_get_next_wait_delay(&cxn_A, now, maxdelay));
-  //     CHECK(cxn_A.key_rotation.state == NIK_KR_I_I2RReady);
-  //     CHECK(nik_cxn_outgoing(&cxn_A, &hs1, now) == NIK_Cxn_Status_MsgReady);
-  //     CHECK0(nik_cxn_outgoing(&cxn_A, &zero, now));
-  //   }
-  //
-  //   // Messages should still go through even with old keys
-  //   {
-  //     Bytes msg = str_from_c("mid rotation");
-  //     CHECK0(nik_cxn_get_next_wait_delay(&cxn_B, now, maxdelay));
-  //     Bytes buf;
-  //     CHECK(nik_cxn_outgoing(&cxn_B, &buf, now) == NIK_Cxn_Status_MsgReady);
-  //     CHECK(buf.buf[0] == NIK_Msg_Keepalive);
-  //     CHECK0(nik_cxn_outgoing(&cxn_B, &zero, now));
-  //     nik_cxn_enqueue(&cxn_B, msg, now);
-  //     CHECK(nik_cxn_outgoing(&cxn_B, &data, now) == NIK_Cxn_Status_MsgReady);
-  //   }
-  //
-  //   // Complete the key rotation
-  //   {
-  //     ++now;
-  //     LOG("%d", cxn_B.key_rotation.state);
-  //     CHECK(cxn_B.key_rotation.state == NIK_KR_Null);
-  //     nik_cxn_incoming(&cxn_B, hs1, now);
-  //     CHECK(cxn_B.key_rotation.state == NIK_KR_R_R2IReady);
-  //     CHECK(nik_cxn_outgoing(&cxn_B, &hs2, now) == NIK_Cxn_Status_MsgReady);
-  //     nik_cxn_incoming(&cxn_A, hs2, now);
-  //     CHECK(cxn_A.key_rotation.current.start_time == now);
-  //   }
-  //
-  //   // Verify that the mid-rotation message still decrypts
-  //
   nik_cxn_deinit(&cxn_A);
   nik_cxn_deinit(&cxn_B);
 
@@ -615,6 +555,35 @@ int demo_kv(int argc, const char **argv) {
   return 0;
 }
 
+int demo_base64(int argc, const char **argv) {
+  Str a = str_from_c("hello world!");
+
+  Str enc;
+  {
+    usize sz = base64_encoded_maxlen(a.len);
+    enc = (Str){sz, malloc(sz)};
+  }
+
+  CHECK0(base64_encode(a, &enc));
+  LOGS(enc);
+
+  Str dec;
+  {
+    usize sz = base64_decoded_maxlen(enc.len);
+    dec = (Str){sz, malloc(sz)};
+  }
+
+  CHECK0(base64_decode(enc, &dec));
+  LOGS(dec);
+
+  CHECK(a.len == dec.len);
+  CHECK(memcmp(a.buf, dec.buf, a.len) == 0);
+
+  free(enc.buf);
+  free(dec.buf);
+  return 0;
+}
+
 void vt_cb(const char* s, size_t len, void* user) {
   LOG("vt(%d)=%.*s", (int)len, (int)len, s);
 }
@@ -649,7 +618,9 @@ int demo_x3dh(int argc, const char **argv) {
   CryptoSeed A_seed;
   sodium_hex2bin((u8 *)&A_seed, sizeof(A_seed), (char *)A_seed_str.buf,
                  A_seed_str.len, 0, 0, 0);
-  pcrypt(A_seed);
+  LOGB(CryptoBytes(A_seed));
+
+  Str plaintxt = str_from_c(A_to_B_message);
 
   // Bob seed
   Str B_seed_str = str_from_c(B_seed_hex);
@@ -657,50 +628,42 @@ int demo_x3dh(int argc, const char **argv) {
   CryptoSeed B_seed;
   sodium_hex2bin((u8 *)&B_seed, sizeof(B_seed), (char *)B_seed_str.buf,
                  B_seed_str.len, 0, 0, 0);
-  pcrypt(B_seed);
+  LOGB(CryptoBytes(B_seed));
 
   // Alice init
-  CryptoUserState A_sec;
-  CHECK(crypto_seed_new_user(&A_seed, &A_sec) == 0);
+  X3DHKeys A_sec;
+  CHECK0(x3dh_keys_seed(&A_seed, &A_sec));
 
   // Bob init
-  CryptoUserState B_sec;
-  CHECK(crypto_seed_new_user(&B_seed, &B_sec) == 0);
+  X3DHKeys B_sec;
+  CHECK0(x3dh_keys_seed(&B_seed, &B_sec));
+
+  CryptoKxTx A_session_key;
+  CryptoKxTx B_session_key;
 
   // Alice's message to Bob
   Str A_msg_buf;
   {
-    Str plaintxt = str_from_c(A_to_B_message);
-    printf("plaintxt=%.*s\n", (int)plaintxt.len, plaintxt.buf);
-    A_msg_buf.len = crypto_x3dh_first_msg_len(plaintxt.len);
+    LOGS(plaintxt);
+    A_msg_buf.len = x3dh_init_len(plaintxt.len);
     A_msg_buf.buf = malloc(A_msg_buf.len);
-    CHECK(crypto_x3dh_first_msg(&A_sec, &B_sec.pub, plaintxt, &A_msg_buf) == 0);
+    CHECK0(x3dh_init(&A_sec, &B_sec.pub, plaintxt, &A_msg_buf, &A_session_key));
   }
 
-  phex("msg", A_msg_buf.buf, A_msg_buf.len);
+  LOGB(A_msg_buf);
 
   // Bob receives Alice's message
   {
-    Str ciphertxt;
-    CryptoX3DHFirstMessageHeader *header;
-    CHECK(crypto_x3dh_first_msg_parse(A_msg_buf, &header, &ciphertxt) == 0);
+    Str decrypted;
+    CHECK0(x3dh_init_recv(&B_sec, A_msg_buf, &decrypted, &B_session_key));
 
-    Str plaintxt;
-    plaintxt.len = crypto_plaintxt_len(ciphertxt.len);
-    plaintxt.buf = malloc(plaintxt.len);
-
-    CHECK(crypto_x3dh_first_msg_recv(&B_sec, header, ciphertxt, &plaintxt) ==
-          0);
-
-    printf("decrypted=%.*s\n", (int)plaintxt.len, plaintxt.buf);
-    CHECK(plaintxt.len == strlen(A_to_B_message));
-    CHECK(sodium_memcmp(plaintxt.buf, A_to_B_message, strlen(A_to_B_message)) ==
-          0);
-
-    free(plaintxt.buf);
+    LOGS(decrypted);
+    CHECK(str_eq(decrypted, plaintxt));
   }
 
   free(A_msg_buf.buf);
+
+  CHECK(memcmp((u8*)&A_session_key, (u8*)&B_session_key, sizeof(A_session_key)) == 0);
 
   // TODO:
   // * Nonce needs to be incremented per session key or random
@@ -902,6 +865,7 @@ int demo_mimalloc(int argc, const char **argv) {
 static const char *const usages[] = {
     "pk [options] [cmd] [args]\n\n    Commands:"
     "\n      - demo-vterm"
+    "\n      - demo-base64"
     "\n      - demo-x3dh"
     "\n      - demo-kv"
     "\n      - demo-nik"
@@ -922,6 +886,7 @@ struct cmd_struct {
 static struct cmd_struct commands[] = {
     {"demo-vterm", demo_vterm},           //
     {"demo-x3dh", demo_x3dh},           //
+    {"demo-base64", demo_base64},           //
     {"demo-kv", demo_kv},               //
     {"demo-nik", demo_nik},             //
     {"demo-nikcxn", demo_nikcxn},       //

@@ -11,7 +11,6 @@ export CFLAGS += -std=c99 -nostdinc -nostdinc++ \
 	-Wall -Werror \
 	$(OPT) -target $(TARGET)
 
-# src/
 HDRS := $(wildcard src/*.h)
 SRCS := $(wildcard src/*.c)
 OBJS := $(SRCS:.c=.$(O))
@@ -20,7 +19,9 @@ DEPS := \
 		lib/cbase \
 		lib/uvco \
 		lib/nik \
+		lib/signal \
 		lib/crypto \
+		lib/base64 \
 		vendor/sodium \
 		vendor/tai \
 		vendor/uv \
@@ -33,12 +34,12 @@ DEPS := \
 		vendor/argparse
 include $(ROOTDIR)/scripts/deps.mk
 
-BUILD_DEPS = $(HDRS) Makefile | deps
+BUILD_DEPS = $(HDRS) Makefile | deps build_dir
 
 .PHONY: cli
 cli: build/cli$(EXE)
 
-build/cli$(EXE): $(OBJS) $(SRCS) $(HDRS) $(BUILD_DEPS) build_dir
+build/cli$(EXE): $(OBJS) $(SRCS) $(HDRS) $(BUILD_DEPS)
 	$(CC) -o $@ $(CFLAGS) $(OBJS) $(LDFLAGS) $(DEPS_LDFLAGS) -lc
 
 %.$(O): %.c $(BUILD_DEPS)
