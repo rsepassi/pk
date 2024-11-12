@@ -1,3 +1,7 @@
+Crypto todo (NIK, Signal)
+* Use specific algos instead of sodium's generics
+* Use IETF chacha
+
 NIK todo
 * compare against wireguard-go
 * max timestamp for handshake
@@ -5,7 +9,7 @@ NIK todo
   https://github.com/WireGuard/wireguard-go/blob/master/replay/replay.go
 
 Signal todo
-* Fix up key mgmt to use the sodium key conversion functions
+* Double ratchet
 
 kv
 * libkv interface

@@ -611,76 +611,43 @@ int demo_vterm(int argc, const char **argv) {
   return 0;
 }
 
+void get_identity_key(Str hex, CryptoSignSK* out) {
+  CHECK(hex.len == 64, "got length %d", (int)hex.len);
+  CryptoSeed seed;
+  sodium_hex2bin((u8 *)&seed, sizeof(CryptoSeed), (char *)hex.buf,
+                 hex.len, 0, 0, 0);
+
+  CryptoSignPK pk;
+  CHECK0(crypto_sign_seed_keypair((u8*)&pk, (u8*)out, (u8*)&seed));
+}
+
 int demo_x3dh(int argc, const char **argv) {
-  // Alice seed
-  Str A_seed_str = str_from_c(A_seed_hex);
-  CHECK(A_seed_str.len == 64, "got length %d", (int)A_seed_str.len);
-  CryptoSeed A_seed;
-  sodium_hex2bin((u8 *)&A_seed, sizeof(A_seed), (char *)A_seed_str.buf,
-                 A_seed_str.len, 0, 0, 0);
-  LOGB(CryptoBytes(A_seed));
-
-  Str plaintxt = str_from_c(A_to_B_message);
-
-  // Bob seed
-  Str B_seed_str = str_from_c(B_seed_hex);
-  CHECK(B_seed_str.len == 64, "got length %d", (int)B_seed_str.len);
-  CryptoSeed B_seed;
-  sodium_hex2bin((u8 *)&B_seed, sizeof(B_seed), (char *)B_seed_str.buf,
-                 B_seed_str.len, 0, 0, 0);
-  LOGB(CryptoBytes(B_seed));
+  CryptoSignSK A_key;
+  get_identity_key(str_from_c(A_seed_hex), &A_key);
+  CryptoSignSK B_key;
+  get_identity_key(str_from_c(B_seed_hex), &B_key);
 
   // Alice init
   X3DHKeys A_sec;
-  CHECK0(x3dh_keys_seed(&A_seed, &A_sec));
+  CHECK0(x3dh_keys_init(&A_key, &A_sec));
 
   // Bob init
   X3DHKeys B_sec;
-  CHECK0(x3dh_keys_seed(&B_seed, &B_sec));
+  CHECK0(x3dh_keys_init(&B_key, &B_sec));
 
-  CryptoKxTx A_session_key;
-  CryptoKxTx B_session_key;
+  // Alice sends X3DHHeader and derives key
+  X3DH A_x;
+  X3DHHeader A_header;
+  CHECK0(x3dh_init(&A_sec, &B_sec.pub, &A_header, &A_x));
 
-  // Alice's message to Bob
-  Str A_msg_buf;
-  {
-    LOGS(plaintxt);
-    A_msg_buf.len = x3dh_init_len(plaintxt.len);
-    A_msg_buf.buf = malloc(A_msg_buf.len);
-    CHECK0(x3dh_init(&A_sec, &B_sec.pub, plaintxt, &A_msg_buf, &A_session_key));
-  }
+  // Bob receives X3DHHeader and derives key
+  X3DH B_x;
+  CHECK0(x3dh_init_recv(&B_sec, &A_header, &B_x));
 
-  LOGB(A_msg_buf);
+  // Keys + AD are equal
+  CHECK0(memcmp((u8*)&A_x, (u8*)&B_x, sizeof(X3DH)));
+  LOG("keys match!");
 
-  // Bob receives Alice's message
-  {
-    Str decrypted;
-    CHECK0(x3dh_init_recv(&B_sec, A_msg_buf, &decrypted, &B_session_key));
-
-    LOGS(decrypted);
-    CHECK(str_eq(decrypted, plaintxt));
-  }
-
-  free(A_msg_buf.buf);
-
-  CHECK(memcmp((u8*)&A_session_key, (u8*)&B_session_key, sizeof(A_session_key)) == 0);
-
-  // TODO:
-  // * Nonce needs to be incremented per session key or random
-  // * Rotate pre-shared key
-  // * One-time prekeys (and possibly other replay mitigations)
-  // * Double ratchet
-
-  // Lookup registrar for destination key from directory
-  // DirectoryResult dir = pk_directory_lookup(ctx, pk)
-
-  // Lookup mailbox for destination key from registrar
-  // RecordResult rec = pk_registrar_record_lookup(ctx, dir.registrar, pk,
-  // RecordMailbox);
-
-  // Package message for mailbox
-
-  // Send message to mailbox
   return 0;
 }
 
