@@ -127,7 +127,7 @@ NIK_Status nik_handshake_init(NIK_Handshake *state, const NIK_Keys keys, u32 loc
                               NIK_HandshakeMsg1 *msg);
 // Responder checks HandshakeMsg1
 NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
-                                    const NIK_HandshakeMsg1 *msg);
+                                    NIK_HandshakeMsg1 *msg);
 // Responder sends HandshakeMsg2
 NIK_Status nik_handshake_respond(NIK_Handshake *state, u32 local_idx,
                                  const NIK_HandshakeMsg1 *msg1,

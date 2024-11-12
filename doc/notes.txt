@@ -1,16 +1,22 @@
 NIK todo
-* compare against wireguard-go
-* max timestamp for handshake
 * Update counter check to use algorithm in RFC 6479 as in WG-Go
   https://github.com/WireGuard/wireguard-go/blob/master/replay/replay.go
+* In Cxn, check if we're triggering on timeouts too often (already acted upon)
+  e.g. if (cxn->current.send_n >= NIK_LIMIT_REKEY_AFTER_MESSAGES)
+* Lifetime for enqueue payload
+* If both A and B initiate a handshake simultaneously what happens?
 
 Signal todo
-* Fix up key mgmt to use the sodium key conversion functions
+* Double ratchet
+* Sesame?
 
 kv
 * libkv interface
 * lmdb impl
+
+key usability
 * password-protected key
+* read+use ssh-keygen/openssl ed25519 keys
 
 uvco
 * uv_close_handle expects the handle to outlive the call, so handle can't be

@@ -1,7 +1,3 @@
-// TODO: unless it's already been acted upon!
-// if (cxn->current.send_n >= NIK_LIMIT_REKEY_AFTER_MESSAGES)
-// Lifetime for enqueue payload
-// If both A and B initiate a handshake simultaneously what happens?
 #include "nik_cxn.h"
 
 #include "log.h"
@@ -166,6 +162,8 @@ static void handshake_init_wait(NIK_Cxn *cxn, u64 now) {
 
 static void handshake_respond_checked(NIK_Cxn *cxn, NIK_Handshake *state,
                                       const NIK_HandshakeMsg1 *msg1, u64 now) {
+  if (memcmp(msg1->timestamp.timestamp, cxn->max_handshake_timestamp, NIK_TIMESTAMP_SZ) < 1)
+    return;
   if (nik_handshake_respond(state, cxn->id, msg1,
                             &cxn->handshake.responder.msg)) {
     error(cxn, str_from_c("bad handshake response"));
@@ -175,8 +173,10 @@ static void handshake_respond_checked(NIK_Cxn *cxn, NIK_Handshake *state,
     error(cxn, str_from_c("bad handshake response"));
     return;
   }
+
   cxn->next_start_time = now;
   cxn->handshake_state = NIK_CxnHState_R_R2IReady;
+  memcpy(cxn->max_handshake_timestamp, msg1->timestamp.timestamp, NIK_TIMESTAMP_SZ);
 }
 
 static void handshake_respond(NIK_Cxn *cxn, Bytes msg, u64 now) {
