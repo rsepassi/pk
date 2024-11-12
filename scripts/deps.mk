@@ -8,6 +8,6 @@ $(DEPS):
 	$(MAKE) -C $(ROOTDIR)/$@
 
 .PHONY: clean-deps $(DEPS_CLEAN)
-clean-deps: clean $(DEPS_CLEAN) $(CLEAN_ALL_EXTRAS)
+clean-deps: $(DEPS_CLEAN) $(CLEAN_ALL_EXTRAS)
 $(DEPS_CLEAN):
 	$(MAKE) -C $(@:-clean=) clean
