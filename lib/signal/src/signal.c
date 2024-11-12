@@ -235,3 +235,29 @@ Signal_Status x3dh_init_recv(const X3DHKeys *B, Str msg, Str *ciphertxt,
 
   return 0;
 }
+
+// Drat: Double Ratchet
+//
+// Bob -> Alice current ratchet public key
+// Alice runs DH with APK to get DHO
+// Alice sends APK to Bob
+// Bob runs DH with APK to get DHO2
+//
+// DH outputs at each step are used to derive new send/recv chain keys
+// Bob's sending chain = Alice's receiving chain, and vice-versa
+//
+// Drat step updates KDF root chain twice to derive
+// 1. send and 2. recv chain key
+//
+// Combining the symmetric-key and DH ratchets gives the Double Ratchet
+// 1. When a message is sent or received, a symmetric-key ratchet step is
+//    applied to the sending or receiving chain to derive the message key.
+// 2. When a new ratchet public key is received, a DH ratchet step is performed
+//    prior to the symmetric-key ratchet to replace the chain keys.
+//
+// #define MAX_SKIP 512
+// MKSKIPPED: Dictionary of skipped-over message keys, indexed by ratchet
+// public key and message number. Raises an exception if too many elements
+// are stored.
+//
+// x3dh: rm plain/cipher txt, use Drat for that
