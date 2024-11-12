@@ -30,7 +30,7 @@ typedef int Signal_Status;
 // ============================================================================
 
 typedef struct {
-  const CryptoSignPK* identity;
+  const CryptoSignPK *identity;
   CryptoKxPK kx;
   CryptoKxPK kx_prekey;
   CryptoSig kx_prekey_sig;
@@ -42,7 +42,7 @@ typedef struct {
 } X3DHSecret;
 
 typedef struct {
-  const CryptoSignSK* identity;
+  const CryptoSignSK *identity;
   X3DHPublic pub;
   X3DHSecret sec;
 } X3DHKeys;
@@ -71,12 +71,14 @@ Signal_Status x3dh_init_recv(const X3DHKeys *B, const X3DHHeader *header,
 // Double Ratchet
 // ============================================================================
 
+#define SIGNAL_DRAT_CHAIN_SZ 32
+
 typedef struct {
   CryptoKxKeypair key;
   CryptoKxPK remote_key;
-  u8 root_key[32];
-  u8 chain_send[32];
-  u8 chain_recv[32];
+  u8 root_key[SIGNAL_DRAT_CHAIN_SZ];
+  u8 chain_send[SIGNAL_DRAT_CHAIN_SZ];
+  u8 chain_recv[SIGNAL_DRAT_CHAIN_SZ];
   u64 send_n;
   u64 recv_n;
   u64 chain_len;
@@ -87,9 +89,9 @@ typedef struct {
 } DratState;
 
 typedef struct __attribute__((packed)) {
-  CryptoKxTx ratchet;
-  u64 number;
+  CryptoKxPK ratchet;
   u64 chain_len;
+  u64 number;
   CryptoAuthTag tag;
 } DratHeader;
 

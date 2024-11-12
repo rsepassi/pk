@@ -9,7 +9,8 @@ NIK todo
   https://github.com/WireGuard/wireguard-go/blob/master/replay/replay.go
 
 Signal todo
-* Double ratchet
+* Double ratchet skipped messages
+* we haven't authenticated when we ratchet? but we're updating state
 
 kv
 * libkv interface

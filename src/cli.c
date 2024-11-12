@@ -10,17 +10,17 @@
 #include "mimalloc.h"
 #include "minicoro.h"
 #include "plum/plum.h"
+#include "signal.h"
 #include "uv.h"
 #include "vterm.h"
-#include "signal.h"
 
 // lib
+#include "base64.h"
 #include "getpass.h"
 #include "log.h"
 #include "stdtypes.h"
 #include "taia.h"
 #include "uvco.h"
-#include "base64.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 #define MAX_PW_LEN 2048
@@ -584,24 +584,24 @@ int demo_base64(int argc, const char **argv) {
   return 0;
 }
 
-void vt_cb(const char* s, size_t len, void* user) {
+void vt_cb(const char *s, size_t len, void *user) {
   LOG("vt(%d)=%.*s", (int)len, (int)len, s);
 }
 
 int demo_vterm(int argc, const char **argv) {
   int rows = 100;
   int cols = 80;
-  VTerm* vt = vterm_new(rows, cols);
+  VTerm *vt = vterm_new(rows, cols);
   vterm_set_utf8(vt, true);
 
   VTermScreen *vt_screen = vterm_obtain_screen(vt);
   vterm_screen_reset(vt_screen, true);
 
-  //VTermState *vt_state = vterm_obtain_state(vt);
-  //vterm_state_reset(vt_state, 1);
+  // VTermState *vt_state = vterm_obtain_state(vt);
+  // vterm_state_reset(vt_state, 1);
 
   Str txt = str_from_c("hi!");
-  vterm_input_write(vt, (char*)txt.buf, txt.len);
+  vterm_input_write(vt, (char *)txt.buf, txt.len);
 
   vterm_output_set_callback(vt, vt_cb, NULL);
   vterm_keyboard_unichar(vt, 65, 0);
@@ -611,14 +611,96 @@ int demo_vterm(int argc, const char **argv) {
   return 0;
 }
 
-void get_identity_key(Str hex, CryptoSignSK* out) {
+void get_identity_key(Str hex, CryptoSignSK *out) {
   CHECK(hex.len == 64, "got length %d", (int)hex.len);
   CryptoSeed seed;
-  sodium_hex2bin((u8 *)&seed, sizeof(CryptoSeed), (char *)hex.buf,
-                 hex.len, 0, 0, 0);
+  sodium_hex2bin((u8 *)&seed, sizeof(CryptoSeed), (char *)hex.buf, hex.len, 0,
+                 0, 0);
 
   CryptoSignPK pk;
-  CHECK0(crypto_sign_seed_keypair((u8*)&pk, (u8*)out, (u8*)&seed));
+  CHECK0(crypto_sign_seed_keypair((u8 *)&pk, (u8 *)out, (u8 *)&seed));
+}
+
+int drat_a_to_b(DratState *A_state, X3DH *A_x, DratState *B_state, X3DH *B_x,
+                Str msg) {
+  LOGS(msg);
+
+  // A sends
+  Bytes A_ad = {sizeof(A_x->ad), A_x->ad};
+  DratHeader header;
+  usize cipher_sz = drat_encrypt_len(msg.len);
+  Bytes cipher = {cipher_sz, malloc(cipher_sz)};
+  if (drat_encrypt(A_state, msg, A_ad, &header, &cipher))
+    return 1;
+
+  // B receives
+  Bytes B_ad = {sizeof(B_x->ad), B_x->ad};
+  if (drat_decrypt(B_state, &header, cipher, B_ad))
+    return 1;
+
+  // decrypt(encrypt(msg)) == msg
+  CHECK(msg.len == cipher.len);
+  if (memcmp(cipher.buf, msg.buf, msg.len))
+    return 1;
+  LOGS(cipher);
+  free(cipher.buf);
+  return 0;
+}
+
+int demo_drat(int argc, const char **argv) {
+  // Alice and Bob identity keys
+  CryptoSignSK A_key;
+  get_identity_key(str_from_c(A_seed_hex), &A_key);
+  CryptoSignSK B_key;
+  get_identity_key(str_from_c(B_seed_hex), &B_key);
+
+  // X3DH
+  X3DHKeys A_sec;
+  X3DHKeys B_sec;
+  X3DH A_x;
+  X3DH B_x;
+  {
+    CHECK0(x3dh_keys_init(&A_key, &A_sec));
+    CHECK0(x3dh_keys_init(&B_key, &B_sec));
+    X3DHHeader A_header;
+    CHECK0(x3dh_init(&A_sec, &B_sec.pub, &A_header, &A_x));
+    CHECK0(x3dh_init_recv(&B_sec, &A_header, &B_x));
+    CHECK0(memcmp((u8 *)&A_x, (u8 *)&B_x, sizeof(X3DH)));
+  }
+
+  // Initialize double ratchet
+  DratState B_state;
+  DratInit B_init = {
+      .session_key = &B_x.key,
+      .pk = &B_sec.pub.kx_prekey,
+      .sk = &B_sec.sec.kx_prekey,
+  };
+  CHECK0(drat_init(&B_state, &B_init));
+
+  DratState A_state;
+  DratInitRecv A_init = {
+      .session_key = &A_x.key,
+      .bob = &B_sec.pub.kx_prekey,
+  };
+  CHECK0(drat_init_recv(&A_state, &A_init));
+
+  // Send some messages back and forth
+  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state, &A_x, //
+                     str_from_c("hello from Bob! secret number is 77")));
+  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state, &A_x, //
+                     str_from_c("hello from Bob! secret number is 79")));
+  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state, &B_x, //
+                     str_from_c("hello from Alice!")));
+  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state, &A_x, //
+                     str_from_c("roger roger")));
+  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state, &A_x, //
+                     str_from_c("roger roger 2")));
+  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state, &B_x, //
+                     str_from_c("1")));
+  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state, &B_x, //
+                     str_from_c("2")));
+
+  return 0;
 }
 
 int demo_x3dh(int argc, const char **argv) {
@@ -645,7 +727,7 @@ int demo_x3dh(int argc, const char **argv) {
   CHECK0(x3dh_init_recv(&B_sec, &A_header, &B_x));
 
   // Keys + AD are equal
-  CHECK0(memcmp((u8*)&A_x, (u8*)&B_x, sizeof(X3DH)));
+  CHECK0(memcmp((u8 *)&A_x, (u8 *)&B_x, sizeof(X3DH)));
   LOG("keys match!");
 
   return 0;
@@ -834,6 +916,7 @@ static const char *const usages[] = {
     "\n      - demo-vterm"
     "\n      - demo-base64"
     "\n      - demo-x3dh"
+    "\n      - demo-drat"
     "\n      - demo-kv"
     "\n      - demo-nik"
     "\n      - demo-nikcxn"
@@ -851,9 +934,10 @@ struct cmd_struct {
 };
 
 static struct cmd_struct commands[] = {
-    {"demo-vterm", demo_vterm},           //
+    {"demo-vterm", demo_vterm},         //
     {"demo-x3dh", demo_x3dh},           //
-    {"demo-base64", demo_base64},           //
+    {"demo-drat", demo_drat},           //
+    {"demo-base64", demo_base64},       //
     {"demo-kv", demo_kv},               //
     {"demo-nik", demo_nik},             //
     {"demo-nikcxn", demo_nikcxn},       //
