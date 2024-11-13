@@ -7,16 +7,14 @@ NIK todo
 * If both A and B initiate a handshake simultaneously what happens?
 
 Signal todo
-* Double ratchet header encryption
-* Double ratchet memzero?
-* Skips: what if they never arrive? just takes up space...
-  what if the map becomes full?
-* we haven't authenticated when we ratchet? but we're updating state
-* One-time prekeys, or alternative anti-replay mechanism
+* Verify counter nonce usage won't repeat (separate tx and rx keys?)
+* We haven't authenticated when we update state. Header encryption would solve.
+* See where we may want/need to memzero
+* Skips: implement some kind of cleanup/expiration
+* One-time prekeys, or alternative anti-replay mechanism, maybe borrowing from
+  Wireguard
 * Consider adding PQXDH: https://signal.org/docs/specifications/pqxdh/
-* Use fastrange https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
-  instead of modulus
-* Sesame?
+* Sesame session management
 
 kv
 * libkv interface

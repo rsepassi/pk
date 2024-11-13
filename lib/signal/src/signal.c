@@ -1,6 +1,7 @@
 #include "signal.h"
 
 #include "log.h"
+#include "fastrange.h"
 
 #define X3DH_KDF_PREFIX "000000000000000000000000pksignal"
 #define DRAT_KDF_ROOT "drat-kdf-root"
@@ -221,9 +222,9 @@ static Signal_Status drat_kdf_rk(u8 *rk, CryptoKxTx *dh, u8 *rk_out,
 
 Signal_Status drat_init(DratState *state, const DratInit *init) {
   *state = (DratState){0};
-  for (usize i = 0; i < SIGNAL_DRAT_MAX_SKIP; ++i)
-    state->skips[i].key.number = UINT64_MAX;
-  randombytes_buf(state->skip_key, sizeof(state->skip_key));
+  for (usize i = 0; i < SIGNAL_DRAT_SKIPMAP_SZ; ++i)
+    state->skips.arr[i].key.number = UINT64_MAX;
+  randombytes_buf(state->skips.key, sizeof(state->skips.key));
 
   // state.DHs = bob_dh_key_pair
   state->key.pk = *init->pk;
@@ -238,9 +239,9 @@ Signal_Status drat_init(DratState *state, const DratInit *init) {
 
 Signal_Status drat_init_recv(DratState *state, const DratInitRecv *init) {
   *state = (DratState){0};
-  for (usize i = 0; i < SIGNAL_DRAT_MAX_SKIP; ++i)
-    state->skips[i].key.number = UINT64_MAX;
-  randombytes_buf(state->skip_key, sizeof(state->skip_key));
+  for (usize i = 0; i < SIGNAL_DRAT_SKIPMAP_SZ; ++i)
+    state->skips.arr[i].key.number = UINT64_MAX;
+  randombytes_buf(state->skips.key, sizeof(state->skips.key));
 
   // state.DHs = GENERATE_DH()
   crypto_kx_keypair((u8 *)&state->key.pk, (u8 *)&state->key.sk);
@@ -330,22 +331,31 @@ static Signal_Status drat_skipped_hash_key(DratState *state,
   STATIC_CHECK(crypto_shorthash_siphash24_BYTES == 8);
   u64 h;
   if (crypto_shorthash_siphash24((u8 *)&h, (u8 *)&key, sizeof(DratSkipKey),
-                                 state->skip_key))
+                                 state->skips.key))
     return 1;
-  *i = h % SIGNAL_DRAT_MAX_SKIP;
+  *i = fastrange64(h, SIGNAL_DRAT_SKIPMAP_SZ);
   return 0;
+}
+
+static void drat_skips_cleanup(DratState* state) {
+  // TODO
+  CHECK(false, "double ratchet skips overflow, unimplemented cleanup");
 }
 
 static Signal_Status drat_insert_skipped_mk(DratState *state, CryptoKxPK *pk,
                                             u64 number, DratSkipEntry **entry) {
+  if (state->skips.n > SIGNAL_DRAT_MAX_SKIP) {
+    drat_skips_cleanup(state);
+  }
   u64 i;
   if (drat_skipped_hash_key(state, pk, number, &i))
     return 1;
-  while (state->skips[i].key.number != UINT64_MAX)
+  while (state->skips.arr[i].key.number != UINT64_MAX)
     ++i;
-  *entry = &state->skips[i];
+  *entry = &state->skips.arr[i];
   (*entry)->key.number = number;
   (*entry)->key.pk = *pk;
+  state->skips.n++;
   return 0;
 }
 
@@ -366,6 +376,7 @@ static Signal_Status drat_skip(DratState *state, u64 until) {
     u8 ck[SIGNAL_DRAT_CHAIN_SZ];
     if (drat_kdf_ck(state->chain_recv, ck, &entry->mk)) {
       entry->key.number = UINT64_MAX;
+      state->skips.n--;
       return 1;
     }
     memcpy(state->chain_recv, ck, sizeof(ck));
@@ -420,14 +431,15 @@ static Signal_Status drat_find_skipped_mk(DratState *state,
     return 1;
 
   *entry = NULL;
-  while (state->skips[i].key.number != UINT64_MAX) {
-    if (state->skips[i].key.number == header->number &&
-        memcmp(&state->skips[i].key.pk, &header->ratchet,
+  while (state->skips.arr[i].key.number != UINT64_MAX) {
+    if (state->skips.arr[i].key.number == header->number &&
+        memcmp(&state->skips.arr[i].key.pk, &header->ratchet,
                sizeof(header->ratchet)) == 0) {
-      *entry = &state->skips[i];
+      *entry = &state->skips.arr[i];
       return 0;
     }
-    i = (i + 1) % (SIGNAL_DRAT_MAX_SKIP * 2);
+    i++;
+    if (i >= SIGNAL_DRAT_SKIPMAP_SZ) i = 0;
   }
   return 0;
 }
@@ -455,6 +467,7 @@ static Signal_Status drat_check_skipped(DratState *state,
 
   sodium_memzero(skip, sizeof(DratSkipEntry));
   skip->key.number = UINT64_MAX;
+  state->skips.n--;
 
   return 0;
 }

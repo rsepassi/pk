@@ -80,6 +80,7 @@ Signal_Status x3dh_init_recv(const X3DHKeys *B, const X3DHHeader *header,
 
 #define SIGNAL_DRAT_CHAIN_SZ 32
 #define SIGNAL_DRAT_MAX_SKIP 256
+#define SIGNAL_DRAT_SKIPMAP_SZ (SIGNAL_DRAT_MAX_SKIP * 2)
 
 typedef struct {
   CryptoKxPK pk;
@@ -92,6 +93,12 @@ typedef struct {
 } DratSkipEntry;
 
 typedef struct {
+  u8 key[crypto_shorthash_siphash24_KEYBYTES];
+  DratSkipEntry arr[SIGNAL_DRAT_SKIPMAP_SZ];
+  usize n;
+} DratSkipMap;
+
+typedef struct {
   CryptoKxKeypair key;
   CryptoKxPK remote_key;
   u8 root_key[SIGNAL_DRAT_CHAIN_SZ];
@@ -100,8 +107,7 @@ typedef struct {
   u64 send_n;
   u64 recv_n;
   u64 psend_n;
-  u8 skip_key[crypto_shorthash_siphash24_KEYBYTES];
-  DratSkipEntry skips[SIGNAL_DRAT_MAX_SKIP * 2];
+  DratSkipMap skips;
   bool chain_recv_exists;
 } DratState;
 
