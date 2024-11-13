@@ -16,6 +16,8 @@ Signal todo
 * we haven't authenticated when we ratchet? but we're updating state
 * One-time prekeys, or alternative anti-replay mechanism
 * Consider adding PQXDH: https://signal.org/docs/specifications/pqxdh/
+* Use fastrange https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
+  instead of modulus
 
 kv
 * libkv interface

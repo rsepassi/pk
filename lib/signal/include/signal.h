@@ -11,8 +11,19 @@
 // Double Ratchet
 // Specification:
 // https://signal.org/docs/specifications/doubleratchet/doubleratchet.pdf
+// Parameters:
+//   GENERATE_DH = Curve25519
+//   DH = X25519
+//   KDF = HKDF-SHA-256
+//   AEAD = ChaCha20-Poly1305
 //
-// See copies of pdfs in doc/
+// The libary does no dynamic memory allocation.
+//
+// To allow for arbitrary-sized associated data without dynamic memory
+// allocation, AD is replaced with BLAKE2b(CONCAT(AD, header)) instead of
+// CONCAT(AD, header) directly.
+//
+// See copies of specification pdfs in doc/
 #pragma once
 
 #include "crypto.h"
