@@ -516,7 +516,7 @@ NIK_Status nik_handshake_respond_check(NIK_Handshake *state,
 }
 
 NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
-                                    const NIK_HandshakeMsg1 *msg) {
+                                    NIK_HandshakeMsg1 *msg) {
   // Responder checks the first message and constructs identical state
   if (msg->type != NIK_Msg_I2R)
     return 1;
@@ -603,6 +603,7 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
     return 1;
 
   // msg.static := AEAD(K, 0, S_pub_i, H_i)
+  u8 key_decrypt[sizeof(*S_pub_i)];
   {
     // Snapshot H_i
     u8 H[32];
@@ -612,14 +613,13 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
       return 1;
 
     // AEAD(K, 0, S_pub_i, H_i)
-    u8 H_decrypt[sizeof(*S_pub_i)];
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
     if (crypto_aead_chacha20poly1305_decrypt_detached(
-            H_decrypt, 0, (u8 *)&msg->statik.key, sizeof(msg->statik.key),
+            key_decrypt, 0, (u8 *)&msg->statik.key, sizeof(msg->statik.key),
             (u8 *)&msg->statik.tag, H, sizeof(H), zero_nonce, K))
       return 1;
 
-    if (sodium_memcmp(H_decrypt, S_pub_i, sizeof(*S_pub_i)))
+    if (sodium_memcmp(key_decrypt, S_pub_i, sizeof(*S_pub_i)))
       return 1;
   }
 
@@ -628,11 +628,15 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
                                         sizeof(msg->statik)))
     return 1;
 
+  // Copy the decrypted key back into the message
+  memcpy((u8*)&msg->statik.key, key_decrypt, sizeof(key_decrypt));
+
   // C_i, K := KDF_2(C_i, DH(S_priv_r, S_pub_i))
   if (nik_dh_kdf2(C_i, S_pub_r, S_priv_r, S_pub_i, C_i, K, false))
     return 1;
 
   // msg.timestamp := AEAD(K, 0, Timestamp(), H_i)
+  u8 T_decrypt[sizeof(msg->timestamp.timestamp)];
   {
     // Snapshot H_i
     u8 H[32];
@@ -641,7 +645,6 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
     if (crypto_generichash_blake2b_final(&H_i, H, sizeof(H)))
       return 1;
 
-    u8 T_decrypt[sizeof(msg->timestamp.timestamp)];
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
     if (crypto_aead_chacha20poly1305_decrypt_detached(
             T_decrypt, 0, (u8 *)&msg->timestamp.timestamp,
@@ -654,6 +657,9 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
   if (crypto_generichash_blake2b_update(H_state, (u8 *)&msg->timestamp,
                                         sizeof(msg->timestamp)))
     return 1;
+
+  // Copy the decrypted timestamp back into the message
+  memcpy((u8*)&msg->timestamp.timestamp, T_decrypt, sizeof(T_decrypt));
 
   state->keys = keys;
   state->initiator = false;
