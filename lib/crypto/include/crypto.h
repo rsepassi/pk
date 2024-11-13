@@ -10,17 +10,17 @@ typedef struct {
 } CryptoSeed;
 
 typedef struct {
-  u8 bytes[crypto_sign_SEEDBYTES];
+  u8 bytes[crypto_sign_ed25519_SEEDBYTES];
 } CryptoSignSeed;
 typedef struct {
-  u8 bytes[crypto_sign_PUBLICKEYBYTES];
+  u8 bytes[crypto_sign_ed25519_PUBLICKEYBYTES];
 } CryptoSignPK;
 typedef struct __attribute__((packed)) {
   CryptoSignSeed seed;
   CryptoSignPK pk;
 } CryptoSignSK;
 typedef struct {
-  u8 bytes[crypto_sign_BYTES];
+  u8 bytes[crypto_sign_ed25519_BYTES];
 } CryptoSig;
 
 typedef struct {

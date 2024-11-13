@@ -27,11 +27,12 @@ Signal_Status x3dh_keys_init(const CryptoSignSK *identity, X3DHKeys *keys) {
     return 1;
 
   // Sign pre-shared key
-  if (crypto_sign_detached((u8 *)&keys->pub.kx_prekey_sig, 0, // signature
-                           (u8 *)&keys->pub.kx_prekey,
-                           sizeof(CryptoKxPK), // input message
-                           (u8 *)identity      // signing key
-                           ))
+  if (crypto_sign_ed25519_detached((u8 *)&keys->pub.kx_prekey_sig,
+                                   0, // signature
+                                   (u8 *)&keys->pub.kx_prekey,
+                                   sizeof(CryptoKxPK), // input message
+                                   (u8 *)identity      // signing key
+                                   ))
     return 1;
 
   return 0;
@@ -41,10 +42,10 @@ Signal_Status x3dh_keys_init(const CryptoSignSK *identity, X3DHKeys *keys) {
 static u8 x3dh_init_internal(const X3DHKeys *A, const X3DHPublic *B,
                              X3DHInit *out) {
   // Alice verifies Bob's pre-shared key
-  if (crypto_sign_verify_detached((u8 *)&B->kx_prekey_sig, (u8 *)&B->kx_prekey,
-                                  sizeof(CryptoKxPK),
-                                  (u8 *)B->identity // public key
-                                  ))
+  if (crypto_sign_ed25519_verify_detached(
+          (u8 *)&B->kx_prekey_sig, (u8 *)&B->kx_prekey, sizeof(CryptoKxPK),
+          (u8 *)B->identity // public key
+          ))
     return 1;
 
   // Alice ephemeral keypair
@@ -222,7 +223,7 @@ Signal_Status drat_init(DratState *state, const DratInit *init) {
   *state = (DratState){0};
   for (usize i = 0; i < SIGNAL_DRAT_MAX_SKIP; ++i)
     state->skips[i].key.number = UINT64_MAX;
-  crypto_shorthash_keygen(state->skip_key);
+  randombytes_buf(state->skip_key, sizeof(state->skip_key));
 
   // state.DHs = bob_dh_key_pair
   state->key.pk = *init->pk;
@@ -239,7 +240,7 @@ Signal_Status drat_init_recv(DratState *state, const DratInitRecv *init) {
   *state = (DratState){0};
   for (usize i = 0; i < SIGNAL_DRAT_MAX_SKIP; ++i)
     state->skips[i].key.number = UINT64_MAX;
-  crypto_shorthash_keygen(state->skip_key);
+  randombytes_buf(state->skip_key, sizeof(state->skip_key));
 
   // state.DHs = GENERATE_DH()
   crypto_kx_keypair((u8 *)&state->key.pk, (u8 *)&state->key.sk);
@@ -272,15 +273,15 @@ static Signal_Status drat_kdf_ck(u8 *ck, u8 *ck_out, CryptoKxTx *mk_out) {
 static Signal_Status drat_hash_ad_header(Bytes ad, const DratHeader *header,
                                          u8 *out) {
   // H(AD) = BLAKE2b(CONCAT(AD, header))
-  crypto_generichash_state h;
-  if (crypto_generichash_init(&h, 0, 0, 64))
+  crypto_generichash_blake2b_state h;
+  if (crypto_generichash_blake2b_init(&h, 0, 0, 64))
     return 1;
-  if (crypto_generichash_update(&h, ad.buf, ad.len))
+  if (crypto_generichash_blake2b_update(&h, ad.buf, ad.len))
     return 1;
-  if (crypto_generichash_update(&h, (u8 *)header,
-                                ((u8 *)&header->tag - (u8 *)header)))
+  if (crypto_generichash_blake2b_update(&h, (u8 *)header,
+                                        ((u8 *)&header->tag - (u8 *)header)))
     return 1;
-  if (crypto_generichash_final(&h, out, 64))
+  if (crypto_generichash_blake2b_final(&h, out, 64))
     return 1;
   return 0;
 }
@@ -326,10 +327,10 @@ static Signal_Status drat_skipped_hash_key(DratState *state,
                                            const CryptoKxPK *pk, u64 number,
                                            u64 *i) {
   DratSkipKey key = {.pk = *pk, .number = number};
-  STATIC_CHECK(crypto_shorthash_BYTES == 8);
+  STATIC_CHECK(crypto_shorthash_siphash24_BYTES == 8);
   u64 h;
-  if (crypto_shorthash((u8 *)&h, (u8 *)&key, sizeof(DratSkipKey),
-                       state->skip_key))
+  if (crypto_shorthash_siphash24((u8 *)&h, (u8 *)&key, sizeof(DratSkipKey),
+                                 state->skip_key))
     return 1;
   *i = h % SIGNAL_DRAT_MAX_SKIP;
   return 0;

@@ -1,6 +1,3 @@
-Crypto todo (NIK, Signal)
-* Use specific algos instead of sodium's generics
-
 NIK todo
 * Update counter check to use algorithm in RFC 6479 as in WG-Go
   https://github.com/WireGuard/wireguard-go/blob/master/replay/replay.go

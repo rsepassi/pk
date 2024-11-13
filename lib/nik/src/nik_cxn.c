@@ -1,7 +1,6 @@
 #include "nik_cxn.h"
 
 #include "log.h"
-#include "sodium.h"
 
 #define JITTER_MS 334
 

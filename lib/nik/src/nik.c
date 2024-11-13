@@ -147,12 +147,12 @@ static NIK_Status nik_dh_kdf2(const u8 *C, const CryptoKxPK *pk,
   if (hmac_blake2b(T0, sizeof(T0), C, NIK_CHAIN_SZ, (u8 *)&dh, sizeof(dh)))
     return 1;
   // T1 = HMAC(T0, 1)
-  if (crypto_kdf_derive_from_key(T1, 32, 1, NIK_KDF_CTX, T0))
+  if (crypto_kdf_blake2b_derive_from_key(T1, 32, 1, NIK_KDF_CTX, T0))
     return 1;
 
   if (T2) {
     // T2 = HMAC(T0 T1, 2)
-    if (crypto_kdf_derive_from_key(T2, 32, 2, NIK_KDF_CTX, T1))
+    if (crypto_kdf_blake2b_derive_from_key(T2, 32, 2, NIK_KDF_CTX, T1))
       return 1;
   }
 
@@ -191,7 +191,8 @@ NIK_Status nik_handshake_respond(NIK_Handshake *state, u32 local_idx,
                      sizeof(*E_pub_r)))
       return 1;
     // T1 = HMAC(T0, 1)
-    if (crypto_kdf_derive_from_key(C_r, NIK_CHAIN_SZ, 1, NIK_KDF_CTX, T0))
+    if (crypto_kdf_blake2b_derive_from_key(C_r, NIK_CHAIN_SZ, 1, NIK_KDF_CTX,
+                                           T0))
       return 1;
   }
 
@@ -222,11 +223,13 @@ NIK_Status nik_handshake_respond(NIK_Handshake *state, u32 local_idx,
                      crypto_secretbox_KEYBYTES))
       return 1;
 
-    if (crypto_kdf_derive_from_key(C_r, NIK_CHAIN_SZ, 1, NIK_KDF_CTX, T0))
+    if (crypto_kdf_blake2b_derive_from_key(C_r, NIK_CHAIN_SZ, 1, NIK_KDF_CTX,
+                                           T0))
       return 1;
-    if (crypto_kdf_derive_from_key(T, NIK_CHAIN_SZ, 2, NIK_KDF_CTX, C_r))
+    if (crypto_kdf_blake2b_derive_from_key(T, NIK_CHAIN_SZ, 2, NIK_KDF_CTX,
+                                           C_r))
       return 1;
-    if (crypto_kdf_derive_from_key(K, NIK_CHAIN_SZ, 3, NIK_KDF_CTX, T))
+    if (crypto_kdf_blake2b_derive_from_key(K, NIK_CHAIN_SZ, 3, NIK_KDF_CTX, T))
       return 1;
   }
 
@@ -321,7 +324,8 @@ NIK_Status nik_handshake_init(NIK_Handshake *state, const NIK_Keys keys,
                      sizeof(*E_pub_i)))
       return 1;
     // C_i = T1 = HMAC(T0, 1)
-    if (crypto_kdf_derive_from_key(C_i, NIK_CHAIN_SZ, 1, NIK_KDF_CTX, T0))
+    if (crypto_kdf_blake2b_derive_from_key(C_i, NIK_CHAIN_SZ, 1, NIK_KDF_CTX,
+                                           T0))
       return 1;
   }
 
@@ -443,7 +447,8 @@ NIK_Status nik_handshake_respond_check(NIK_Handshake *state,
                      sizeof(msg->ephemeral)))
       return 1;
     // T1 = HMAC(T0, 1)
-    if (crypto_kdf_derive_from_key(C_i, NIK_CHAIN_SZ, 1, NIK_KDF_CTX, T0))
+    if (crypto_kdf_blake2b_derive_from_key(C_i, NIK_CHAIN_SZ, 1, NIK_KDF_CTX,
+                                           T0))
       return 1;
   }
 
@@ -476,11 +481,13 @@ NIK_Status nik_handshake_respond_check(NIK_Handshake *state,
                      crypto_secretbox_KEYBYTES))
       return 1;
 
-    if (crypto_kdf_derive_from_key(C_i, NIK_CHAIN_SZ, 1, NIK_KDF_CTX, T0))
+    if (crypto_kdf_blake2b_derive_from_key(C_i, NIK_CHAIN_SZ, 1, NIK_KDF_CTX,
+                                           T0))
       return 1;
-    if (crypto_kdf_derive_from_key(T, NIK_CHAIN_SZ, 2, NIK_KDF_CTX, C_i))
+    if (crypto_kdf_blake2b_derive_from_key(T, NIK_CHAIN_SZ, 2, NIK_KDF_CTX,
+                                           C_i))
       return 1;
-    if (crypto_kdf_derive_from_key(K, NIK_CHAIN_SZ, 3, NIK_KDF_CTX, T))
+    if (crypto_kdf_blake2b_derive_from_key(K, NIK_CHAIN_SZ, 3, NIK_KDF_CTX, T))
       return 1;
   }
 
@@ -588,7 +595,8 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
                      sizeof(msg->ephemeral)))
       return 1;
     // T1 = HMAC(T0, 1)
-    if (crypto_kdf_derive_from_key(C_i, NIK_CHAIN_SZ, 1, NIK_KDF_CTX, T0))
+    if (crypto_kdf_blake2b_derive_from_key(C_i, NIK_CHAIN_SZ, 1, NIK_KDF_CTX,
+                                           T0))
       return 1;
   }
 
@@ -690,12 +698,12 @@ NIK_Status nik_handshake_final(NIK_Handshake *state, NIK_Session *session) {
     if (hmac_blake2b(T0, sizeof(T0), C, NIK_CHAIN_SZ, e, sizeof(e)))
       return 1;
     // T1 = HMAC(T0, 1)
-    if (crypto_kdf_derive_from_key((u8 *)send, sizeof(session->send), 1,
-                                   NIK_KDF_CTX, T0))
+    if (crypto_kdf_blake2b_derive_from_key((u8 *)send, sizeof(session->send), 1,
+                                           NIK_KDF_CTX, T0))
       return 1;
     // T2 = HMAC(T1, 2)
-    if (crypto_kdf_derive_from_key((u8 *)recv, sizeof(session->recv), 2,
-                                   NIK_KDF_CTX, (u8 *)send))
+    if (crypto_kdf_blake2b_derive_from_key((u8 *)recv, sizeof(session->recv), 2,
+                                           NIK_KDF_CTX, (u8 *)send))
       return 1;
   }
 

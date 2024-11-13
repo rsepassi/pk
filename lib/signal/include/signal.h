@@ -100,7 +100,7 @@ typedef struct {
   u64 send_n;
   u64 recv_n;
   u64 psend_n;
-  u8 skip_key[crypto_shorthash_KEYBYTES];
+  u8 skip_key[crypto_shorthash_siphash24_KEYBYTES];
   DratSkipEntry skips[SIGNAL_DRAT_MAX_SKIP * 2];
   bool chain_recv_exists;
 } DratState;
