@@ -1,3 +1,4 @@
+#pragma once
 // Dec  Char                           Dec  Char     Dec  Char     Dec  Char
 // ---------                           ---------     ---------     ----------
 //   0  NUL (null)                      32  SPACE     64  @         96  `

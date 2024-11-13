@@ -1,5 +1,4 @@
 // src
-#include "crypto.h"
 
 // vendor deps
 #include "argparse.h"
@@ -8,30 +7,27 @@
 #include "mimalloc.h"
 #include "minicoro.h"
 #include "plum/plum.h"
-#include "signal.h"
 #include "uv.h"
 #include "vterm.h"
 
 // lib
 #include "allocatormi.h"
 #include "base64.h"
+#include "crypto.h"
 #include "getpass.h"
 #include "log.h"
+#include "nik.h"
+#include "nik_cxn.h"
+#include "signal.h"
+#include "stdmacros.h"
 #include "stdtypes.h"
 #include "taia.h"
 #include "uvco.h"
-#include "nik.h"
-#include "nik_cxn.h"
 
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 #define MAX_PW_LEN 2048
 
 #define NS_PER_MS 1000000ULL
 #define MS_PER_SEC 1000ULL
-
-#ifndef MIN
-#define MIN(x, y) ((x) < (y) ? x : y)
-#endif
 
 // Global event loop
 uv_loop_t *loop;

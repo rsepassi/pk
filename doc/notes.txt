@@ -12,6 +12,8 @@ NIK todo
   flood := time.since(handshake.last_initiation_consumption) <= HandshakeInitiationRate (20ms)
 
 Signal todo
+* Routing - consider using sender/recveiver ids like Wireguard, but maybe
+  random each time with a nextid in each message
 * Verify counter nonce usage won't repeat (separate tx and rx keys?)
 * One-time prekeys, or alternative anti-replay mechanism, maybe borrowing from
   Wireguard

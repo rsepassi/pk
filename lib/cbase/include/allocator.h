@@ -1,6 +1,7 @@
 #pragma once
 
 #include "stdtypes.h"
+#include "str.h"
 
 typedef int AllocStatus;
 #define Alloc_OK 0
