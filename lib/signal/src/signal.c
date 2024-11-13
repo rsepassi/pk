@@ -6,6 +6,7 @@
 #define X3DH_KDF_PREFIX "000000000000000000000000pksignal"
 #define DRAT_KDF_ROOT "drat-kdf-root"
 #define DRAT_KDF_CHAIN "drat-kdf-chain"
+#define DRAT_AD_HSZ 64
 
 typedef struct {
   CryptoKxTx session_key;
@@ -269,14 +270,14 @@ static Signal_Status drat_hash_ad_header(Bytes ad, const DratHeader *header,
                                          u8 *out) {
   // H(AD) = BLAKE2b(CONCAT(AD, header))
   crypto_generichash_blake2b_state h;
-  if (crypto_generichash_blake2b_init(&h, 0, 0, 64))
+  if (crypto_generichash_blake2b_init(&h, 0, 0, DRAT_AD_HSZ))
     return 1;
   if (crypto_generichash_blake2b_update(&h, ad.buf, ad.len))
     return 1;
   if (crypto_generichash_blake2b_update(&h, (u8 *)header,
                                         ((u8 *)&header->tag - (u8 *)header)))
     return 1;
-  if (crypto_generichash_blake2b_final(&h, out, 64))
+  if (crypto_generichash_blake2b_final(&h, out, DRAT_AD_HSZ))
     return 1;
   return 0;
 }
@@ -300,7 +301,7 @@ Signal_Status drat_encrypt(DratState *state, Bytes msg, Bytes ad,
   header->number = state->send_n;
 
   // H(AD) = BLAKE2b(CONCAT(AD, header))
-  u8 h_ad[64];
+  u8 h_ad[DRAT_AD_HSZ];
   drat_hash_ad_header(ad, header, h_ad);
 
   // state.Ns += 1
@@ -381,7 +382,7 @@ Signal_Status drat_decrypt(DratState *state, const DratHeader *header,
   state->recv_n++;
 
   // H(AD) = BLAKE2b(CONCAT(AD, header))
-  u8 h_ad[64];
+  u8 h_ad[DRAT_AD_HSZ];
   drat_hash_ad_header(ad, header, h_ad);
 
   // DECRYPT(mk, ciphertext, H(AD))
