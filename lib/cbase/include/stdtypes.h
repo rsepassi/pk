@@ -8,6 +8,7 @@
 #define u32 uint32_t
 #define u64 uint64_t
 #define usize size_t
+#define uptr uintptr_t
 
 #define i8 int8_t
 #define i16 int16_t

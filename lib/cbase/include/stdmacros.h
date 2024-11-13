@@ -23,7 +23,7 @@
 #endif
 
 #ifndef ALIGN
-#define ALIGN(x, align)  ((((x) + ((align) - 1)) / (align)) * (align))
+#define ALIGN(x, align)  ((x) + (-(uintptr_t)(x) & (align - 1)))
 #define ALIGNB(x, align) (((x) + ((align) - 1)) & ~((align) - 1))
 #endif
 

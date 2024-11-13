@@ -33,3 +33,9 @@ static inline void allocator_deinit(Allocator a) {
 }
 
 Allocator allocator_libc(void);
+
+typedef struct {
+  Bytes mem;
+  usize i;
+} BumpAllocator;
+Allocator allocator_bump(BumpAllocator*, Bytes mem);
