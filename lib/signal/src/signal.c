@@ -311,10 +311,10 @@ Signal_Status drat_encrypt(DratState *state, Bytes msg, Bytes ad,
   state->send_n++;
 
   // ENCRYPT(mk, plaintext, H(AD))
-  STATIC_CHECK(sizeof(mk) == crypto_aead_chacha20poly1305_KEYBYTES);
-  u8 nonce[crypto_aead_chacha20poly1305_NPUBBYTES] = {0};
+  STATIC_CHECK(sizeof(mk) == crypto_aead_chacha20poly1305_IETF_KEYBYTES);
+  u8 nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
   *(u64 *)nonce = header->number;
-  if (crypto_aead_chacha20poly1305_encrypt_detached(
+  if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
           cipher->buf, (u8 *)&header->tag, 0, msg.buf, msg.len, h_ad,
           sizeof(h_ad), 0, nonce, (u8 *)&mk))
     return 1;
@@ -322,21 +322,26 @@ Signal_Status drat_encrypt(DratState *state, Bytes msg, Bytes ad,
   return 0;
 }
 
-static Signal_Status drat_skipped_hash_key(DratState* state, const CryptoKxPK* pk, u64 number, u64* i) {
+static Signal_Status drat_skipped_hash_key(DratState *state,
+                                           const CryptoKxPK *pk, u64 number,
+                                           u64 *i) {
   DratSkipKey key = {.pk = *pk, .number = number};
   STATIC_CHECK(crypto_shorthash_BYTES == 8);
   u64 h;
-  if (crypto_shorthash((u8*)&h, (u8*)&key, sizeof(DratSkipKey), state->skip_key))
+  if (crypto_shorthash((u8 *)&h, (u8 *)&key, sizeof(DratSkipKey),
+                       state->skip_key))
     return 1;
   *i = h % SIGNAL_DRAT_MAX_SKIP;
   return 0;
 }
 
-static Signal_Status drat_insert_skipped_mk(DratState* state, CryptoKxPK* pk, u64 number, DratSkipEntry** entry) {
+static Signal_Status drat_insert_skipped_mk(DratState *state, CryptoKxPK *pk,
+                                            u64 number, DratSkipEntry **entry) {
   u64 i;
   if (drat_skipped_hash_key(state, pk, number, &i))
     return 1;
-  while (state->skips[i].key.number != UINT64_MAX) ++i;
+  while (state->skips[i].key.number != UINT64_MAX)
+    ++i;
   *entry = &state->skips[i];
   (*entry)->key.number = number;
   (*entry)->key.pk = *pk;
@@ -351,8 +356,9 @@ static Signal_Status drat_skip(DratState *state, u64 until) {
 
   while (state->recv_n < until) {
     // state.MKSKIPPED[state.DHr, state.Nr] = mk (computed below)
-    DratSkipEntry* entry;
-    if (drat_insert_skipped_mk(state, &state->remote_key, state->recv_n, &entry))
+    DratSkipEntry *entry;
+    if (drat_insert_skipped_mk(state, &state->remote_key, state->recv_n,
+                               &entry))
       return 1;
 
     // state.CKr, mk = KDF_CK(state.CKr)
@@ -405,14 +411,18 @@ static Signal_Status drat_ratchet(DratState *state, const DratHeader *header) {
   return 0;
 }
 
-static Signal_Status drat_find_skipped_mk(DratState* state, const DratHeader* header, DratSkipEntry** entry) {
+static Signal_Status drat_find_skipped_mk(DratState *state,
+                                          const DratHeader *header,
+                                          DratSkipEntry **entry) {
   u64 i;
   if (drat_skipped_hash_key(state, &header->ratchet, header->number, &i))
     return 1;
 
   *entry = NULL;
   while (state->skips[i].key.number != UINT64_MAX) {
-    if (state->skips[i].key.number == header->number && memcmp(&state->skips[i].key.pk, &header->ratchet, sizeof(header->ratchet)) == 0) {
+    if (state->skips[i].key.number == header->number &&
+        memcmp(&state->skips[i].key.pk, &header->ratchet,
+               sizeof(header->ratchet)) == 0) {
       *entry = &state->skips[i];
       return 0;
     }
@@ -421,9 +431,10 @@ static Signal_Status drat_find_skipped_mk(DratState* state, const DratHeader* he
   return 0;
 }
 
-static Signal_Status drat_check_skipped(DratState *state, const DratHeader *header,
-                           Bytes cipher, Bytes ad, bool* found) {
-  DratSkipEntry* skip;
+static Signal_Status drat_check_skipped(DratState *state,
+                                        const DratHeader *header, Bytes cipher,
+                                        Bytes ad, bool *found) {
+  DratSkipEntry *skip;
   if (drat_find_skipped_mk(state, header, &skip))
     return 1;
   *found = skip != NULL;
@@ -434,9 +445,9 @@ static Signal_Status drat_check_skipped(DratState *state, const DratHeader *head
   u8 h_ad[64];
   drat_hash_ad_header(ad, header, h_ad);
   // DECRYPT(mk, ciphertext, H(AD))
-  u8 nonce[crypto_aead_chacha20poly1305_NPUBBYTES] = {0};
+  u8 nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
   *(u64 *)nonce = header->number;
-  if (crypto_aead_chacha20poly1305_decrypt_detached(
+  if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
           cipher.buf, 0, cipher.buf, cipher.len, (u8 *)&header->tag, h_ad,
           sizeof(h_ad), nonce, (u8 *)&skip->mk))
     return 1;
@@ -453,7 +464,7 @@ Signal_Status drat_decrypt(DratState *state, const DratHeader *header,
   // If the keys don't match, we need to check the skip list.
   // If the keys do match, we need to check the skip list if recv_n > number.
   bool key_match = memcmp((u8 *)&header->ratchet, (u8 *)&state->remote_key,
-             sizeof(header->ratchet)) == 0;
+                          sizeof(header->ratchet)) == 0;
   bool check_skips = !key_match || state->recv_n > header->number;
   if (check_skips) {
     bool found;
@@ -496,9 +507,9 @@ Signal_Status drat_decrypt(DratState *state, const DratHeader *header,
   drat_hash_ad_header(ad, header, h_ad);
 
   // DECRYPT(mk, ciphertext, H(AD))
-  u8 nonce[crypto_aead_chacha20poly1305_NPUBBYTES] = {0};
+  u8 nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
   *(u64 *)nonce = header->number;
-  if (crypto_aead_chacha20poly1305_decrypt_detached(
+  if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
           cipher.buf, 0, cipher.buf, cipher.len, (u8 *)&header->tag, h_ad,
           sizeof(h_ad), nonce, (u8 *)&mk))
     return 1;

@@ -1,6 +1,5 @@
 Crypto todo (NIK, Signal)
 * Use specific algos instead of sodium's generics
-* Use IETF chacha
 
 NIK todo
 * Update counter check to use algorithm in RFC 6479 as in WG-Go

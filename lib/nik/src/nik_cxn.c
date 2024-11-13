@@ -162,7 +162,8 @@ static void handshake_init_wait(NIK_Cxn *cxn, u64 now) {
 
 static void handshake_respond_checked(NIK_Cxn *cxn, NIK_Handshake *state,
                                       const NIK_HandshakeMsg1 *msg1, u64 now) {
-  if (memcmp(msg1->timestamp.timestamp, cxn->max_handshake_timestamp, NIK_TIMESTAMP_SZ) < 1)
+  if (memcmp(msg1->timestamp.timestamp, cxn->max_handshake_timestamp,
+             NIK_TIMESTAMP_SZ) < 1)
     return;
   if (nik_handshake_respond(state, cxn->id, msg1,
                             &cxn->handshake.responder.msg)) {
@@ -176,7 +177,8 @@ static void handshake_respond_checked(NIK_Cxn *cxn, NIK_Handshake *state,
 
   cxn->next_start_time = now;
   cxn->handshake_state = NIK_CxnHState_R_R2IReady;
-  memcpy(cxn->max_handshake_timestamp, msg1->timestamp.timestamp, NIK_TIMESTAMP_SZ);
+  memcpy(cxn->max_handshake_timestamp, msg1->timestamp.timestamp,
+         NIK_TIMESTAMP_SZ);
 }
 
 static void handshake_respond(NIK_Cxn *cxn, Bytes msg, u64 now) {

@@ -250,7 +250,7 @@ NIK_Status nik_handshake_respond(NIK_Handshake *state, u32 local_idx,
     u8 *empty = dummy_ptr;
     u8 *mempty = (u8 *)&msg2->empty;
     STATIC_CHECK(sizeof(msg2->empty) == crypto_box_MACBYTES);
-    if (crypto_aead_chacha20poly1305_encrypt_detached(
+    if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
             empty, mempty, 0, 0, 0, H, sizeof(H), 0, zero_nonce, K))
       return 1;
   }
@@ -263,8 +263,8 @@ NIK_Status nik_handshake_respond(NIK_Handshake *state, u32 local_idx,
   return 0;
 }
 
-NIK_Status nik_handshake_init(NIK_Handshake *state, const NIK_Keys keys, u32 local_idx,
-                              NIK_HandshakeMsg1 *msg) {
+NIK_Status nik_handshake_init(NIK_Handshake *state, const NIK_Keys keys,
+                              u32 local_idx, NIK_HandshakeMsg1 *msg) {
   // First message: Initiator to Responder
   sodium_memzero(msg, sizeof(NIK_HandshakeMsg1));
   // Set message type
@@ -347,7 +347,7 @@ NIK_Status nik_handshake_init(NIK_Handshake *state, const NIK_Keys keys, u32 loc
     // AEAD(K, 0, S_pub_i, H_i)
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
     STATIC_CHECK(sizeof(msg->statik) == crypto_box_MACBYTES + sizeof(*S_pub_i));
-    if (crypto_aead_chacha20poly1305_encrypt_detached(
+    if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
             (u8 *)&msg->statik.key, (u8 *)&msg->statik.tag, 0, (u8 *)S_pub_i,
             sizeof(*S_pub_i), H, sizeof(H), 0, zero_nonce, K))
       return 1;
@@ -382,7 +382,7 @@ NIK_Status nik_handshake_init(NIK_Handshake *state, const NIK_Keys keys, u32 loc
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
     STATIC_CHECK(sizeof(msg->timestamp) ==
                  crypto_box_MACBYTES + sizeof(timestamp));
-    if (crypto_aead_chacha20poly1305_encrypt_detached(
+    if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
             msg->timestamp.timestamp, (u8 *)&msg->timestamp.tag, 0, timestamp,
             sizeof(timestamp), H, sizeof(H), 0, zero_nonce, K))
       return 1;
@@ -502,8 +502,8 @@ NIK_Status nik_handshake_respond_check(NIK_Handshake *state,
     u8 dummy_ptr[1];
     u8 *empty = dummy_ptr;
     u8 *mempty = (u8 *)&msg->empty;
-    if (crypto_aead_chacha20poly1305_decrypt_detached(0, 0, empty, 0, mempty, H,
-                                                      sizeof(H), zero_nonce, K))
+    if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
+            0, 0, empty, 0, mempty, H, sizeof(H), zero_nonce, K))
       return 1;
   }
 
@@ -614,7 +614,7 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
 
     // AEAD(K, 0, S_pub_i, H_i)
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
-    if (crypto_aead_chacha20poly1305_decrypt_detached(
+    if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
             key_decrypt, 0, (u8 *)&msg->statik.key, sizeof(msg->statik.key),
             (u8 *)&msg->statik.tag, H, sizeof(H), zero_nonce, K))
       return 1;
@@ -629,7 +629,7 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
     return 1;
 
   // Copy the decrypted key back into the message
-  memcpy((u8*)&msg->statik.key, key_decrypt, sizeof(key_decrypt));
+  memcpy((u8 *)&msg->statik.key, key_decrypt, sizeof(key_decrypt));
 
   // C_i, K := KDF_2(C_i, DH(S_priv_r, S_pub_i))
   if (nik_dh_kdf2(C_i, S_pub_r, S_priv_r, S_pub_i, C_i, K, false))
@@ -646,7 +646,7 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
       return 1;
 
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
-    if (crypto_aead_chacha20poly1305_decrypt_detached(
+    if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
             T_decrypt, 0, (u8 *)&msg->timestamp.timestamp,
             sizeof(msg->timestamp.timestamp), (u8 *)&msg->timestamp.tag, H,
             sizeof(H), zero_nonce, K))
@@ -659,7 +659,7 @@ NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
     return 1;
 
   // Copy the decrypted timestamp back into the message
-  memcpy((u8*)&msg->timestamp.timestamp, T_decrypt, sizeof(T_decrypt));
+  memcpy((u8 *)&msg->timestamp.timestamp, T_decrypt, sizeof(T_decrypt));
 
   state->keys = keys;
   state->initiator = false;
@@ -704,7 +704,9 @@ NIK_Status nik_handshake_final(NIK_Handshake *state, NIK_Session *session) {
   return 0;
 }
 
-u64 nik_sendmsg_sz(u64 len) { return sizeof(NIK_MsgHeader) + len + len % PADDING_MULTIPLE; }
+u64 nik_sendmsg_sz(u64 len) {
+  return sizeof(NIK_MsgHeader) + len + len % PADDING_MULTIPLE;
+}
 
 NIK_Status nik_msg_send(NIK_Session *session, Str payload, Str send) {
   if (nik_sendmsg_sz(payload.len) != send.len) {
@@ -729,7 +731,7 @@ NIK_Status nik_msg_send(NIK_Session *session, Str payload, Str send) {
 
   u8 nonce[crypto_box_NONCEBYTES] = {0};
   *(u64 *)nonce = header->counter;
-  if (crypto_aead_chacha20poly1305_encrypt_detached(
+  if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
           crypt, (u8 *)&header->tag, 0, crypt, payload_len,
           (u8 *)&header->payload_len, sizeof(header->payload_len), 0, nonce,
           (u8 *)&session->send)) {
@@ -765,7 +767,7 @@ NIK_Status nik_msg_recv(NIK_Session *session, Str *msg) {
   // Inplace decrypt: msg (and header) will be rewritten
   u8 nonce[crypto_box_NONCEBYTES] = {0};
   *(u64 *)nonce = header->counter;
-  if (crypto_aead_chacha20poly1305_decrypt_detached(
+  if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
           msg->buf, 0, crypt, crypt_len, (u8 *)&header->tag,
           (u8 *)&header->payload_len, sizeof(header->payload_len), nonce,
           (u8 *)&session->recv)) {
