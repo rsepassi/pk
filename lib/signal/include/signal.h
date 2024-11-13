@@ -82,7 +82,7 @@ Signal_Status x3dh_init_recv(const X3DHKeys *B, const X3DHHeader *header,
 
 typedef struct {
   CryptoKxKeypair key;
-  CryptoKxPK remote_key;
+  CryptoKxPK bob;
   u8 root_key[SIGNAL_DRAT_CHAIN_SZ];
   u8 chain_send[SIGNAL_DRAT_CHAIN_SZ];
   u8 chain_recv[SIGNAL_DRAT_CHAIN_SZ];

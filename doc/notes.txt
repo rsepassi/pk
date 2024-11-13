@@ -13,8 +13,6 @@ NIK todo
 
 Signal todo
 * Verify counter nonce usage won't repeat (separate tx and rx keys?)
-* We haven't authenticated when we update state. Header encryption would solve.
-* See where we may want/need to memzero
 * One-time prekeys, or alternative anti-replay mechanism, maybe borrowing from
   Wireguard
 * Out-of-order message support

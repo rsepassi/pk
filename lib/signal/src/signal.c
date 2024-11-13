@@ -102,7 +102,8 @@ static u8 x3dh_init_internal(const X3DHKeys *A, const X3DHPublic *B,
 static u8 x3dh_init_recv_internal(const X3DHKeys *B, const X3DHHeader *A,
                                   CryptoKxTx *out) {
   // Bob checks that the right prekey was used
-  if (sodium_memcmp((u8 *)&B->pub.kx_prekey, (u8 *)&A->kx_prekey_B,
+  // memcmp OK: public key
+  if (memcmp((u8 *)&B->pub.kx_prekey, (u8 *)&A->kx_prekey_B,
                     sizeof(CryptoKxTx)))
     return 1;
 
@@ -189,6 +190,7 @@ Signal_Status x3dh_init_recv(const X3DHKeys *B, const X3DHHeader *header,
 
 static Signal_Status drat_dh(CryptoKxPK *pk, CryptoKxSK *sk, CryptoKxPK *bob,
                              CryptoKxTx *dh) {
+  // memcmp OK: public key
   bool isclient = memcmp(pk, bob, sizeof(CryptoKxPK)) < 0;
   if (isclient) {
     if (crypto_kx_client_session_keys(0, (u8 *)dh, (u8 *)pk, (u8 *)sk,
@@ -241,22 +243,24 @@ Signal_Status drat_init_recv(DratState *state, const DratInitRecv *init) {
   // state.DHs = GENERATE_DH()
   crypto_kx_keypair((u8 *)&state->key.pk, (u8 *)&state->key.sk);
   // state.DHr = bob_dh_public_key
-  state->remote_key = *init->bob;
+  state->bob = *init->bob;
 
   // state.RK, state.CKs = KDF_RK(SK, DH(state.DHs, state.DHr))
   CryptoKxTx dh;
-  if (drat_dh(&state->key.pk, &state->key.sk, &state->remote_key, &dh))
+  if (drat_dh(&state->key.pk, &state->key.sk, &state->bob, &dh))
     return 1;
   if (drat_kdf_rk((u8 *)init->session_key, &dh, state->root_key,
                   state->chain_send))
     return 1;
+
+  sodium_memzero(&dh, sizeof(dh));
 
   return 0;
 }
 
 usize drat_encrypt_len(usize msg_len) { return msg_len; }
 
-static Signal_Status drat_kdf_ck(u8 *ck, u8 *ck_out, CryptoKxTx *mk_out) {
+static Signal_Status drat_kdf_ck(const u8 *ck, u8 *ck_out, CryptoKxTx *mk_out) {
   STATIC_CHECK(crypto_kdf_hkdf_sha256_KEYBYTES == SIGNAL_DRAT_CHAIN_SZ);
   if (crypto_kdf_hkdf_sha256_expand(ck_out, SIGNAL_DRAT_CHAIN_SZ, "a", 1, ck))
     return 1;
@@ -316,6 +320,9 @@ Signal_Status drat_encrypt(DratState *state, Bytes msg, Bytes ad,
           sizeof(h_ad), 0, nonce, (u8 *)&mk))
     return 1;
 
+  sodium_memzero(&mk, sizeof(mk));
+  sodium_memzero(ck, sizeof(ck));
+
   return 0;
 }
 
@@ -327,11 +334,11 @@ static Signal_Status drat_ratchet(DratState *state, const DratHeader *header) {
   // state.Nr = 0
   state->recv_n = 0;
   // state.DHr = header.dh
-  state->remote_key = header->key;
+  state->bob = header->key;
 
   // DH1 = DH(state.DHs, state.DHr)
   CryptoKxTx dh1;
-  if (drat_dh(&state->key.pk, &state->key.sk, &state->remote_key, &dh1))
+  if (drat_dh(&state->key.pk, &state->key.sk, &state->bob, &dh1))
     return 1;
   // state.RK, state.CKr = KDF_RK(state.RK, DH1)
   u8 rk[SIGNAL_DRAT_CHAIN_SZ];
@@ -343,19 +350,32 @@ static Signal_Status drat_ratchet(DratState *state, const DratHeader *header) {
   crypto_kx_keypair((u8 *)&state->key.pk, (u8 *)&state->key.sk);
   // DH2 = DH(state.DHs, state.DHr)
   CryptoKxTx dh2;
-  if (drat_dh(&state->key.pk, &state->key.sk, &state->remote_key, &dh2))
+  if (drat_dh(&state->key.pk, &state->key.sk, &state->bob, &dh2))
     return 1;
   // state.RK, state.CKs = KDF_RK(state.RK, DH2)
   if (drat_kdf_rk(state->root_key, &dh2, rk, state->chain_send))
     return 1;
   memcpy(state->root_key, rk, sizeof(rk));
 
+  sodium_memzero(&dh1, sizeof(dh1));
+  sodium_memzero(&dh2, sizeof(dh2));
+  sodium_memzero(rk, sizeof(rk));
+
   return 0;
 }
 
-Signal_Status drat_decrypt(DratState *state, const DratHeader *header,
+Signal_Status drat_decrypt(DratState *ostate, const DratHeader *header,
                            Bytes cipher, Bytes ad) {
-  bool key_match = memcmp((u8 *)&header->key, (u8 *)&state->remote_key,
+  // To prevent updating state before actually authenticating the message,
+  // we apply all updates to a copy of the session state, and only after
+  // authentication do we apply it to the actual state.
+  STATIC_CHECK(sizeof(DratState) < 512);  // to ensure we limit the size
+  DratState state_copy = *ostate;
+  DratState* state = &state_copy;
+
+  // Has the peer changed keys?
+  // memcmp OK: public key
+  bool key_match = memcmp((u8 *)&header->key, (u8 *)&state->bob,
                           sizeof(header->key)) == 0;
 
   // if header.dh != state.DHr
@@ -392,6 +412,13 @@ Signal_Status drat_decrypt(DratState *state, const DratHeader *header,
           cipher.buf, 0, cipher.buf, cipher.len, (u8 *)&header->tag, h_ad,
           sizeof(h_ad), nonce, (u8 *)&mk))
     return 1;
+
+  // Update the state only after successful authentication
+  *ostate = *state;
+
+  sodium_memzero(ck, sizeof(ck));
+  sodium_memzero(&mk, sizeof(mk));
+  sodium_memzero(state, sizeof(DratState));
 
   return 0;
 }
