@@ -952,7 +952,7 @@ typedef struct {
   const char **argv;
 } MainCoroCtx;
 
-void coro_exit(u8 code) { mco_push(mco_running(), &code, 1); }
+void coro_exit(int code) { mco_push(mco_running(), &code, 1); }
 
 void main_coro(mco_coro *co) {
   MainCoroCtx *ctx = (MainCoroCtx *)mco_get_user_data(co);
@@ -1031,7 +1031,7 @@ int main(int argc, const char **argv) {
     uv_run(loop, UV_RUN_DEFAULT);
   LOG("uv loop done");
 
-  u8 rc = 0;
+  int rc = 0;
   if (mco_get_storage_size(co) > 0)
     mco_pop(co, &rc, 1);
 
@@ -1043,6 +1043,9 @@ int main(int argc, const char **argv) {
   // uv_loop_close(loop);  SEGFAULTS! TODO
   free(loop);
 
-  LOG("goodbye (code=%d)", rc);
+  if (rc == 0)
+    LOG("goodbye");
+  else
+    LOG("ERROR code=%d", rc);
   return rc;
 }
