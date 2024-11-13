@@ -1,0 +1,4 @@
+Name: fastrange
+Version: f6e712b
+Description: Fair maps to intervals without division
+Cflags: -I${prefix}/include
