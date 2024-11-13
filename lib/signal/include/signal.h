@@ -13,10 +13,6 @@
 // https://signal.org/docs/specifications/doubleratchet/doubleratchet.pdf
 //
 // See copies of pdfs in doc/
-//
-// TODO:
-// * One-time prekeys, or alternative anti-replay mechanism
-// * Consider adding PQXDH: https://signal.org/docs/specifications/pqxdh/
 #pragma once
 
 #include "crypto.h"
@@ -72,6 +68,17 @@ Signal_Status x3dh_init_recv(const X3DHKeys *B, const X3DHHeader *header,
 // ============================================================================
 
 #define SIGNAL_DRAT_CHAIN_SZ 32
+#define SIGNAL_DRAT_MAX_SKIP 256
+
+typedef struct {
+  CryptoKxPK pk;
+  u64 number;
+} DratSkipKey;
+
+typedef struct {
+  DratSkipKey key;
+  CryptoKxTx mk;
+} DratSkipEntry;
 
 typedef struct {
   CryptoKxKeypair key;
@@ -81,16 +88,15 @@ typedef struct {
   u8 chain_recv[SIGNAL_DRAT_CHAIN_SZ];
   u64 send_n;
   u64 recv_n;
-  u64 chain_len;
-  CryptoKxTx header_key_send;
-  CryptoKxTx header_key_recv;
-  CryptoKxTx next_header_key_send;
-  CryptoKxTx next_header_key_recv;
+  u64 psend_n;
+  u8 skip_key[crypto_shorthash_KEYBYTES];
+  DratSkipEntry skips[SIGNAL_DRAT_MAX_SKIP * 2];
+  bool chain_recv_exists;
 } DratState;
 
 typedef struct __attribute__((packed)) {
   CryptoKxPK ratchet;
-  u64 chain_len;
+  u64 psend_n;
   u64 number;
   CryptoAuthTag tag;
 } DratHeader;

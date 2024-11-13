@@ -9,8 +9,13 @@ NIK todo
   https://github.com/WireGuard/wireguard-go/blob/master/replay/replay.go
 
 Signal todo
-* Double ratchet skipped messages
+* Double ratchet header encryption
+* Double ratchet memzero?
+* Skips: what if they never arrive? just takes up space...
+  what if the map becomes full?
 * we haven't authenticated when we ratchet? but we're updating state
+* One-time prekeys, or alternative anti-replay mechanism
+* Consider adding PQXDH: https://signal.org/docs/specifications/pqxdh/
 
 kv
 * libkv interface

@@ -700,6 +700,46 @@ int demo_drat(int argc, const char **argv) {
   CHECK0(drat_a_to_b(&A_state, &A_x, &B_state, &B_x, //
                      str_from_c("2")));
 
+  // Send some out of order messages
+  {
+    Str msg1 = str_from_c("msg1");
+    Str msg2 = str_from_c("msg2");
+
+    Bytes A_ad = {sizeof(A_x.ad), A_x.ad};
+
+    // A sends msg1 and msg2
+    DratHeader header1;
+    DratHeader header2;
+    usize cipher1_sz = drat_encrypt_len(msg1.len);
+    usize cipher2_sz = drat_encrypt_len(msg2.len);
+    Bytes cipher1 = {cipher1_sz, malloc(cipher1_sz)};
+    Bytes cipher2 = {cipher2_sz, malloc(cipher2_sz)};
+    if (drat_encrypt(&A_state, msg1, A_ad, &header1, &cipher1))
+      return 1;
+    if (drat_encrypt(&A_state, msg2, A_ad, &header2, &cipher2))
+      return 1;
+
+    // B receives msg2 then msg1
+    Bytes B_ad = {sizeof(B_x.ad), B_x.ad};
+    if (drat_decrypt(&B_state, &header2, cipher2, B_ad))
+      return 1;
+    if (drat_decrypt(&B_state, &header1, cipher1, B_ad))
+      return 1;
+
+    // decrypt(encrypt(msg)) == msg
+    CHECK(msg1.len == cipher1.len);
+    if (memcmp(cipher1.buf, msg1.buf, msg1.len))
+      return 1;
+    LOGS(cipher1);
+    CHECK(msg2.len == cipher2.len);
+    if (memcmp(cipher2.buf, msg2.buf, msg2.len))
+      return 1;
+    LOGS(cipher2);
+
+    free(cipher1.buf);
+    free(cipher2.buf);
+  }
+
   return 0;
 }
 
