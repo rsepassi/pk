@@ -51,4 +51,3 @@ typedef struct {
 
 // Initializes libsodium and does some checks
 u8 crypto_init(void);
-

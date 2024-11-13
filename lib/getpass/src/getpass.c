@@ -7,13 +7,15 @@
 
 #include <windows.h>
 
-ssize_t getpass(char* pw, size_t maxlen) {
+ssize_t getpass(char *pw, size_t maxlen) {
   HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
   DWORD mode = 0;
   ssize_t nread;
 
-  if (!GetConsoleMode(hStdin, &mode)) return -1;
-  if (!SetConsoleMode(hStdin, mode & (~ENABLE_ECHO_INPUT))) return -1;
+  if (!GetConsoleMode(hStdin, &mode))
+    return -1;
+  if (!SetConsoleMode(hStdin, mode & (~ENABLE_ECHO_INPUT)))
+    return -1;
 
   if (fgets(pw, maxlen, stdin) == NULL) {
     SetConsoleMode(hStdin, mode);
@@ -33,16 +35,18 @@ ssize_t getpass(char* pw, size_t maxlen) {
 
 #include <termios.h>
 
-ssize_t getpass(char* pw, size_t maxlen) {
+ssize_t getpass(char *pw, size_t maxlen) {
   struct termios old, new;
   ssize_t nread;
 
-  if (tcgetattr(0, &old) != 0) return -1;
+  if (tcgetattr(0, &old) != 0)
+    return -1;
 
   new = old;
   new.c_lflag &= ~ECHO;
   new.c_lflag |= ECHONL;
-  if (tcsetattr(0, TCSAFLUSH, &new) != 0) return -1;
+  if (tcsetattr(0, TCSAFLUSH, &new) != 0)
+    return -1;
 
   if (fgets(pw, maxlen, stdin) == NULL) {
     tcsetattr(0, TCSAFLUSH, &old);

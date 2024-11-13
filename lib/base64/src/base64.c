@@ -3,13 +3,14 @@
 #include "log.h"
 
 #define PAD '='
-u8 b64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+u8 b64_chars[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 u8 b64_dec[] = {
     99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, // 0 - 15
     99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, // 16 - 31
     99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 62, 99, 99, 99, 63, // 32 - 47
     52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 99, 99, 99, 64, 99, 99, // 48 - 63
-    99,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, // 64 - 79
+    99, 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, // 64 - 79
     15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 99, 99, 99, 99, 99, // 99 - 96
     99, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, // 87 - 111
     41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 99, 99, 99, 99, 99  // 112 - 127
@@ -27,7 +28,7 @@ usize base64_decoded_maxlen(usize in_len) {
   return in_len * 3 / 4;
 }
 
-Base64_Status base64_encode(Bytes in, Bytes* out) {
+Base64_Status base64_encode(Bytes in, Bytes *out) {
   if (out->len != base64_encoded_maxlen(in.len))
     return 1;
   if (in.len == 0)
@@ -68,7 +69,7 @@ Base64_Status base64_encode(Bytes in, Bytes* out) {
   return 0;
 }
 
-Base64_Status base64_decode(Bytes in, Bytes* out) {
+Base64_Status base64_decode(Bytes in, Bytes *out) {
   if (in.len % 4 != 0)
     return 1;
   if (out->len != base64_decoded_maxlen(in.len))
@@ -78,7 +79,8 @@ Base64_Status base64_decode(Bytes in, Bytes* out) {
 
   usize nchunks = in.len / 4;
   bool padded = in.buf[in.len - 1] == PAD;
-  if (padded) nchunks--;
+  if (padded)
+    nchunks--;
 
   u64 j = 0;
   for (usize i = 0; i < nchunks; ++i) {
