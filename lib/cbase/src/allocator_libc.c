@@ -53,4 +53,4 @@ static int alloc_libc(void *ctx, Bytes *buf, usize sz, usize align) {
   return 0;
 }
 
-Allocator allocator_libc(void) { return (Allocator){0, alloc_libc}; }
+Allocator allocator_libc(void) { return (Allocator){0, alloc_libc, 0}; }

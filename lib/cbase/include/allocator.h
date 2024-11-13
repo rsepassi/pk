@@ -6,14 +6,16 @@ typedef int AllocStatus;
 #define Alloc_OK 0
 
 typedef AllocStatus (*AllocFn)(void *ctx, Bytes *buf, usize sz, usize align);
+typedef void (*AllocDeinitFn)(void *ctx);
 
 typedef struct {
   void *ctx;
   AllocFn alloc;
+  AllocDeinitFn deinit;
 } Allocator;
 
 #define Alloc_alloc(a, b, T, n)                                                \
-  allocator_alloc(a.ctx, b, sizeof(T) * n, alignof(T))
+  allocator_alloc(a, b, sizeof(T) * n, _Alignof(T))
 
 static inline AllocStatus allocator_alloc(Allocator a, Bytes *b, usize sz,
                                           usize align) {
@@ -22,6 +24,11 @@ static inline AllocStatus allocator_alloc(Allocator a, Bytes *b, usize sz,
 
 static inline AllocStatus allocator_free(Allocator a, Bytes *b) {
   return a.alloc(a.ctx, b, 0, 0);
+}
+
+static inline void allocator_deinit(Allocator a) {
+  if (a.deinit)
+    a.deinit(a.ctx);
 }
 
 Allocator allocator_libc(void);

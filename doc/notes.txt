@@ -5,6 +5,11 @@ NIK todo
   e.g. if (cxn->current.send_n >= NIK_LIMIT_REKEY_AFTER_MESSAGES)
 * Lifetime for enqueue payload
 * If both A and B initiate a handshake simultaneously what happens?
+* Implement HMAC-based KDF functions like in wg-go noise-helpers.go?
+* Review wg-go replay + flood prevention
+  On init message check (ConsumeMessageInititation)
+  replay := !timestamp.after(handshake.last_timestamp)
+  flood := time.since(handshake.last_initiation_consumption) <= HandshakeInitiationRate (20ms)
 
 Signal todo
 * Verify counter nonce usage won't repeat (separate tx and rx keys?)
@@ -27,62 +32,3 @@ key usability
 uvco
 * uv_close_handle expects the handle to outlive the call, so handle can't be
   stack allocated...
-
-cbase
-* implement a mimalloc allocator
-* implement a mimalloc arena allocator
-* implement a mimalloc fixed-size arena allocator
-
----
-
-Wireguard go notes
-
-peer.go
-
-timers
-retransmitHandshake
-sendKeepalive
-newHandshake
-zeroKeyMaterial
-persistentKeepalive
-handshakeAttempts uint32
-needAnotherKeepalive bool
-sentLastMinuteHandhsake bool
-persistentKeepaliveInterval uint32
-
-
-MessageInitiation
-MessageResponse
-  timersAnyAuthenticatedPacketTraversal
-  timersAnyAuthenticatedPacketReceived
-MessageResponse
-  timersSessionDerived
-  timersHandshakeComplete
-  sendKeepalive
-timersDataSent
-timersAnyAuthenticatedPacketSent
-timersHandshakeInitiated
-
-Keepalive timeout gets bumped on timersDataReceived
-
-map[PK]Peer
-
-
-MaxSegmentSize = (1 << 16) - 1  // UDP datagram limit
-// Windows: 2048 - 32
-// iOS: 1700
-
-MaxTimerHandshakes = RekeyAttemptTime / RekeyTimeout
-HandshakeInitiationRate: 20ms
-
-Min/max message sizes
-
-Implement HMAC-based KDF functions like in noise-helpers.go?
-
-Replay + flood prevention
-On init message check (ConsumeMessageInititation)
-replay := !timestamp.after(handshake.last_timestamp)
-flood := time.since(handshake.last_initiation_consumption) <= HandshakeInitiationRate (20ms)
-
----
-

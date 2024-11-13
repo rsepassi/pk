@@ -22,6 +22,7 @@ DEPS := \
 		lib/signal \
 		lib/crypto \
 		lib/base64 \
+		lib/allocatormi \
 		vendor/sodium \
 		vendor/tai \
 		vendor/uv \

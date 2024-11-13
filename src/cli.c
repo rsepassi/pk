@@ -1,7 +1,5 @@
 // src
 #include "crypto.h"
-#include "nik.h"
-#include "nik_cxn.h"
 
 // vendor deps
 #include "argparse.h"
@@ -15,12 +13,15 @@
 #include "vterm.h"
 
 // lib
+#include "allocatormi.h"
 #include "base64.h"
 #include "getpass.h"
 #include "log.h"
 #include "stdtypes.h"
 #include "taia.h"
 #include "uvco.h"
+#include "nik.h"
+#include "nik_cxn.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 #define MAX_PW_LEN 2048
@@ -893,21 +894,36 @@ int demo_holepunch(int argc, const char **argv) {
   return 0;
 }
 
+void do_some_allocs(Allocator a) {
+  Bytes b1 = {0};
+  Alloc_alloc(a, &b1, u8, 16);
+  CHECK(b1.len == 16);
+
+  Bytes b2 = {0};
+  Alloc_alloc(a, &b2, usize, 16);
+  CHECK(b2.len == (sizeof(usize) * 16));
+
+  allocator_free(a, &b1);
+  allocator_free(a, &b2);
+
+  allocator_deinit(a);
+}
+
 int demo_mimalloc(int argc, const char **argv) {
   // MIMALLOC_SHOW_STATS=1
   mi_option_enable(mi_option_show_stats);
 
-  {
-    void *p = mi_malloc(1024);
-    mi_free(p);
-  }
+  Allocator a1 = allocatormi_allocator();
+  do_some_allocs(a1);
 
-  {
-    mi_heap_t *h = mi_heap_new();
-    void *p = mi_heap_malloc(h, 16);
-    (void)p;
-    mi_heap_destroy(h);
-  }
+  Allocator a2 = allocatormi_heap();
+  do_some_allocs(a2);
+
+  Bytes x = allocatormi_block_alloc(1);
+  Allocator a3 = allocatormi_arena(x, true);
+  do_some_allocs(a3);
+  allocatormi_block_free(x);
+
   return 0;
 }
 
