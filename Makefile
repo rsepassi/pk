@@ -32,7 +32,6 @@ DEPS := \
 		vendor/plum \
 		vendor/vterm \
 		vendor/argparse
-include $(ROOTDIR)/scripts/deps.mk
 
 BUILD_DEPS = $(HDRS) Makefile | deps build_dir
 
@@ -52,5 +51,6 @@ clean-all: clean clean-deps clean-test
 build_dir:
 	mkdir -p build
 
+include $(ROOTDIR)/scripts/deps.mk
 include $(ROOTDIR)/scripts/test.mk
 include $(ROOTDIR)/scripts/clean.mk

@@ -2,22 +2,14 @@
 TEST_SRCS := $(wildcard test/*.c)
 TESTS := $(TEST_SRCS:.c=.ok)
 
-TEST_CFLAGS := `need-cflags vendor/unity`
-TEST_LDFLAGS := `need-libs vendor/unity`
+TEST_CFLAGS := `need --cflags vendor/unity`
+TEST_LDFLAGS := `need --libs vendor/unity`
 
-CLEAN_ALL_EXTRAS += unity-clean
+CLEAN_ALL_EXTRAS += unity-clean clean-test
 
 .PHONY: test
 test:
 	$(MAKE) $(TESTS)
-
-.PHONY: vendor/unity
-vendor/unity:
-	$(MAKE) -C $(ROOTDIR)/$@
-
-.PHONY: unity-clean
-unity-clean:
-	$(MAKE) -C vendor/unity clean
 
 # compile a test executable
 test/%: test/%.c vendor/unity
@@ -27,6 +19,12 @@ test/%: test/%.c vendor/unity
 test/%.ok: test/%
 	./$< && touch $@
 
-.PHONY: clean-test
+.PHONY: vendor/unity unity-clean clean-test
+vendor/unity:
+	$(MAKE) -C $(ROOTDIR)/$@
+
+unity-clean:
+	$(MAKE) -C vendor/unity clean
+
 clean-test:
 	rm -f test/*.ok

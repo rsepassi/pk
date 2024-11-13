@@ -1,5 +1,8 @@
 #!/usr/bin/env sh
 
+flag=$1
+shift
+
 while [ -n "$1" ]
 do
 
@@ -11,7 +14,7 @@ then
   dir=$ROOTDIR/$dir
 fi
 
-PKG_CONFIG_PATH=$dir pkg-config --define-variable=prefix=$dir --libs $lib
+PKG_CONFIG_PATH=$dir pkg-config --define-variable=prefix=$dir $flag $lib
 
 shift
 done
