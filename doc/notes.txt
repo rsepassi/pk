@@ -10,9 +10,9 @@ Signal todo
 * Verify counter nonce usage won't repeat (separate tx and rx keys?)
 * We haven't authenticated when we update state. Header encryption would solve.
 * See where we may want/need to memzero
-* Skips: implement some kind of cleanup/expiration
 * One-time prekeys, or alternative anti-replay mechanism, maybe borrowing from
   Wireguard
+* Out-of-order message support
 * Consider adding PQXDH: https://signal.org/docs/specifications/pqxdh/
 * Sesame session management
 
