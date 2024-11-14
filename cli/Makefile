@@ -4,6 +4,7 @@ OBJS := $(SRCS:.c=.$(O))
 DEPS := \
 		lib/allocatormi \
 		lib/base64 \
+		lib/bip39 \
 		lib/cbase \
 		lib/crypto \
 		lib/getpass \

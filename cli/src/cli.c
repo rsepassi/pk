@@ -13,6 +13,7 @@
 // lib
 #include "allocatormi.h"
 #include "base64.h"
+#include "bip39.h"
 #include "crypto.h"
 #include "getpass.h"
 #include "log.h"
@@ -584,6 +585,34 @@ int demo_kv(int argc, const char **argv) {
     CHECK0(cryptkv_put(kv, key, val));
   }
   cryptkv_close(kv);
+  return 0;
+}
+
+int demo_bip39(int argc, const char **argv) {
+  // Generate 32 bytes of entropy
+  u8 key_buf[32];
+  randombytes_buf(key_buf, sizeof(key_buf));
+  Bytes key = {sizeof(key_buf), key_buf};
+  LOGB(key);
+
+  // Convert it to a word list
+  u16 word_idxs[bip39_MNEMONIC_LEN(sizeof(key_buf))];
+  CHECK0(bip39_mnemonic_idxs(key, word_idxs));
+  for (usize i = 0; i < ARRAY_LEN(word_idxs); ++i) {
+    LOG("%02d. %04d %s", (int)(i + 1), word_idxs[i], bip39_words[word_idxs[i]]);
+  }
+
+  // Verify that it decodes properly
+  u8 dec_buf[sizeof(key_buf)];
+  Bytes dec = {sizeof(key_buf), dec_buf};
+  CHECK0(bip39_mnemonic_bytes(word_idxs, ARRAY_LEN(word_idxs), &dec));
+  CHECK0(memcmp(key_buf, dec_buf, sizeof(key_buf)));
+
+  // From mnemonic to seed:
+  // Password Hash: Argon2id (Bitcoin uses PBKDF2)
+  // Password = joined mnemonic words
+  // Salt = "mnemonic" + passphrase
+
   return 0;
 }
 
@@ -1211,6 +1240,7 @@ static const char *const usages[] = {
     "\n      - demo-pwhash"
     "\n      - demo-vterm"
     "\n      - demo-x3dh"
+    "\n      - demo-bip39"
     //
     ,
     NULL,
@@ -1236,6 +1266,7 @@ static struct cmd_struct commands[] = {
     {"demo-pwhash", demo_pwhash},       //
     {"demo-vterm", demo_vterm},         //
     {"demo-x3dh", demo_x3dh},           //
+    {"demo-bip39", demo_bip39},         //
 };
 
 typedef struct {
@@ -1264,7 +1295,7 @@ void main_coro(mco_coro *co) {
   }
 
   struct cmd_struct *cmd = NULL;
-  for (int i = 0; i < ARRAY_SIZE(commands); i++) {
+  for (int i = 0; i < ARRAY_LEN(commands); i++) {
     if (!strcmp(commands[i].cmd, argv[0])) {
       cmd = &commands[i];
       break;

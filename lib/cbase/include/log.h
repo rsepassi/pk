@@ -25,7 +25,7 @@
 #define LOGB(b)                                                                \
   do {                                                                         \
     LOG_PREFIX_(I, stderr);                                                    \
-    fprinthex(stderr, #b, b.buf, b.len);                                       \
+    fprinthex(stderr, #b, (b).buf, (b).len);                                   \
     fprintf(stderr, "\n");                                                     \
   } while (0)
 
