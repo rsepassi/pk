@@ -29,7 +29,7 @@ usize base64_decoded_maxlen(usize in_len) {
 }
 
 Base64_Status base64_encode(Bytes in, Bytes *out) {
-  if (out->len != base64_encoded_maxlen(in.len))
+  if (out->len < base64_encoded_maxlen(in.len))
     return 1;
   if (in.len == 0)
     return 0;
@@ -72,7 +72,7 @@ Base64_Status base64_encode(Bytes in, Bytes *out) {
 Base64_Status base64_decode(Bytes in, Bytes *out) {
   if (in.len % 4 != 0)
     return 1;
-  if (out->len != base64_decoded_maxlen(in.len))
+  if (out->len < base64_decoded_maxlen(in.len))
     return 1;
   if (in.len == 0)
     return 0;

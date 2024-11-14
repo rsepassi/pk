@@ -30,5 +30,4 @@ key usability
 * read+use ssh-keygen/openssl ed25519 keys
 
 uvco
-* uv_close_handle expects the handle to outlive the call, so handle can't be
-  stack allocated...
+* consider storing handles in the coroutine frame? instead of malloc
