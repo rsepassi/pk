@@ -2,8 +2,10 @@
 
 ifndef OPT
 export OPT := -O2
+export ZIG_OPT := ReleaseFast
 else
 export OPT
+export ZIG_OPT
 endif
 
 ifndef TARGET

@@ -11,47 +11,41 @@ export CFLAGS += -std=c99 -nostdinc -nostdinc++ \
 	-Wall -Werror \
 	$(OPT) -target $(TARGET)
 
-HDRS := $(wildcard src/*.h)
-SRCS := $(wildcard src/*.c)
-OBJS := $(SRCS:.c=.$(O))
 DEPS := \
-		lib/getpass \
+		lib/allocatormi \
+		lib/base64 \
 		lib/cbase \
-		lib/uvco \
+		lib/crypto \
+		lib/getpass \
 		lib/nik \
 		lib/signal \
-		lib/crypto \
-		lib/base64 \
-		lib/allocatormi \
+		lib/uvco \
+		vendor/argparse \
+		vendor/base58 \
+		vendor/fastrange \
+		vendor/lmdb \
+		vendor/mimalloc \
+		vendor/minicoro \
+		vendor/plum \
 		vendor/sodium \
 		vendor/tai \
 		vendor/uv \
-		vendor/minicoro \
-		vendor/lmdb \
-		vendor/base58 \
-		vendor/mimalloc \
-		vendor/plum \
-		vendor/vterm \
-		vendor/argparse
-
-BUILD_DEPS = $(HDRS) Makefile | deps build_dir
+		vendor/vterm
 
 .PHONY: cli
-cli: build/cli$(EXE)
-
-build/cli$(EXE): $(OBJS) $(SRCS) $(HDRS) $(BUILD_DEPS)
-	$(CC) -o $@ $(CFLAGS) $(OBJS) $(LDFLAGS) $(DEPS_LDFLAGS) -lc
-
-%.$(O): %.c $(BUILD_DEPS)
-	$(CC) -c $(CFLAGS) -o $@ $(DEPS_CFLAGS) $<
+cli:
+	$(MAKE) -C cli
 
 .PHONY: clean-all
 clean-all: clean clean-deps clean-test
+	$(MAKE) -C cli clean
 
-.PHONY: build_dir
-build_dir:
-	mkdir -p build
+.PHONY: fmt
+fmt:
+	clang-format -i `find lib -type f -name '*.c'`
+	clang-format -i `find lib -type f -name '*.h'`
+	clang-format -i `find cli -type f -name '*.c'`
+	clang-format -i `find cli -type f -name '*.h'`
 
 include $(ROOTDIR)/scripts/deps.mk
 include $(ROOTDIR)/scripts/test.mk
-include $(ROOTDIR)/scripts/clean.mk
