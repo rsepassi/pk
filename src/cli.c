@@ -365,190 +365,217 @@ int demo_nik(int argc, const char **argv) {
   return 0;
 }
 
-int demo_kv(int argc, const char **argv) {
-  // get or put
-  enum { KvGet, KvPut } cmd;
-  MDB_val user_key;
-  MDB_val user_val;
-  {
-    CHECK(argc >= 4, "usage: demo-kv kvfolder {get,put} key [value]");
-    user_key.mv_data = (void *)argv[3];
-    user_key.mv_size = strlen(user_key.mv_data);
-    if (!strcmp(argv[2], "get")) {
-      cmd = KvGet;
-      CHECK(argc == 4);
-    } else if (!strcmp(argv[2], "put")) {
-      cmd = KvPut;
-      CHECK(argc == 5);
-      user_val.mv_data = (void *)argv[4];
-      user_val.mv_size = strlen(user_val.mv_data);
-    } else {
-      CHECK(false, "must specify get or put");
-    }
-    (void)cmd;
-  }
-
-  // Open/create KV
+typedef struct {
   MDB_env *kv;
   MDB_dbi db;
+  CryptoBoxKey key;
+  Allocator allocator;
+} CryptKv;
+
+int cryptkv_keycrypt(CryptKv* kv, Bytes key, Bytes* out) {
+  // Encrypt the key with a nonce derived from the key
+  int rc = 1;
+  u64 ekey_len = key.len + crypto_secretbox_MACBYTES;
+  if (Alloc_alloc(kv->allocator, out, u8, ekey_len))
+    goto end;
+  u8 nonce[crypto_secretbox_NONCEBYTES];
+  STATIC_CHECK(crypto_kdf_hkdf_sha256_KEYBYTES == sizeof(kv->key));
+  if (crypto_kdf_hkdf_sha256_expand(nonce, sizeof(nonce), (const char*)key.buf, key.len, (u8*)&kv->key))
+    goto err;
+  STATIC_CHECK(crypto_secretbox_KEYBYTES == sizeof(kv->key));
+  if (crypto_secretbox_easy(out->buf, key.buf, key.len, nonce, (u8*)&kv->key))
+    goto err;
+
+  rc = 0;
+  goto end;
+
+err:
+  allocator_free(kv->allocator, *out);
+end:
+  return rc;
+}
+
+int cryptkv_put(CryptKv* kv, Bytes key, Bytes val) {
+  int rc = 1;
+
+  Bytes ekey = {0};
+  if (cryptkv_keycrypt(kv, key, &ekey))
+    goto end;
+
+  MDB_txn* txn;
+  if (mdb_txn_begin(kv->kv, 0, 0, &txn))
+    goto end;
+
+  u64 elen = val.len + crypto_secretbox_NONCEBYTES +
+    crypto_secretbox_MACBYTES;
+  Bytes eval = {0};
+  if (Alloc_alloc(kv->allocator, &eval, u8, elen))
+    goto end;
+  randombytes_buf(eval.buf, crypto_secretbox_NONCEBYTES);
+
+  if (crypto_secretbox_easy(eval.buf + crypto_secretbox_NONCEBYTES,
+                               val.buf, val.len, eval.buf,
+                               (u8*)&kv->key))
+    goto end2;
+
+  MDB_val mk = {ekey.len, ekey.buf};
+  MDB_val mv = {eval.len, eval.buf};
+
+  if (mdb_txn_begin(kv->kv, 0, 0, &txn))
+    goto end2;
+  if (mdb_put(txn, kv->db, &mk, &mv, 0))
+    goto end2;
+  if (mdb_txn_commit(txn))
+    goto end2;
+
+  rc = 0;
+
+end2:
+  allocator_free(kv->allocator, eval);
+end:
+  allocator_free(kv->allocator, ekey);
+  return rc;
+}
+
+int cryptkv_get(CryptKv* kv, Bytes key, Bytes* val) {
+  STATIC_CHECK(MDB_NOTFOUND < 0);
+
+  int rc = 1;
+
+  Bytes ekey = {0};
+  if (cryptkv_keycrypt(kv, key, &ekey))
+    goto end;
+
+  MDB_txn* txn;
+  if (mdb_txn_begin(kv->kv, 0, MDB_RDONLY, &txn))
+    goto end;
+
+  MDB_val mk = {ekey.len, ekey.buf};
+  MDB_val mv;
+  rc = mdb_get(txn, kv->db, &mk, &mv);
+  mdb_txn_commit(txn);
+  if (rc)
+    goto end;
+  rc = 1;
+
+  u64 decrypted_len = mv.mv_size - crypto_secretbox_NONCEBYTES -
+                      crypto_secretbox_MACBYTES;
+  Alloc_alloc(kv->allocator, val, u8, decrypted_len);
+
+  if (crypto_secretbox_open_easy(
+             val->buf, mv.mv_data + crypto_secretbox_NONCEBYTES,
+             mv.mv_size - crypto_secretbox_NONCEBYTES,
+             mv.mv_data, (u8*)&kv->key))
+    goto end;
+
+  rc = 0;
+
+end:
+  allocator_free(kv->allocator, ekey);
+  return rc;
+}
+
+int cryptkv_open(CryptKv** kv_ptr, const char* kv_path, CryptoBoxKey* key, Allocator allocator) {
+  *kv_ptr = sodium_malloc(sizeof(CryptKv));
+  CryptKv* kv = *kv_ptr;
+  *kv = (CryptKv){0};
+
+  kv->key = *key;
+  kv->allocator = allocator;
+  sodium_memzero(key, sizeof(CryptoBoxKey));
+
+  uv_fs_t req;
+  if (uvco_fs_stat(loop, &req, kv_path)) {
+    fprintf(stderr, "error: kv path does not exist. Specify a path or pass --create. path=%s\n", kv_path);
+    goto err;
+  }
+
+  if (!S_ISDIR(req.statbuf.st_mode)) {
+    fprintf(stderr, "kv path must be a directory: %s",
+        kv_path);
+    goto err;
+  }
+  uv_fs_req_cleanup(&req);
+
+  mode_t kv_mode = S_IRUSR | S_IWUSR | S_IRGRP; // rw-r-----
+  if (mdb_env_create(&kv->kv))
+    goto err;
+  if (mdb_env_open(kv->kv, kv_path, MDB_NOLOCK, kv_mode))
+    goto err;
+
   MDB_txn *txn;
-  MDB_txn *rtxn;
-  {
-    const char *kv_path = argv[1];
-    LOG("kv=%s", kv_path);
+  if (mdb_txn_begin(kv->kv, 0, 0, &txn))
+    goto err;
+  if (mdb_dbi_open(txn, 0, 0, &kv->db))
+    goto err;
+  if (mdb_txn_commit(txn))
+    goto err;
 
-    // Check that directory exists
-    uv_fs_t req;
-    CHECK0(uvco_fs_stat(loop, &req, kv_path), "kv path must be a directory: %s",
-           kv_path);
-    CHECK(S_ISDIR(req.statbuf.st_mode), "kv path must be a directory: %s",
-          kv_path);
-    uv_fs_req_cleanup(&req);
+  return 0;
 
-    mode_t kv_mode = S_IRUSR | S_IWUSR | S_IRGRP; // rw-r-----
-    CHECK0(mdb_env_create(&kv));
-    CHECK0(mdb_env_open(kv, kv_path, MDB_NOLOCK, kv_mode));
-    CHECK0(mdb_txn_begin(kv, 0, 0, &txn));
-    CHECK0(mdb_dbi_open(txn, 0, MDB_CREATE, &db));
-    CHECK0(mdb_txn_commit(txn));
+err:
+  sodium_free(*kv_ptr);
+  return 1;
+}
+
+void cryptkv_close(CryptKv* kv) {
+  mdb_env_close(kv->kv);
+  sodium_memzero(kv, sizeof(CryptKv));
+  sodium_free(kv);
+}
+
+int demo_kv(int argc, const char **argv) {
+  struct argparse argparse;
+  struct argparse_option options[] = {
+      OPT_HELP(),
+      OPT_END(),
+  };
+  const char *const usages[] = {
+    "kv [options] get <db> <key>",
+    "kv [options] put <db> <key> <value>",
+    NULL
+  };
+  argparse_init(&argparse, options, usages, ARGPARSE_STOP_AT_NON_OPTION);
+  argc = argparse_parse(&argparse, argc, argv);
+  if (argc < 3) {
+    argparse_usage(&argparse);
+    return 1;
   }
 
-  // Ask for password
-  char *pw = malloc(MAX_PW_LEN);
-  sodium_mlock(pw, MAX_PW_LEN);
-  ssize_t pw_len;
-  {
-    fprintf(stderr, "pw > ");
-    if (1) {
-      pw_len = getpass(pw, MAX_PW_LEN);
-      CHECK(pw_len >= 0);
-    } else {
-      pw = "asdfasdf";
-      pw_len = strlen(pw);
-    }
-  }
-
-  // If it's a fresh db:
-  // * Store the password hash
-  // * Generate a salt
-  // Else:
-  // * Validate the password
-  // * Lookup the salt
-  u8 salt[crypto_pwhash_SALTBYTES];
-  {
-    CHECK0(mdb_txn_begin(kv, 0, MDB_RDONLY, &rtxn));
-    char *salt_str = "__salthash";
-    MDB_val salt_key = {strlen(salt_str), salt_str};
-    MDB_val salt_val;
-    int rc = mdb_get(rtxn, db, &salt_key, &salt_val);
-    mdb_txn_reset(rtxn);
-    if (rc == MDB_NOTFOUND) {
-      LOG("fresh kv store");
-      u8 pwhash_and_salt[crypto_pwhash_SALTBYTES + crypto_pwhash_STRBYTES];
-
-      // Create a random salt
-      randombytes_buf(pwhash_and_salt, crypto_pwhash_SALTBYTES);
-      memcpy(salt, pwhash_and_salt, crypto_pwhash_SALTBYTES);
-
-      // Hash the password
-      u64 opslimit = crypto_pwhash_OPSLIMIT_INTERACTIVE;
-      u64 memlimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
-      CHECK0(
-          crypto_pwhash_str((char *)(pwhash_and_salt + crypto_pwhash_SALTBYTES),
-                            pw, pw_len, opslimit, memlimit));
-
-      // Insert in kv
-      salt_val.mv_size = crypto_pwhash_SALTBYTES + crypto_pwhash_STRBYTES;
-      salt_val.mv_data = pwhash_and_salt;
-      CHECK0(mdb_txn_begin(kv, 0, 0, &txn));
-      CHECK0(mdb_put(txn, db, &salt_key, &salt_val, 0));
-      CHECK0(mdb_txn_commit(txn));
-    } else {
-      CHECK0(rc, "failed to read database");
-      CHECK(salt_val.mv_size ==
-            crypto_pwhash_SALTBYTES + crypto_pwhash_STRBYTES);
-
-      // Copy out salt
-      memcpy(salt, salt_val.mv_data, crypto_pwhash_SALTBYTES);
-
-      // Verify password hash
-      CHECK0(
-          crypto_pwhash_str_verify(
-              (char *)(salt_val.mv_data + crypto_pwhash_SALTBYTES), pw, pw_len),
-          "wrong password");
-    }
-  }
-
-  // Derive the key
-  u8 key[crypto_secretbox_KEYBYTES];
-  {
-    u64 opslimit = crypto_pwhash_OPSLIMIT_INTERACTIVE;
-    u64 memlimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
-    CHECK0(crypto_pwhash(key, sizeof(key), pw, pw_len, salt, opslimit, memlimit,
-                         crypto_pwhash_ALG_ARGON2ID13));
-  }
-
-  // Password no longer needed
-  sodium_munlock(pw, MAX_PW_LEN);
-  free(pw);
-
-  // Encrypt the key with a nonce derived from the key and db salt
-  u64 ekey_len = user_key.mv_size + crypto_secretbox_MACBYTES;
-  u8 *ekey = malloc(ekey_len);
-  {
-    u8 key_nonce[crypto_secretbox_NONCEBYTES];
-    crypto_generichash_blake2b_state state;
-    crypto_generichash_blake2b_init(&state, 0, 0, sizeof(key_nonce));
-    crypto_generichash_blake2b_update(&state, user_key.mv_data,
-                                      user_key.mv_size);
-    crypto_generichash_blake2b_update(&state, salt, sizeof(salt));
-    crypto_generichash_blake2b_final(&state, key_nonce, sizeof(key_nonce));
-    CHECK0(crypto_secretbox_easy(ekey, user_key.mv_data, user_key.mv_size,
-                                 key_nonce, key));
-    user_key.mv_data = ekey;
-    user_key.mv_size = ekey_len;
-  }
-
-  if (cmd == KvGet) {
-    CHECK0(mdb_txn_begin(kv, 0, MDB_RDONLY, &rtxn));
-    int rc = mdb_get(rtxn, db, &user_key, &user_val);
-    if (rc == MDB_NOTFOUND) {
-      LOG("key not found");
-      return 1;
-    } else {
-      CHECK0(rc, "failed to read database");
-      u64 decrypted_len = user_val.mv_size - crypto_secretbox_NONCEBYTES -
-                          crypto_secretbox_MACBYTES;
-      u8 *decrypted = malloc(decrypted_len);
-      CHECK0(crypto_secretbox_open_easy(
-                 decrypted, user_val.mv_data + crypto_secretbox_NONCEBYTES,
-                 user_val.mv_size - crypto_secretbox_NONCEBYTES,
-                 user_val.mv_data, key),
-             "failed to decrypt");
-      printf("%.*s\n", (int)decrypted_len, decrypted);
-      free(decrypted);
-    }
+  // get or put
+  enum { KvNone, KvGet, KvPut } cmd = strcmp(argv[1], "get") == 0 ? KvGet :
+      strcmp(argv[1], "put") == 0 ? KvPut : KvNone;
+  if (cmd == KvNone) {
+    fprintf(stderr, "error: must specify get or put\n");
+    return 1;
   } else if (cmd == KvPut) {
-    u64 encrypted_len = user_val.mv_size + crypto_secretbox_NONCEBYTES +
-                        crypto_secretbox_MACBYTES;
-    u8 *encrypted = malloc(encrypted_len);
-    randombytes_buf(encrypted, crypto_secretbox_NONCEBYTES);
-    CHECK0(crypto_secretbox_easy(encrypted + crypto_secretbox_NONCEBYTES,
-                                 user_val.mv_data, user_val.mv_size, encrypted,
-                                 key));
-    user_val.mv_data = encrypted;
-    user_val.mv_size = encrypted_len;
+    if (argc != 4) {
+      fprintf(stderr, "error: put expects a key and a value");
+      return 1;
+    }
+  }
 
-    CHECK0(mdb_txn_begin(kv, 0, 0, &txn));
-    CHECK0(mdb_put(txn, db, &user_key, &user_val, 0));
-    CHECK0(mdb_txn_commit(txn));
+  Bytes key = str_from_c(argv[2]);
+  Bytes val = cmd == KvPut ? str_from_c(argv[3]) : BytesZero;
 
-    free(encrypted);
-  } else
-    CHECK(false);
+  Allocator allocator = allocator_libc();
+  CryptoBoxKey kvkey = {{1, 2, 3, 4}};
 
-  free(ekey);
-  mdb_env_close(kv);
+  CryptKv* kv;
+  CHECK0(cryptkv_open(&kv, "/tmp/crypt", &kvkey, allocator));
+  if (cmd == KvGet) {
+    int rc = cryptkv_get(kv, key, &val);
+    if (rc == MDB_NOTFOUND) {
+      fprintf(stderr, "key not found\n");
+      return 1;
+    }
+    CHECK0(rc);
+    printf("%.*s\n", (int)val.len, val.buf);
+  } else {
+    CHECK(cmd == KvPut);
+    CHECK0(cryptkv_put(kv, key, val));
+  }
+  cryptkv_close(kv);
   return 0;
 }
 
@@ -899,8 +926,8 @@ void do_some_allocs(Allocator a) {
   Alloc_alloc(a, &b2, usize, 16);
   CHECK(b2.len == (sizeof(usize) * 16));
 
-  allocator_free(a, &b1);
-  allocator_free(a, &b2);
+  allocator_free(a, b1);
+  allocator_free(a, b2);
 
   allocator_deinit(a);
 }
@@ -934,6 +961,34 @@ int demo_mimalloc(int argc, const char **argv) {
   return 0;
 }
 
+int demo_pwhash(int argc, const char **argv) {
+  char *pw = sodium_malloc(MAX_PW_LEN);
+  fprintf(stderr, "pw > ");
+  ssize_t pw_len = getpass(pw, MAX_PW_LEN);
+  CHECK(pw_len >= 0);
+
+  // Hash the password
+  u8 pw_hash[crypto_pwhash_STRBYTES];
+  u64 opslimit = crypto_pwhash_OPSLIMIT_INTERACTIVE;
+  u64 memlimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
+  CHECK0(crypto_pwhash_str((char*)pw_hash, pw, pw_len, opslimit, memlimit));
+  LOGS(str_from_c((char*)pw_hash));
+  CHECK0(crypto_pwhash_str_verify((char*)pw_hash, pw, pw_len));
+
+  // Derive a key
+  u8 salt[crypto_pwhash_SALTBYTES] = {0, 1, 2, 3};
+  LOGB(((Bytes){sizeof(salt), salt}));
+  u8 key[crypto_secretbox_KEYBYTES];
+  {
+    u64 opslimit = crypto_pwhash_OPSLIMIT_INTERACTIVE;
+    u64 memlimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
+    CHECK0(crypto_pwhash(key, sizeof(key), pw, pw_len, salt, opslimit, memlimit,
+                         crypto_pwhash_ALG_ARGON2ID13));
+  }
+  LOGB(((Bytes){sizeof(key), key}));
+  return 0;
+}
+
 static const char *const usages[] = {
     "pk [options] [cmd] [args]\n\n    Commands:"
     "\n      - demo-vterm"
@@ -945,6 +1000,7 @@ static const char *const usages[] = {
     "\n      - demo-nikcxn"
     "\n      - demo-b58"
     "\n      - demo-mimalloc"
+    "\n      - demo-pwhash"
     "\n      - demo-multicast"
     "\n      - demo-holepunch" //
     ,
@@ -963,6 +1019,7 @@ static struct cmd_struct commands[] = {
     {"demo-base64", demo_base64},       //
     {"demo-kv", demo_kv},               //
     {"demo-nik", demo_nik},             //
+    {"demo-pwhash", demo_pwhash},             //
     {"demo-nikcxn", demo_nikcxn},       //
     {"demo-b58", demo_b58},             //
     {"demo-mimalloc", demo_mimalloc},   //
@@ -1011,21 +1068,14 @@ void main_coro(mco_coro *co) {
   return coro_exit(cmd->fn(argc, argv));
 }
 
-#define MAIN_STACK_SIZE 1 << 21
+#define MAIN_STACK_SIZE 1 << 21  // 2MiB
+u8 main_stack[MAIN_STACK_SIZE];
 
 void *mco_alloc(size_t size, void *udata) {
-  MainCoroCtx *ctx = (MainCoroCtx *)udata;
-  (void)ctx;
-  (void)size;
-  return calloc(1, size);
+  return CBASE_ALIGN(main_stack, 1 << 12);
 }
 
-void mco_dealloc(void *ptr, size_t size, void *udata) {
-  MainCoroCtx *ctx = (MainCoroCtx *)udata;
-  (void)ctx;
-  (void)size;
-  return free(ptr);
-}
+void mco_dealloc(void *ptr, size_t size, void *udata) {}
 
 int main(int argc, const char **argv) {
   LOG("hello");

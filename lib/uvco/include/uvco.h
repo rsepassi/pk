@@ -22,8 +22,13 @@ typedef struct {
     CHECK(mco_resume((wait)->co) == MCO_SUCCESS);                              \
   } while (0)
 
+// Time
 void uvco_sleep(uv_loop_t *loop, u64 ms);
-ssize_t uvco_fs_stat(uv_loop_t *loop, uv_fs_t *req, const char *path);
 
+// Filesystem
+ssize_t uvco_fs_stat(uv_loop_t *loop, uv_fs_t *req, const char *path);
+int uvco_fs_mkdir(uv_loop_t *loop, const char* path, int mode);
+
+// UDP
 int uvco_udp_send(uv_loop_t *loop, uv_udp_t *handle, const uv_buf_t bufs[],
                   unsigned int nbufs, const struct sockaddr *addr);

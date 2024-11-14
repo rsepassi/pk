@@ -23,8 +23,8 @@ static inline AllocStatus allocator_alloc(Allocator a, Bytes *b, usize sz,
   return a.alloc(a.ctx, b, sz, align);
 }
 
-static inline AllocStatus allocator_free(Allocator a, Bytes *b) {
-  return a.alloc(a.ctx, b, 0, 0);
+static inline AllocStatus allocator_free(Allocator a, Bytes b) {
+  return a.alloc(a.ctx, &b, 0, 0);
 }
 
 static inline void allocator_deinit(Allocator a) {

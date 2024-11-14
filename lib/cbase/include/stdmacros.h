@@ -22,10 +22,8 @@
 	(type *)((char *)__mptr - offsetof(type,member));})
 #endif
 
-#ifndef ALIGN
-#define ALIGN(x, align)  ((x) + (-(uintptr_t)(x) & (align - 1)))
-#define ALIGNB(x, align) (((x) + ((align) - 1)) & ~((align) - 1))
-#endif
+#define CBASE_ALIGN(x, align)  ((x) + (-(uintptr_t)(x) & ((align) - 1)))
+#define CBASE_ALIGNB(x, align) (((x) + ((align) - 1)) & ~((align) - 1))
 
 #ifndef CLAMP
 #define CLAMP(a, x, b) (((x) < (a)) ? (a) : \
@@ -48,4 +46,9 @@
 #ifndef CONCAT
 #define CONCAT(a, b) a ## b
 #define UNIQUENAME(prefix) CONCAT(prefix, __LINE__)
+#endif
+
+#ifndef ALIGN
+#define ALIGN  CBASE_ALIGN
+#define ALIGNB CBASE_ALIGNB
 #endif

@@ -24,6 +24,16 @@ ssize_t uvco_fs_stat(uv_loop_t *loop, uv_fs_t *req, const char *path) {
   return req->result;
 }
 
+int uvco_fs_mkdir(uv_loop_t *loop, const char* path, int mode) {
+  co_wait_t wait = {mco_running(), 0};
+  uv_fs_t req;
+  req.data = &wait;
+  if (uv_fs_mkdir(loop, &req, path, mode, fs_cb) != 0)
+    return 1;
+  CO_AWAIT(&wait);
+  return req.result;
+}
+
 void uvco_sleep(uv_loop_t *loop, u64 ms) {
   co_wait_t wait = {mco_running(), 0};
   uv_timer_t timer;

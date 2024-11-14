@@ -106,7 +106,7 @@ typedef struct {
   CryptoKxPK *pk;
   CryptoKxSK *sk;
   CryptoKxPK *bob;
-  CryptoPSK *psk;
+  CryptoBoxKey *psk;
 } NIK_Keys;
 
 // State of an ongoing handshake

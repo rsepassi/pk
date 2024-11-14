@@ -42,7 +42,7 @@ typedef struct {
 
 typedef struct {
   u8 bytes[crypto_secretbox_KEYBYTES];
-} CryptoPSK;
+} CryptoBoxKey;
 typedef struct {
   u8 bytes[crypto_secretbox_MACBYTES];
 } CryptoAuthTag;
