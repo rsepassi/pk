@@ -38,4 +38,4 @@ typedef struct {
   Bytes mem;
   usize i;
 } BumpAllocator;
-Allocator allocator_bump(BumpAllocator*, Bytes mem);
+Allocator allocator_bump(BumpAllocator *, Bytes mem);

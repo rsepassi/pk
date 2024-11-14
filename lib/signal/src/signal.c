@@ -1,7 +1,7 @@
 #include "signal.h"
 
-#include "log.h"
 #include "fastrange.h"
+#include "log.h"
 
 #define X3DH_KDF_PREFIX "000000000000000000000000pksignal"
 #define DRAT_KDF_ROOT "drat-kdf-root"
@@ -104,7 +104,7 @@ static u8 x3dh_init_recv_internal(const X3DHKeys *B, const X3DHHeader *A,
   // Bob checks that the right prekey was used
   // memcmp OK: public key
   if (memcmp((u8 *)&B->pub.kx_prekey, (u8 *)&A->kx_prekey_B,
-                    sizeof(CryptoKxTx)))
+             sizeof(CryptoKxTx)))
     return 1;
 
   u8 A_kx[sizeof(A->identity)];
@@ -369,14 +369,14 @@ Signal_Status drat_decrypt(DratState *ostate, const DratHeader *header,
   // To prevent updating state before actually authenticating the message,
   // we apply all updates to a copy of the session state, and only after
   // authentication do we apply it to the actual state.
-  STATIC_CHECK(sizeof(DratState) < 512);  // to ensure we limit the size
+  STATIC_CHECK(sizeof(DratState) < 512); // to ensure we limit the size
   DratState state_copy = *ostate;
-  DratState* state = &state_copy;
+  DratState *state = &state_copy;
 
   // Has the peer changed keys?
   // memcmp OK: public key
-  bool key_match = memcmp((u8 *)&header->key, (u8 *)&state->bob,
-                          sizeof(header->key)) == 0;
+  bool key_match =
+      memcmp((u8 *)&header->key, (u8 *)&state->bob, sizeof(header->key)) == 0;
 
   // if header.dh != state.DHr
   if (!key_match) {

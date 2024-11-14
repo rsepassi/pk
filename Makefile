@@ -42,10 +42,8 @@ clean-all: clean clean-deps clean-test
 
 .PHONY: fmt
 fmt:
-	clang-format -i `find lib -type f -name '*.c'`
-	clang-format -i `find lib -type f -name '*.h'`
-	clang-format -i `find cli -type f -name '*.c'`
-	clang-format -i `find cli -type f -name '*.h'`
+	clang-format -i `find lib -type f -name '*.c'` `find lib -type f -name '*.h'`
+	clang-format -i `find cli -type f -name '*.c'` `find cli -type f -name '*.h'`
 
 include $(ROOTDIR)/scripts/deps.mk
 include $(ROOTDIR)/scripts/test.mk
