@@ -13,9 +13,9 @@
 // Determines word idxs for the given bytes.
 // b.len must be divisible by 4
 // out must be of length bip39_MNEMONIC_LEN(b.len)
-int bip39_mnemonic_idxs(Bytes b, u16 *out);
+int bip39_mnemonic_idxs(Bytes b, u16* out);
 
 // Determines bytes for the given words.
-int bip39_mnemonic_bytes(u16 *words, usize words_len, Bytes *out);
+int bip39_mnemonic_bytes(u16* words, usize words_len, Bytes* out);
 
-extern const char *bip39_words[2048];
+extern const char* bip39_words[2048];

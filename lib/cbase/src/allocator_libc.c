@@ -1,12 +1,11 @@
 #include "allocator.h"
 #include "log.h"
+#include "stdmacros.h"
 
 #include <mm_malloc.h>
 #include <stdlib.h>
 
-#include "stdmacros.h"
-
-static int alloc_libc(void *ctx, Bytes *buf, usize sz, usize align) {
+static int alloc_libc(void* ctx, Bytes* buf, usize sz, usize align) {
   bool exists = buf->buf && buf->len > 0;
 
   // Free
@@ -20,7 +19,7 @@ static int alloc_libc(void *ctx, Bytes *buf, usize sz, usize align) {
 
   // Unaligned realloc
   if (align <= 1) {
-    void *ptr = (void *)buf->buf;
+    void* ptr = (void*)buf->buf;
     ptr = realloc(ptr, sz);
     if (!ptr)
       return 1;
@@ -34,7 +33,7 @@ static int alloc_libc(void *ctx, Bytes *buf, usize sz, usize align) {
 #else
   // Aligned alloc
   if (!exists) {
-    void *ptr;
+    void* ptr;
     if (posix_memalign(&ptr, align, sz) != 0)
       return 1;
     buf->buf = ptr;
@@ -43,7 +42,7 @@ static int alloc_libc(void *ctx, Bytes *buf, usize sz, usize align) {
   }
 
   // Aligned realloc
-  void *ptr;
+  void* ptr;
   if (posix_memalign(&ptr, align, sz) != 0)
     return 1;
   memcpy(ptr, buf->buf, buf->len);
@@ -57,13 +56,13 @@ static int alloc_libc(void *ctx, Bytes *buf, usize sz, usize align) {
 
 Allocator allocator_libc(void) { return (Allocator){0, alloc_libc, 0}; }
 
-static int bump_alloc(void *ctx, Bytes *buf, usize sz, usize align) {
-  BumpAllocator *b = ctx;
+static int bump_alloc(void* ctx, Bytes* buf, usize sz, usize align) {
+  BumpAllocator* b = ctx;
   if (sz == 0)
     return 0;
 
-  u8 *start = &b->mem.buf[b->i];
-  u8 *p = start;
+  u8* start = &b->mem.buf[b->i];
+  u8* p = start;
   if (align > 1)
     p = ALIGN(p, align);
   DCHECK((uptr)p % align == 0);
@@ -79,7 +78,7 @@ static int bump_alloc(void *ctx, Bytes *buf, usize sz, usize align) {
   return 0;
 }
 
-Allocator allocator_bump(BumpAllocator *b, Bytes mem) {
+Allocator allocator_bump(BumpAllocator* b, Bytes mem) {
   b->mem = mem;
   b->i = 0;
   return (Allocator){b, bump_alloc, 0};

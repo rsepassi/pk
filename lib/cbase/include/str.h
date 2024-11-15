@@ -6,14 +6,14 @@
 
 typedef struct {
   uint64_t len;
-  uint8_t *buf;
+  uint8_t* buf;
 } Str;
 
 typedef Str Bytes;
 #define BytesZero ((Bytes){0, 0})
 
-static inline Str str_from_c(const char *buf) {
-  return (Str){.len = strlen(buf), .buf = (uint8_t *)buf};
+static inline Str str_from_c(const char* buf) {
+  return (Str){.len = strlen(buf), .buf = (uint8_t*)buf};
 }
 
 #define bytes_from_arr(arr) ((Bytes){sizeof(arr), (arr)})

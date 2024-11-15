@@ -103,10 +103,10 @@ typedef struct {
 
 // Keys for establishing a session with bob
 typedef struct {
-  CryptoKxPK *pk;
-  CryptoKxSK *sk;
-  CryptoKxPK *bob;
-  CryptoBoxKey *psk;
+  CryptoKxPK* pk;
+  CryptoKxSK* sk;
+  CryptoKxPK* bob;
+  CryptoBoxKey* psk;
 } NIK_Keys;
 
 // State of an ongoing handshake
@@ -123,26 +123,26 @@ typedef struct {
 
 // Low-level handshake API
 // Initiator sends HandshakeMsg1
-NIK_Status nik_handshake_init(NIK_Handshake *state, const NIK_Keys keys,
-                              u32 local_idx, NIK_HandshakeMsg1 *msg);
+NIK_Status nik_handshake_init(NIK_Handshake* state, const NIK_Keys keys,
+                              u32 local_idx, NIK_HandshakeMsg1* msg);
 // Responder checks HandshakeMsg1
-NIK_Status nik_handshake_init_check(NIK_Handshake *state, const NIK_Keys keys,
-                                    NIK_HandshakeMsg1 *msg);
+NIK_Status nik_handshake_init_check(NIK_Handshake* state, const NIK_Keys keys,
+                                    NIK_HandshakeMsg1* msg);
 // Responder sends HandshakeMsg2
-NIK_Status nik_handshake_respond(NIK_Handshake *state, u32 local_idx,
-                                 const NIK_HandshakeMsg1 *msg1,
-                                 NIK_HandshakeMsg2 *msg2);
+NIK_Status nik_handshake_respond(NIK_Handshake* state, u32 local_idx,
+                                 const NIK_HandshakeMsg1* msg1,
+                                 NIK_HandshakeMsg2* msg2);
 // Initiator checks HandshakeMsg2
-NIK_Status nik_handshake_respond_check(NIK_Handshake *state,
-                                       const NIK_HandshakeMsg2 *msg);
+NIK_Status nik_handshake_respond_check(NIK_Handshake* state,
+                                       const NIK_HandshakeMsg2* msg);
 // Handshake is finalized and Session populated
-NIK_Status nik_handshake_final(NIK_Handshake *state, NIK_Session *session);
+NIK_Status nik_handshake_final(NIK_Handshake* state, NIK_Session* session);
 
 // Low-level send/recv API
 // Determines the length of an outgoing message given a payload length.
 u64 nik_sendmsg_sz(u64 len);
 // Encrypts payload into send. send must have length
 // nik_sendmsg_sz(payload.len).
-NIK_Status nik_msg_send(NIK_Session *session, Bytes payload, Bytes send);
+NIK_Status nik_msg_send(NIK_Session* session, Bytes payload, Bytes send);
 // Decrypts msg in place.
-NIK_Status nik_msg_recv(NIK_Session *session, Bytes *msg);
+NIK_Status nik_msg_recv(NIK_Session* session, Bytes* msg);

@@ -9,7 +9,7 @@
 #include <sys/time.h>
 #endif
 
-char *log_get_current_time() {
+char* log_get_current_time() {
   static char time_str[13];
 
 #ifdef _WIN32
@@ -20,7 +20,7 @@ char *log_get_current_time() {
            st.wMinute, st.wSecond, st.wMilliseconds);
 #else
   struct timeval tv;
-  struct tm *tm_info;
+  struct tm* tm_info;
 
   gettimeofday(&tv, NULL);
   tm_info = gmtime(&tv.tv_sec);
@@ -32,7 +32,7 @@ char *log_get_current_time() {
   return time_str;
 }
 
-void fprinthex(FILE *stream, char *tag, uint8_t *b, uint64_t len) {
+void fprinthex(FILE* stream, char* tag, uint8_t* b, uint64_t len) {
   fprintf(stream, "%s(%" PRIu64 ")=", tag, len);
   for (uint64_t i = 0; i < len; ++i)
     fprintf(stream, "%02X", b[i]);

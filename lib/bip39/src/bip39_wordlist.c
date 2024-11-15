@@ -1,5 +1,5 @@
 // https://raw.githubusercontent.com/bitcoin/bips/refs/heads/ce1862a/bip-0039/english.txt
-const char *bip39_words[2048] = {
+const char* bip39_words[2048] = {
     "abandon",  "ability",  "able",     "about",    "above",    "absent",
     "absorb",   "abstract", "absurd",   "abuse",    "access",   "accident",
     "account",  "accuse",   "achieve",  "acid",     "acoustic", "acquire",

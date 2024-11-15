@@ -13,27 +13,27 @@ typedef struct {
   CryptoKxPK eph_key;
 } X3DHInit;
 
-Signal_Status x3dh_keys_init(const CryptoSignSK *identity, X3DHKeys *keys) {
+Signal_Status x3dh_keys_init(const CryptoSignSK* identity, X3DHKeys* keys) {
   keys->identity = identity;
   keys->pub.identity = &identity->pk;
 
   // sign -> kx
-  if (crypto_sign_ed25519_pk_to_curve25519((u8 *)&keys->pub.kx,
-                                           (u8 *)&identity->pk))
+  if (crypto_sign_ed25519_pk_to_curve25519((u8*)&keys->pub.kx,
+                                           (u8*)&identity->pk))
     return 1;
-  if (crypto_sign_ed25519_sk_to_curve25519((u8 *)&keys->sec.kx, (u8 *)identity))
+  if (crypto_sign_ed25519_sk_to_curve25519((u8*)&keys->sec.kx, (u8*)identity))
     return 1;
 
   // Pre-shared keypair
-  if (crypto_kx_keypair((u8 *)&keys->pub.kx_prekey, (u8 *)&keys->sec.kx_prekey))
+  if (crypto_kx_keypair((u8*)&keys->pub.kx_prekey, (u8*)&keys->sec.kx_prekey))
     return 1;
 
   // Sign pre-shared key
-  if (crypto_sign_ed25519_detached((u8 *)&keys->pub.kx_prekey_sig,
-                                   0, // signature
-                                   (u8 *)&keys->pub.kx_prekey,
-                                   sizeof(CryptoKxPK), // input message
-                                   (u8 *)identity      // signing key
+  if (crypto_sign_ed25519_detached((u8*)&keys->pub.kx_prekey_sig,
+                                   0,  // signature
+                                   (u8*)&keys->pub.kx_prekey,
+                                   sizeof(CryptoKxPK),  // input message
+                                   (u8*)identity        // signing key
                                    ))
     return 1;
 
@@ -41,120 +41,119 @@ Signal_Status x3dh_keys_init(const CryptoSignSK *identity, X3DHKeys *keys) {
 }
 
 // Alice -> Bob
-static u8 x3dh_init_internal(const X3DHKeys *A, const X3DHPublic *B,
-                             X3DHInit *out) {
+static u8 x3dh_init_internal(const X3DHKeys* A, const X3DHPublic* B,
+                             X3DHInit* out) {
   // Alice verifies Bob's pre-shared key
   if (crypto_sign_ed25519_verify_detached(
-          (u8 *)&B->kx_prekey_sig, (u8 *)&B->kx_prekey, sizeof(CryptoKxPK),
-          (u8 *)B->identity // public key
+          (u8*)&B->kx_prekey_sig, (u8*)&B->kx_prekey, sizeof(CryptoKxPK),
+          (u8*)B->identity  // public key
           ))
     return 1;
 
   // Alice ephemeral keypair
   CryptoKxSK A_eph_sk;
-  if (crypto_kx_keypair((u8 *)&out->eph_key, (u8 *)&A_eph_sk))
+  if (crypto_kx_keypair((u8*)&out->eph_key, (u8*)&A_eph_sk))
     return 1;
 
-  CryptoKxTx dh1; // DH1 = DH(IK_A, SPK_B)
-  CryptoKxTx dh2; // DH2 = DH(EK_A, IK_B)
-  CryptoKxTx dh3; // DH3 = DH(EK_A, SPK_B)
-  if (crypto_kx_client_session_keys(0, (u8 *)&dh1, (u8 *)&A->pub.kx,
-                                    (u8 *)&A->sec.kx, (u8 *)&B->kx_prekey))
+  CryptoKxTx dh1;  // DH1 = DH(IK_A, SPK_B)
+  CryptoKxTx dh2;  // DH2 = DH(EK_A, IK_B)
+  CryptoKxTx dh3;  // DH3 = DH(EK_A, SPK_B)
+  if (crypto_kx_client_session_keys(0, (u8*)&dh1, (u8*)&A->pub.kx,
+                                    (u8*)&A->sec.kx, (u8*)&B->kx_prekey))
     return 1;
-  if (crypto_kx_client_session_keys(0, (u8 *)&dh2, (u8 *)&out->eph_key,
-                                    (u8 *)&A_eph_sk, (u8 *)&B->kx))
+  if (crypto_kx_client_session_keys(0, (u8*)&dh2, (u8*)&out->eph_key,
+                                    (u8*)&A_eph_sk, (u8*)&B->kx))
     return 1;
-  if (crypto_kx_client_session_keys(0, (u8 *)&dh3, (u8 *)&out->eph_key,
-                                    (u8 *)&A_eph_sk, (u8 *)&B->kx_prekey))
+  if (crypto_kx_client_session_keys(0, (u8*)&dh3, (u8*)&out->eph_key,
+                                    (u8*)&A_eph_sk, (u8*)&B->kx_prekey))
     return 1;
 
   // Alice computes the session key KDF(DH1 || DH2 || DH3)
   // DH1+DH2 provide mutual authentication
   // DH3 provides forward secrecy
   crypto_kdf_hkdf_sha256_state kdf_state;
-  if (crypto_kdf_hkdf_sha256_extract_init(&kdf_state, (u8 *)"x", 0))
+  if (crypto_kdf_hkdf_sha256_extract_init(&kdf_state, (u8*)"x", 0))
     return 1;
-  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8 *)X3DH_KDF_PREFIX,
+  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8*)X3DH_KDF_PREFIX,
                                             sizeof(X3DH_KDF_PREFIX)))
     return 1;
-  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8 *)&dh1,
+  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8*)&dh1,
                                             sizeof(CryptoKxTx)))
     return 1;
-  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8 *)&dh2,
+  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8*)&dh2,
                                             sizeof(CryptoKxTx)))
     return 1;
-  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8 *)&dh3,
+  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8*)&dh3,
                                             sizeof(CryptoKxTx)))
     return 1;
-  if (crypto_kdf_hkdf_sha256_extract_final(&kdf_state, (u8 *)&out->session_key))
+  if (crypto_kdf_hkdf_sha256_extract_final(&kdf_state, (u8*)&out->session_key))
     return 1;
 
   // Erase unneded information
-  sodium_memzero((u8 *)&dh1, sizeof(CryptoKxTx));
-  sodium_memzero((u8 *)&dh2, sizeof(CryptoKxTx));
-  sodium_memzero((u8 *)&dh3, sizeof(CryptoKxTx));
-  sodium_memzero((u8 *)&A_eph_sk, sizeof(CryptoKxSK));
+  sodium_memzero((u8*)&dh1, sizeof(CryptoKxTx));
+  sodium_memzero((u8*)&dh2, sizeof(CryptoKxTx));
+  sodium_memzero((u8*)&dh3, sizeof(CryptoKxTx));
+  sodium_memzero((u8*)&A_eph_sk, sizeof(CryptoKxSK));
 
   return 0;
 }
 
 // Bob <- Alice
-static u8 x3dh_init_recv_internal(const X3DHKeys *B, const X3DHHeader *A,
-                                  CryptoKxTx *out) {
+static u8 x3dh_init_recv_internal(const X3DHKeys* B, const X3DHHeader* A,
+                                  CryptoKxTx* out) {
   // Bob checks that the right prekey was used
   // memcmp OK: public key
-  if (memcmp((u8 *)&B->pub.kx_prekey, (u8 *)&A->kx_prekey_B,
-             sizeof(CryptoKxTx)))
+  if (memcmp((u8*)&B->pub.kx_prekey, (u8*)&A->kx_prekey_B, sizeof(CryptoKxTx)))
     return 1;
 
   u8 A_kx[sizeof(A->identity)];
-  if (crypto_sign_ed25519_pk_to_curve25519(A_kx, (u8 *)&A->identity))
+  if (crypto_sign_ed25519_pk_to_curve25519(A_kx, (u8*)&A->identity))
     return 1;
 
-  CryptoKxTx dh1; // DH1 = DH(SPK_B, IK_A)
-  CryptoKxTx dh2; // DH2 = DH(IK_B, EK_A)
-  CryptoKxTx dh3; // DH3 = DH(SPK_B, EK_A)
-  if (crypto_kx_server_session_keys(0, (u8 *)&dh1, (u8 *)&B->pub.kx_prekey,
-                                    (u8 *)&B->sec.kx_prekey, A_kx))
+  CryptoKxTx dh1;  // DH1 = DH(SPK_B, IK_A)
+  CryptoKxTx dh2;  // DH2 = DH(IK_B, EK_A)
+  CryptoKxTx dh3;  // DH3 = DH(SPK_B, EK_A)
+  if (crypto_kx_server_session_keys(0, (u8*)&dh1, (u8*)&B->pub.kx_prekey,
+                                    (u8*)&B->sec.kx_prekey, A_kx))
     return 1;
-  if (crypto_kx_server_session_keys(0, (u8 *)&dh2, (u8 *)&B->pub.kx,
-                                    (u8 *)&B->sec.kx, (u8 *)&A->kx_eph))
+  if (crypto_kx_server_session_keys(0, (u8*)&dh2, (u8*)&B->pub.kx,
+                                    (u8*)&B->sec.kx, (u8*)&A->kx_eph))
     return 1;
-  if (crypto_kx_server_session_keys(0, (u8 *)&dh3, (u8 *)&B->pub.kx_prekey,
-                                    (u8 *)&B->sec.kx_prekey, (u8 *)&A->kx_eph))
+  if (crypto_kx_server_session_keys(0, (u8*)&dh3, (u8*)&B->pub.kx_prekey,
+                                    (u8*)&B->sec.kx_prekey, (u8*)&A->kx_eph))
     return 1;
 
   // Bob computes the session key KDF(DH1 || DH2 || DH3)
   // DH1+DH2 provide mutual authentication
   // DH3 provide forward secrecy
   crypto_kdf_hkdf_sha256_state kdf_state;
-  if (crypto_kdf_hkdf_sha256_extract_init(&kdf_state, (u8 *)"x", 0))
+  if (crypto_kdf_hkdf_sha256_extract_init(&kdf_state, (u8*)"x", 0))
     return 1;
-  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8 *)X3DH_KDF_PREFIX,
+  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8*)X3DH_KDF_PREFIX,
                                             sizeof(X3DH_KDF_PREFIX)))
     return 1;
-  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8 *)&dh1,
+  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8*)&dh1,
                                             sizeof(CryptoKxTx)))
     return 1;
-  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8 *)&dh2,
+  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8*)&dh2,
                                             sizeof(CryptoKxTx)))
     return 1;
-  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8 *)&dh3,
+  if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8*)&dh3,
                                             sizeof(CryptoKxTx)))
     return 1;
-  if (crypto_kdf_hkdf_sha256_extract_final(&kdf_state, (u8 *)out))
+  if (crypto_kdf_hkdf_sha256_extract_final(&kdf_state, (u8*)out))
     return 1;
 
   // Erase unneded information
-  sodium_memzero((u8 *)&dh1, sizeof(CryptoKxTx));
-  sodium_memzero((u8 *)&dh2, sizeof(CryptoKxTx));
-  sodium_memzero((u8 *)&dh3, sizeof(CryptoKxTx));
+  sodium_memzero((u8*)&dh1, sizeof(CryptoKxTx));
+  sodium_memzero((u8*)&dh2, sizeof(CryptoKxTx));
+  sodium_memzero((u8*)&dh3, sizeof(CryptoKxTx));
 
   return 0;
 }
 
-Signal_Status x3dh_init(const X3DHKeys *A, const X3DHPublic *B,
-                        X3DHHeader *header, X3DH *out) {
+Signal_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B,
+                        X3DHHeader* header, X3DH* out) {
   // Derive session key
   X3DHInit A_x3dh_init;
   if (x3dh_init_internal(A, B, &A_x3dh_init))
@@ -167,63 +166,61 @@ Signal_Status x3dh_init(const X3DHKeys *A, const X3DHPublic *B,
   header->kx_prekey_B = B->kx_prekey;
 
   // AD = IK_A || IK_B
-  memcpy(out->ad, (u8 *)A->pub.identity, sizeof(*A->pub.identity));
-  memcpy(out->ad + sizeof(*A->pub.identity), (u8 *)B->identity,
+  memcpy(out->ad, (u8*)A->pub.identity, sizeof(*A->pub.identity));
+  memcpy(out->ad + sizeof(*A->pub.identity), (u8*)B->identity,
          sizeof(*A->pub.identity));
 
   return 0;
 }
 
-Signal_Status x3dh_init_recv(const X3DHKeys *B, const X3DHHeader *header,
-                             X3DH *out) {
+Signal_Status x3dh_init_recv(const X3DHKeys* B, const X3DHHeader* header,
+                             X3DH* out) {
   // Derive session key
   if (x3dh_init_recv_internal(B, header, &out->key))
     return 1;
 
   // AD = IK_A || IK_B
-  memcpy(out->ad, (u8 *)&header->identity, sizeof(*B->pub.identity));
-  memcpy(out->ad + sizeof(*B->pub.identity), (u8 *)B->pub.identity,
+  memcpy(out->ad, (u8*)&header->identity, sizeof(*B->pub.identity));
+  memcpy(out->ad + sizeof(*B->pub.identity), (u8*)B->pub.identity,
          sizeof(*B->pub.identity));
 
   return 0;
 }
 
-static Signal_Status drat_dh(CryptoKxPK *pk, CryptoKxSK *sk, CryptoKxPK *bob,
-                             CryptoKxTx *dh) {
+static Signal_Status drat_dh(CryptoKxPK* pk, CryptoKxSK* sk, CryptoKxPK* bob,
+                             CryptoKxTx* dh) {
   // memcmp OK: public key
   bool isclient = memcmp(pk, bob, sizeof(CryptoKxPK)) < 0;
   if (isclient) {
-    if (crypto_kx_client_session_keys(0, (u8 *)dh, (u8 *)pk, (u8 *)sk,
-                                      (u8 *)bob))
+    if (crypto_kx_client_session_keys(0, (u8*)dh, (u8*)pk, (u8*)sk, (u8*)bob))
       return 1;
   } else {
-    if (crypto_kx_server_session_keys(0, (u8 *)dh, (u8 *)pk, (u8 *)sk,
-                                      (u8 *)bob))
+    if (crypto_kx_server_session_keys(0, (u8*)dh, (u8*)pk, (u8*)sk, (u8*)bob))
       return 1;
   }
   return 0;
 }
 
-static Signal_Status drat_kdf_rk(u8 *rk, CryptoKxTx *dh, u8 *rk_out,
-                                 u8 *chain_out) {
+static Signal_Status drat_kdf_rk(u8* rk, CryptoKxTx* dh, u8* rk_out,
+                                 u8* chain_out) {
   STATIC_CHECK(crypto_kdf_hkdf_sha256_KEYBYTES == sizeof(CryptoKxTx));
   u8 key[crypto_kdf_hkdf_sha256_KEYBYTES];
-  if (crypto_kdf_hkdf_sha256_extract(key, rk, sizeof(CryptoKxTx), (u8 *)dh,
+  if (crypto_kdf_hkdf_sha256_extract(key, rk, sizeof(CryptoKxTx), (u8*)dh,
                                      sizeof(CryptoKxTx)))
     return 1;
 
-  if (crypto_kdf_hkdf_sha256_expand((u8 *)rk_out, SIGNAL_DRAT_CHAIN_SZ,
+  if (crypto_kdf_hkdf_sha256_expand((u8*)rk_out, SIGNAL_DRAT_CHAIN_SZ,
                                     DRAT_KDF_ROOT, sizeof(DRAT_KDF_ROOT) - 1,
                                     key))
     return 1;
-  if (crypto_kdf_hkdf_sha256_expand((u8 *)chain_out, SIGNAL_DRAT_CHAIN_SZ,
+  if (crypto_kdf_hkdf_sha256_expand((u8*)chain_out, SIGNAL_DRAT_CHAIN_SZ,
                                     DRAT_KDF_CHAIN, sizeof(DRAT_KDF_CHAIN) - 1,
                                     key))
     return 1;
   return 0;
 }
 
-Signal_Status drat_init(DratState *state, const DratInit *init) {
+Signal_Status drat_init(DratState* state, const DratInit* init) {
   *state = (DratState){0};
 
   // state.DHs = bob_dh_key_pair
@@ -232,16 +229,16 @@ Signal_Status drat_init(DratState *state, const DratInit *init) {
 
   // state.RK = SK
   STATIC_CHECK(sizeof(state->root_key) == sizeof(*init->session_key));
-  memcpy(state->root_key, (u8 *)init->session_key, sizeof(state->root_key));
+  memcpy(state->root_key, (u8*)init->session_key, sizeof(state->root_key));
 
   return 0;
 }
 
-Signal_Status drat_init_recv(DratState *state, const DratInitRecv *init) {
+Signal_Status drat_init_recv(DratState* state, const DratInitRecv* init) {
   *state = (DratState){0};
 
   // state.DHs = GENERATE_DH()
-  crypto_kx_keypair((u8 *)&state->key.pk, (u8 *)&state->key.sk);
+  crypto_kx_keypair((u8*)&state->key.pk, (u8*)&state->key.sk);
   // state.DHr = bob_dh_public_key
   state->bob = *init->bob;
 
@@ -249,7 +246,7 @@ Signal_Status drat_init_recv(DratState *state, const DratInitRecv *init) {
   CryptoKxTx dh;
   if (drat_dh(&state->key.pk, &state->key.sk, &state->bob, &dh))
     return 1;
-  if (drat_kdf_rk((u8 *)init->session_key, &dh, state->root_key,
+  if (drat_kdf_rk((u8*)init->session_key, &dh, state->root_key,
                   state->chain_send))
     return 1;
 
@@ -260,34 +257,34 @@ Signal_Status drat_init_recv(DratState *state, const DratInitRecv *init) {
 
 usize drat_encrypt_len(usize msg_len) { return msg_len; }
 
-static Signal_Status drat_kdf_ck(const u8 *ck, u8 *ck_out, CryptoKxTx *mk_out) {
+static Signal_Status drat_kdf_ck(const u8* ck, u8* ck_out, CryptoKxTx* mk_out) {
   STATIC_CHECK(crypto_kdf_hkdf_sha256_KEYBYTES == SIGNAL_DRAT_CHAIN_SZ);
   if (crypto_kdf_hkdf_sha256_expand(ck_out, SIGNAL_DRAT_CHAIN_SZ, "a", 1, ck))
     return 1;
-  if (crypto_kdf_hkdf_sha256_expand((u8 *)mk_out, sizeof(CryptoKxTx), "b", 1,
+  if (crypto_kdf_hkdf_sha256_expand((u8*)mk_out, sizeof(CryptoKxTx), "b", 1,
                                     ck))
     return 1;
   return 0;
 }
 
-static Signal_Status drat_hash_ad_header(Bytes ad, const DratHeader *header,
-                                         u8 *out) {
+static Signal_Status drat_hash_ad_header(Bytes ad, const DratHeader* header,
+                                         u8* out) {
   // H(AD) = BLAKE2b(CONCAT(AD, header))
   crypto_generichash_blake2b_state h;
   if (crypto_generichash_blake2b_init(&h, 0, 0, DRAT_AD_HSZ))
     return 1;
   if (crypto_generichash_blake2b_update(&h, ad.buf, ad.len))
     return 1;
-  if (crypto_generichash_blake2b_update(&h, (u8 *)header,
-                                        ((u8 *)&header->tag - (u8 *)header)))
+  if (crypto_generichash_blake2b_update(&h, (u8*)header,
+                                        ((u8*)&header->tag - (u8*)header)))
     return 1;
   if (crypto_generichash_blake2b_final(&h, out, DRAT_AD_HSZ))
     return 1;
   return 0;
 }
 
-Signal_Status drat_encrypt(DratState *state, Bytes msg, Bytes ad,
-                           DratHeader *header, Bytes *cipher) {
+Signal_Status drat_encrypt(DratState* state, Bytes msg, Bytes ad,
+                           DratHeader* header, Bytes* cipher) {
   if (cipher->len != drat_encrypt_len(msg.len))
     return 1;
 
@@ -314,10 +311,10 @@ Signal_Status drat_encrypt(DratState *state, Bytes msg, Bytes ad,
   // ENCRYPT(mk, plaintext, H(AD))
   STATIC_CHECK(sizeof(mk) == crypto_aead_chacha20poly1305_IETF_KEYBYTES);
   u8 nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
-  *(u64 *)nonce = header->number;
+  *(u64*)nonce = header->number;
   if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
-          cipher->buf, (u8 *)&header->tag, 0, msg.buf, msg.len, h_ad,
-          sizeof(h_ad), 0, nonce, (u8 *)&mk))
+          cipher->buf, (u8*)&header->tag, 0, msg.buf, msg.len, h_ad,
+          sizeof(h_ad), 0, nonce, (u8*)&mk))
     return 1;
 
   sodium_memzero(&mk, sizeof(mk));
@@ -326,7 +323,7 @@ Signal_Status drat_encrypt(DratState *state, Bytes msg, Bytes ad,
   return 0;
 }
 
-static Signal_Status drat_ratchet(DratState *state, const DratHeader *header) {
+static Signal_Status drat_ratchet(DratState* state, const DratHeader* header) {
   // state.PN = state.Ns
   state->psend_n = state->send_n;
   // state.Ns = 0
@@ -347,7 +344,7 @@ static Signal_Status drat_ratchet(DratState *state, const DratHeader *header) {
   memcpy(state->root_key, rk, sizeof(rk));
 
   // state.DHs = GENERATE_DH()
-  crypto_kx_keypair((u8 *)&state->key.pk, (u8 *)&state->key.sk);
+  crypto_kx_keypair((u8*)&state->key.pk, (u8*)&state->key.sk);
   // DH2 = DH(state.DHs, state.DHr)
   CryptoKxTx dh2;
   if (drat_dh(&state->key.pk, &state->key.sk, &state->bob, &dh2))
@@ -364,19 +361,19 @@ static Signal_Status drat_ratchet(DratState *state, const DratHeader *header) {
   return 0;
 }
 
-Signal_Status drat_decrypt(DratState *ostate, const DratHeader *header,
+Signal_Status drat_decrypt(DratState* ostate, const DratHeader* header,
                            Bytes cipher, Bytes ad) {
   // To prevent updating state before actually authenticating the message,
   // we apply all updates to a copy of the session state, and only after
   // authentication do we apply it to the actual state.
-  STATIC_CHECK(sizeof(DratState) < 512); // to ensure we limit the size
+  STATIC_CHECK(sizeof(DratState) < 512);  // to ensure we limit the size
   DratState state_copy = *ostate;
-  DratState *state = &state_copy;
+  DratState* state = &state_copy;
 
   // Has the peer changed keys?
   // memcmp OK: public key
   bool key_match =
-      memcmp((u8 *)&header->key, (u8 *)&state->bob, sizeof(header->key)) == 0;
+      memcmp((u8*)&header->key, (u8*)&state->bob, sizeof(header->key)) == 0;
 
   // if header.dh != state.DHr
   if (!key_match) {
@@ -407,10 +404,10 @@ Signal_Status drat_decrypt(DratState *ostate, const DratHeader *header,
 
   // DECRYPT(mk, ciphertext, H(AD))
   u8 nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
-  *(u64 *)nonce = header->number;
+  *(u64*)nonce = header->number;
   if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
-          cipher.buf, 0, cipher.buf, cipher.len, (u8 *)&header->tag, h_ad,
-          sizeof(h_ad), nonce, (u8 *)&mk))
+          cipher.buf, 0, cipher.buf, cipher.len, (u8*)&header->tag, h_ad,
+          sizeof(h_ad), nonce, (u8*)&mk))
     return 1;
 
   // Update the state only after successful authentication

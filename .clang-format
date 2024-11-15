@@ -1,0 +1,11 @@
+# make fmt uses this to format code in cli/ and lib/
+# vendor/ is left alone
+---
+Language: Cpp
+BasedOnStyle: LLVM
+AlwaysBreakBeforeMultilineStrings: true
+IncludeBlocks: Regroup
+IndentCaseLabels: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+PointerAlignment: Left
+SpacesBeforeTrailingComments: 2

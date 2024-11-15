@@ -34,53 +34,53 @@
 #define PK_SKP_FOOTER "\n-----END PROTECTED PK PRIVATE KEY-----\n"
 
 // Global event loop
-uv_loop_t *loop;
+uv_loop_t* loop;
 
 // Some constant data
-char *A_to_B_message = "hello world";
-char *A_seed_hex =
+char* A_to_B_message = "hello world";
+char* A_seed_hex =
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-char *B_seed_hex =
+char* B_seed_hex =
     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
 
-void bytes_from_hex(Str s, u8 *out, u8 n) {
+void bytes_from_hex(Str s, u8* out, u8 n) {
   CHECK(s.len == (n * 2));
-  sodium_hex2bin(out, n, (char *)s.buf, s.len, 0, 0, 0);
+  sodium_hex2bin(out, n, (char*)s.buf, s.len, 0, 0, 0);
 }
 
 // Printing
-void phex(char *tag, u8 *b, u64 len) {
+void phex(char* tag, u8* b, u64 len) {
   printf("%s(%" PRIu64 ")=", tag, len);
   for (u64 i = 0; i < len; ++i)
     printf("%02X", b[i]);
   printf("\n");
 }
 
-#define pcrypt(k) phex(#k, (u8 *)&(k), sizeof(k))
+#define pcrypt(k) phex(#k, (u8*)&(k), sizeof(k))
 
-int nik_keys_kx_from_seed(const CryptoSeed *seed, CryptoKxKeypair *out) {
+int nik_keys_kx_from_seed(const CryptoSeed* seed, CryptoKxKeypair* out) {
   CryptoSignPK pk;
   CryptoSignSK sk;
-  if (crypto_sign_seed_keypair((u8 *)&pk, (u8 *)&sk, (u8 *)seed))
+  if (crypto_sign_seed_keypair((u8*)&pk, (u8*)&sk, (u8*)seed))
     return 1;
 
-  if (crypto_sign_ed25519_pk_to_curve25519((u8 *)&out->pk, (u8 *)&pk))
+  if (crypto_sign_ed25519_pk_to_curve25519((u8*)&out->pk, (u8*)&pk))
     return 1;
-  if (crypto_sign_ed25519_sk_to_curve25519((u8 *)&out->sk, (u8 *)&sk))
+  if (crypto_sign_ed25519_sk_to_curve25519((u8*)&out->sk, (u8*)&sk))
     return 1;
   return 0;
 }
 
-void CxnCb(NIK_Cxn *cxn, void *userdata, NIK_Cxn_Event e, Bytes data, u64 now) {
+void CxnCb(NIK_Cxn* cxn, void* userdata, NIK_Cxn_Event e, Bytes data, u64 now) {
   LOGS(data);
 }
 
-int demo_nikcxn(int argc, const char **argv) {
+int demo_nikcxn(int argc, const char** argv) {
   CryptoKxKeypair kx_keys_i;
   {
     Str A_seed_str = str_from_c(A_seed_hex);
     CryptoSeed A_seed;
-    sodium_hex2bin((u8 *)&A_seed, sizeof(A_seed), (char *)A_seed_str.buf,
+    sodium_hex2bin((u8*)&A_seed, sizeof(A_seed), (char*)A_seed_str.buf,
                    A_seed_str.len, 0, 0, 0);
     CHECK0(nik_keys_kx_from_seed(&A_seed, &kx_keys_i));
   }
@@ -89,7 +89,7 @@ int demo_nikcxn(int argc, const char **argv) {
   {
     Str B_seed_str = str_from_c(B_seed_hex);
     CryptoSeed B_seed;
-    sodium_hex2bin((u8 *)&B_seed, sizeof(B_seed), (char *)B_seed_str.buf,
+    sodium_hex2bin((u8*)&B_seed, sizeof(B_seed), (char*)B_seed_str.buf,
                    B_seed_str.len, 0, 0, 0);
     CHECK0(nik_keys_kx_from_seed(&B_seed, &kx_keys_r));
   }
@@ -130,7 +130,7 @@ int demo_nikcxn(int argc, const char **argv) {
   {
     LOG("B responds to handshake");
     CHECK(hs1.len == sizeof(NIK_HandshakeMsg1));
-    NIK_HandshakeMsg1 *msg1 = (NIK_HandshakeMsg1 *)hs1.buf;
+    NIK_HandshakeMsg1* msg1 = (NIK_HandshakeMsg1*)hs1.buf;
     NIK_Handshake hs;
     CHECK0(nik_handshake_init_check(&hs, hkeys_B, msg1));
     nik_cxn_init_responder(&cxn_B, hkeys_B, &hs, msg1, CxnCb, &ctx_B, now);
@@ -219,8 +219,8 @@ int demo_nikcxn(int argc, const char **argv) {
     u64 delay_A = cxn_A.handshake.initiator.handshake_start_time;
     u64 delay_B = cxn_B.handshake.initiator.handshake_start_time;
     u64 delay = MIN(delay_A, delay_B);
-    NIK_Cxn *initiator = delay == delay_A ? &cxn_A : &cxn_B;
-    NIK_Cxn *responder = delay == delay_A ? &cxn_B : &cxn_A;
+    NIK_Cxn* initiator = delay == delay_A ? &cxn_A : &cxn_B;
+    NIK_Cxn* responder = delay == delay_A ? &cxn_B : &cxn_A;
     now += delay;
 
     LOG("Initiator sends handshake");
@@ -254,12 +254,12 @@ int demo_nikcxn(int argc, const char **argv) {
   return 0;
 }
 
-int demo_nik(int argc, const char **argv) {
+int demo_nik(int argc, const char** argv) {
   CryptoKxKeypair kx_keys_i;
   {
     Str A_seed_str = str_from_c(A_seed_hex);
     CryptoSeed A_seed;
-    sodium_hex2bin((u8 *)&A_seed, sizeof(A_seed), (char *)A_seed_str.buf,
+    sodium_hex2bin((u8*)&A_seed, sizeof(A_seed), (char*)A_seed_str.buf,
                    A_seed_str.len, 0, 0, 0);
     CHECK0(nik_keys_kx_from_seed(&A_seed, &kx_keys_i));
   }
@@ -268,7 +268,7 @@ int demo_nik(int argc, const char **argv) {
   {
     Str B_seed_str = str_from_c(B_seed_hex);
     CryptoSeed B_seed;
-    sodium_hex2bin((u8 *)&B_seed, sizeof(B_seed), (char *)B_seed_str.buf,
+    sodium_hex2bin((u8*)&B_seed, sizeof(B_seed), (char*)B_seed_str.buf,
                    B_seed_str.len, 0, 0, 0);
     CHECK0(nik_keys_kx_from_seed(&B_seed, &kx_keys_r));
   }
@@ -313,8 +313,8 @@ int demo_nik(int argc, const char **argv) {
   CHECK0(nik_handshake_final(&state_r, &tx_r));
 
   // Check that I and R have the same transfer keys
-  phex("tx.send", (u8 *)&tx_i.send, sizeof(tx_i.send));
-  phex("tx.recv", (u8 *)&tx_i.recv, sizeof(tx_i.recv));
+  phex("tx.send", (u8*)&tx_i.send, sizeof(tx_i.send));
+  phex("tx.recv", (u8*)&tx_i.recv, sizeof(tx_i.recv));
   CHECK0(sodium_memcmp(&tx_i.send, &tx_r.recv, sizeof(tx_i.send)));
   CHECK0(sodium_memcmp(&tx_i.recv, &tx_r.send, sizeof(tx_i.send)));
   CHECK(tx_i.send_n == 0);
@@ -370,13 +370,13 @@ int demo_nik(int argc, const char **argv) {
 }
 
 typedef struct {
-  MDB_env *kv;
+  MDB_env* kv;
   MDB_dbi db;
   CryptoBoxKey key;
   Allocator allocator;
 } CryptKv;
 
-int cryptkv_keycrypt(CryptKv *kv, Bytes key, Bytes *out) {
+int cryptkv_keycrypt(CryptKv* kv, Bytes key, Bytes* out) {
   // Encrypt the key with a nonce derived from the key
   int rc = 1;
   u64 ekey_len = key.len + crypto_secretbox_MACBYTES;
@@ -384,11 +384,11 @@ int cryptkv_keycrypt(CryptKv *kv, Bytes key, Bytes *out) {
     goto end;
   u8 nonce[crypto_secretbox_NONCEBYTES];
   STATIC_CHECK(crypto_kdf_hkdf_sha256_KEYBYTES == sizeof(kv->key));
-  if (crypto_kdf_hkdf_sha256_expand(nonce, sizeof(nonce), (const char *)key.buf,
-                                    key.len, (u8 *)&kv->key))
+  if (crypto_kdf_hkdf_sha256_expand(nonce, sizeof(nonce), (const char*)key.buf,
+                                    key.len, (u8*)&kv->key))
     goto err;
   STATIC_CHECK(crypto_secretbox_KEYBYTES == sizeof(kv->key));
-  if (crypto_secretbox_easy(out->buf, key.buf, key.len, nonce, (u8 *)&kv->key))
+  if (crypto_secretbox_easy(out->buf, key.buf, key.len, nonce, (u8*)&kv->key))
     goto err;
 
   rc = 0;
@@ -400,14 +400,14 @@ end:
   return rc;
 }
 
-int cryptkv_put(CryptKv *kv, Bytes key, Bytes val) {
+int cryptkv_put(CryptKv* kv, Bytes key, Bytes val) {
   int rc = 1;
 
   Bytes ekey = {0};
   if (cryptkv_keycrypt(kv, key, &ekey))
     goto end;
 
-  MDB_txn *txn;
+  MDB_txn* txn;
   if (mdb_txn_begin(kv->kv, 0, 0, &txn))
     goto end;
 
@@ -418,7 +418,7 @@ int cryptkv_put(CryptKv *kv, Bytes key, Bytes val) {
   randombytes_buf(eval.buf, crypto_secretbox_NONCEBYTES);
 
   if (crypto_secretbox_easy(eval.buf + crypto_secretbox_NONCEBYTES, val.buf,
-                            val.len, eval.buf, (u8 *)&kv->key))
+                            val.len, eval.buf, (u8*)&kv->key))
     goto end2;
 
   MDB_val mk = {ekey.len, ekey.buf};
@@ -440,7 +440,7 @@ end:
   return rc;
 }
 
-int cryptkv_get(CryptKv *kv, Bytes key, Bytes *val) {
+int cryptkv_get(CryptKv* kv, Bytes key, Bytes* val) {
   STATIC_CHECK(MDB_NOTFOUND < 0);
 
   int rc = 1;
@@ -449,7 +449,7 @@ int cryptkv_get(CryptKv *kv, Bytes key, Bytes *val) {
   if (cryptkv_keycrypt(kv, key, &ekey))
     goto end;
 
-  MDB_txn *txn;
+  MDB_txn* txn;
   if (mdb_txn_begin(kv->kv, 0, MDB_RDONLY, &txn))
     goto end;
 
@@ -467,7 +467,7 @@ int cryptkv_get(CryptKv *kv, Bytes key, Bytes *val) {
 
   if (crypto_secretbox_open_easy(
           val->buf, mv.mv_data + crypto_secretbox_NONCEBYTES,
-          mv.mv_size - crypto_secretbox_NONCEBYTES, mv.mv_data, (u8 *)&kv->key))
+          mv.mv_size - crypto_secretbox_NONCEBYTES, mv.mv_data, (u8*)&kv->key))
     goto end;
 
   rc = 0;
@@ -477,10 +477,10 @@ end:
   return rc;
 }
 
-int cryptkv_open(CryptKv **kv_ptr, const char *kv_path, CryptoBoxKey *key,
+int cryptkv_open(CryptKv** kv_ptr, const char* kv_path, CryptoBoxKey* key,
                  Allocator allocator) {
   *kv_ptr = sodium_malloc(sizeof(CryptKv));
-  CryptKv *kv = *kv_ptr;
+  CryptKv* kv = *kv_ptr;
   *kv = (CryptKv){0};
 
   kv->key = *key;
@@ -502,13 +502,13 @@ int cryptkv_open(CryptKv **kv_ptr, const char *kv_path, CryptoBoxKey *key,
   }
   uv_fs_req_cleanup(&req);
 
-  mode_t kv_mode = S_IRUSR | S_IWUSR | S_IRGRP; // rw-r-----
+  mode_t kv_mode = S_IRUSR | S_IWUSR | S_IRGRP;  // rw-r-----
   if (mdb_env_create(&kv->kv))
     goto err;
   if (mdb_env_open(kv->kv, kv_path, MDB_NOLOCK, kv_mode))
     goto err;
 
-  MDB_txn *txn;
+  MDB_txn* txn;
   if (mdb_txn_begin(kv->kv, 0, 0, &txn))
     goto err;
   if (mdb_dbi_open(txn, 0, 0, &kv->db))
@@ -523,19 +523,19 @@ err:
   return 1;
 }
 
-void cryptkv_close(CryptKv *kv) {
+void cryptkv_close(CryptKv* kv) {
   mdb_env_close(kv->kv);
   sodium_memzero(kv, sizeof(CryptKv));
   sodium_free(kv);
 }
 
-int demo_kv(int argc, const char **argv) {
+int demo_kv(int argc, const char** argv) {
   struct argparse argparse;
   struct argparse_option options[] = {
       OPT_HELP(),
       OPT_END(),
   };
-  const char *const usages[] = {"kv [options] get <db> <key>",
+  const char* const usages[] = {"kv [options] get <db> <key>",
                                 "kv [options] put <db> <key> <value>", NULL};
   argparse_init(&argparse, options, usages, ARGPARSE_STOP_AT_NON_OPTION);
   argc = argparse_parse(&argparse, argc, argv);
@@ -568,7 +568,7 @@ int demo_kv(int argc, const char **argv) {
   Allocator allocator = allocator_libc();
   CryptoBoxKey kvkey = {{1, 2, 3, 4}};
 
-  CryptKv *kv;
+  CryptKv* kv;
   CHECK0(cryptkv_open(&kv, "/tmp/crypt", &kvkey, allocator));
   if (cmd == KvGet) {
     int rc = cryptkv_get(kv, key, &val);
@@ -589,14 +589,14 @@ int demo_kv(int argc, const char **argv) {
 #define OPENSSH_SK_HEADER "-----BEGIN OPENSSH PRIVATE KEY-----"
 #define OPENSSH_SK_FOOTER "-----END OPENSSH PRIVATE KEY-----"
 
-int demosshkeyread(int argc, const char **argv) {
+int demosshkeyread(int argc, const char** argv) {
   CHECK(argc == 2, "must provide a key path");
-  const char *path = argv[1];
+  const char* path = argv[1];
 
   Allocator al = allocatormi_heap();
 
   usize sz = 1024;
-  Bytes str; // SECRET
+  Bytes str;  // SECRET
   CHECK0(allocator_u8(al, &str, sz));
 
   uv_file fd;
@@ -606,7 +606,7 @@ int demosshkeyread(int argc, const char **argv) {
   LOG("read %d", (int)str.len);
   CHECK(str.len < sz);
 
-  Bytes stripped; // SECRET
+  Bytes stripped;  // SECRET
   CHECK0(allocator_u8(al, &stripped, sz));
   stripped.len = 0;
   {
@@ -618,7 +618,7 @@ int demosshkeyread(int argc, const char **argv) {
     CHECK0(
         memcmp(&str.buf[i], OPENSSH_SK_HEADER, sizeof(OPENSSH_SK_HEADER) - 1));
     i += sizeof(OPENSSH_SK_HEADER) - 1;
-    ++i; // \n
+    ++i;  // \n
 
     // Copy the lines into stripped, excluding the newlines
     // memcmp OK: the footer starts with '-', a character that does not appear
@@ -641,12 +641,12 @@ int demosshkeyread(int argc, const char **argv) {
   }
 
   // base64 decode
-  Bytes buf; // SECRET
+  Bytes buf;  // SECRET
   {
     usize sz = base64_decoded_maxlen(stripped.len);
     CHECK0(allocator_u8(al, &buf, sz));
     usize len;
-    CHECK0(sodium_base642bin(buf.buf, sz, (char *)stripped.buf, stripped.len, 0,
+    CHECK0(sodium_base642bin(buf.buf, sz, (char*)stripped.buf, stripped.len, 0,
                              &len, 0, sodium_base64_VARIANT_ORIGINAL));
     buf.len = len;
     sodium_memzero(stripped.buf, stripped.len);
@@ -690,16 +690,16 @@ int demosshkeyread(int argc, const char **argv) {
   i += 8;
 
   // 32-bit length, "none"   # kdfname length and string
-  len = SWAP_U32(*(u32 *)&buf.buf[i]);
+  len = SWAP_U32(*(u32*)&buf.buf[i]);
   i += 8;
 
   // 32-bit length, nil      # kdf (0 length, no kdf)
-  len = SWAP_U32(*(u32 *)&buf.buf[i]);
+  len = SWAP_U32(*(u32*)&buf.buf[i]);
   i += 4;
   CHECK(len == 0, "%d", (int)len);
 
   // 32-bit 0x01             # number of keys, hard-coded to 1 (no length)
-  len = SWAP_U32(*(u32 *)&buf.buf[i]);
+  len = SWAP_U32(*(u32*)&buf.buf[i]);
   CHECK(len == 1, "%d", (int)len);
   i += 4;
 
@@ -707,13 +707,13 @@ int demosshkeyread(int argc, const char **argv) {
   i += 4;
 
   //     32-bit length, keytype
-  len = SWAP_U32(*(u32 *)&buf.buf[i]);
+  len = SWAP_U32(*(u32*)&buf.buf[i]);
   i += 4;
   CHECK((i + len) < buf.len);
   i += len;
 
   //     32-bit length, pub0
-  len = SWAP_U32(*(u32 *)&buf.buf[i]);
+  len = SWAP_U32(*(u32*)&buf.buf[i]);
   CHECK(len == 32);
   i += 4;
   CHECK((i + len) < buf.len);
@@ -721,7 +721,7 @@ int demosshkeyread(int argc, const char **argv) {
   i += len;
 
   // 32-bit length for rnd+prv+comment+pad
-  len = SWAP_U32(*(u32 *)&buf.buf[i]);
+  len = SWAP_U32(*(u32*)&buf.buf[i]);
   i += 4;
 
   //     64-bit dummy checksum?  # a random 32-bit int, repeated
@@ -729,20 +729,20 @@ int demosshkeyread(int argc, const char **argv) {
   i += 8;
 
   //     32-bit length, keytype  # the private key (including public)
-  len = SWAP_U32(*(u32 *)&buf.buf[i]);
+  len = SWAP_U32(*(u32*)&buf.buf[i]);
   i += 4;
   CHECK((i + len) < buf.len);
   i += len;
 
   //     32-bit length, pub0     # Public Key parts
-  len = SWAP_U32(*(u32 *)&buf.buf[i]);
+  len = SWAP_U32(*(u32*)&buf.buf[i]);
   i += 4;
   CHECK(len == 32);
   CHECK((i + len) < buf.len);
   i += len;
 
   //     32-bit length, prv0     # Private Key parts
-  len = SWAP_U32(*(u32 *)&buf.buf[i]);
+  len = SWAP_U32(*(u32*)&buf.buf[i]);
   i += 4;
   CHECK((i + 32) < buf.len);
   Bytes sk = {32, &buf.buf[i]};
@@ -767,7 +767,7 @@ int demosshkeyread(int argc, const char **argv) {
   return 0;
 }
 
-int demo_bip39(int argc, const char **argv) {
+int demo_bip39(int argc, const char** argv) {
   // Generate 32 bytes of entropy
   u8 key_buf[32];
   randombytes_buf(key_buf, sizeof(key_buf));
@@ -795,7 +795,7 @@ int demo_bip39(int argc, const char **argv) {
   return 0;
 }
 
-int demo_base64(int argc, const char **argv) {
+int demo_base64(int argc, const char** argv) {
   Str a = str_from_c("hello world!");
 
   Str enc;
@@ -824,24 +824,24 @@ int demo_base64(int argc, const char **argv) {
   return 0;
 }
 
-void vt_cb(const char *s, size_t len, void *user) {
+void vt_cb(const char* s, size_t len, void* user) {
   LOG("vt(%d)=%.*s", (int)len, (int)len, s);
 }
 
-int demo_vterm(int argc, const char **argv) {
+int demo_vterm(int argc, const char** argv) {
   int rows = 100;
   int cols = 80;
-  VTerm *vt = vterm_new(rows, cols);
+  VTerm* vt = vterm_new(rows, cols);
   vterm_set_utf8(vt, true);
 
-  VTermScreen *vt_screen = vterm_obtain_screen(vt);
+  VTermScreen* vt_screen = vterm_obtain_screen(vt);
   vterm_screen_reset(vt_screen, true);
 
   // VTermState *vt_state = vterm_obtain_state(vt);
   // vterm_state_reset(vt_state, 1);
 
   Str txt = str_from_c("hi!");
-  vterm_input_write(vt, (char *)txt.buf, txt.len);
+  vterm_input_write(vt, (char*)txt.buf, txt.len);
 
   vterm_output_set_callback(vt, vt_cb, NULL);
   vterm_keyboard_unichar(vt, 65, 0);
@@ -851,17 +851,17 @@ int demo_vterm(int argc, const char **argv) {
   return 0;
 }
 
-void get_identity_key(Str hex, CryptoSignSK *out) {
+void get_identity_key(Str hex, CryptoSignSK* out) {
   CHECK(hex.len == 64, "got length %d", (int)hex.len);
   CryptoSeed seed;
-  sodium_hex2bin((u8 *)&seed, sizeof(CryptoSeed), (char *)hex.buf, hex.len, 0,
-                 0, 0);
+  sodium_hex2bin((u8*)&seed, sizeof(CryptoSeed), (char*)hex.buf, hex.len, 0, 0,
+                 0);
 
   CryptoSignPK pk;
-  CHECK0(crypto_sign_seed_keypair((u8 *)&pk, (u8 *)out, (u8 *)&seed));
+  CHECK0(crypto_sign_seed_keypair((u8*)&pk, (u8*)out, (u8*)&seed));
 }
 
-int drat_a_to_b(DratState *A_state, X3DH *A_x, DratState *B_state, X3DH *B_x,
+int drat_a_to_b(DratState* A_state, X3DH* A_x, DratState* B_state, X3DH* B_x,
                 Str msg) {
   LOGS(msg);
 
@@ -887,7 +887,7 @@ int drat_a_to_b(DratState *A_state, X3DH *A_x, DratState *B_state, X3DH *B_x,
   return 0;
 }
 
-int demo_drat(int argc, const char **argv) {
+int demo_drat(int argc, const char** argv) {
   // Alice and Bob identity keys
   CryptoSignSK A_key;
   get_identity_key(str_from_c(A_seed_hex), &A_key);
@@ -905,7 +905,7 @@ int demo_drat(int argc, const char **argv) {
     X3DHHeader A_header;
     CHECK0(x3dh_init(&A_sec, &B_sec.pub, &A_header, &A_x));
     CHECK0(x3dh_init_recv(&B_sec, &A_header, &B_x));
-    CHECK0(memcmp((u8 *)&A_x, (u8 *)&B_x, sizeof(X3DH)));
+    CHECK0(memcmp((u8*)&A_x, (u8*)&B_x, sizeof(X3DH)));
   }
 
   // Initialize double ratchet
@@ -925,25 +925,32 @@ int demo_drat(int argc, const char **argv) {
   CHECK0(drat_init_recv(&A_state, &A_init));
 
   // Send some messages back and forth
-  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state, &A_x, //
+  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state,
+                     &A_x,  //
                      str_from_c("hello from Bob! secret number is 77")));
-  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state, &A_x, //
+  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state,
+                     &A_x,  //
                      str_from_c("hello from Bob! secret number is 79")));
-  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state, &B_x, //
+  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state,
+                     &B_x,  //
                      str_from_c("hello from Alice!")));
-  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state, &A_x, //
+  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state,
+                     &A_x,  //
                      str_from_c("roger roger")));
-  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state, &A_x, //
+  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state,
+                     &A_x,  //
                      str_from_c("roger roger 2")));
-  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state, &B_x, //
+  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state,
+                     &B_x,  //
                      str_from_c("1")));
-  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state, &B_x, //
+  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state,
+                     &B_x,  //
                      str_from_c("2")));
 
   return 0;
 }
 
-int demo_x3dh(int argc, const char **argv) {
+int demo_x3dh(int argc, const char** argv) {
   CryptoSignSK A_key;
   get_identity_key(str_from_c(A_seed_hex), &A_key);
   CryptoSignSK B_key;
@@ -967,27 +974,27 @@ int demo_x3dh(int argc, const char **argv) {
   CHECK0(x3dh_init_recv(&B_sec, &A_header, &B_x));
 
   // Keys + AD are equal
-  CHECK0(memcmp((u8 *)&A_x, (u8 *)&B_x, sizeof(X3DH)));
+  CHECK0(memcmp((u8*)&A_x, (u8*)&B_x, sizeof(X3DH)));
   LOG("keys match!");
 
   return 0;
 }
 
-int demo_getkey(Str seed_str, CryptoSignPK *pk, CryptoSignSK *sk) {
+int demo_getkey(Str seed_str, CryptoSignPK* pk, CryptoSignSK* sk) {
   CryptoSeed seed;
-  sodium_hex2bin((u8 *)&seed, sizeof(seed), (char *)seed_str.buf, seed_str.len,
-                 0, 0, 0);
-  if (crypto_sign_seed_keypair((u8 *)pk, (u8 *)sk, (u8 *)&seed))
+  sodium_hex2bin((u8*)&seed, sizeof(seed), (char*)seed_str.buf, seed_str.len, 0,
+                 0, 0);
+  if (crypto_sign_seed_keypair((u8*)pk, (u8*)sk, (u8*)&seed))
     return 1;
   return 0;
 }
 
-bool libb58_sha256_impl(void *out, const void *msg, size_t msg_len) {
+bool libb58_sha256_impl(void* out, const void* msg, size_t msg_len) {
   crypto_hash_sha256(out, msg, msg_len);
   return true;
 }
 
-int demo_b58(int argc, const char **argv) {
+int demo_b58(int argc, const char** argv) {
   b58_sha256_impl = libb58_sha256_impl;
 
   // Hex string encodes 1-byte version + payload
@@ -1018,12 +1025,12 @@ int demo_b58(int argc, const char **argv) {
   return 0;
 }
 
-void alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
+void alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
   *buf = uv_buf_init(malloc(suggested_size), suggested_size);
 }
 
-void recv_cb(uv_udp_t *handle, ssize_t nread, const uv_buf_t *buf,
-             const struct sockaddr *addr, unsigned flags) {
+void recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
+             const struct sockaddr* addr, unsigned flags) {
   if (nread == 0 && addr == NULL) {
     LOG("<EOS>");
     return;
@@ -1039,31 +1046,31 @@ void recv_cb(uv_udp_t *handle, ssize_t nread, const uv_buf_t *buf,
 }
 
 void mapping_callback(int id, plum_state_t state,
-                      const plum_mapping_t *mapping) {
+                      const plum_mapping_t* mapping) {
   LOG("map!");
   CHECK(state == PLUM_STATE_SUCCESS);
   LOG("External address: %s:%hu\n", mapping->external_host,
       mapping->external_port);
 }
 
-int demo_multicast(int argc, const char **argv) {
+int demo_multicast(int argc, const char** argv) {
   bool send = argc > 1 && memcmp(argv[1], "send", 4) == 0;
 
   LOG("udp init");
   uv_udp_t udp;
   CHECK0(uv_udp_init(loop, &udp));
 
-  char *multicast_group = "239.0.0.22";
+  char* multicast_group = "239.0.0.22";
   int port = 20000;
 
   if (send) {
     struct sockaddr_in myaddr;
     CHECK0(uv_ip4_addr("0.0.0.0", 0, &myaddr));
-    CHECK0(uv_udp_bind(&udp, (struct sockaddr *)&myaddr, 0));
+    CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&myaddr, 0));
 
     struct sockaddr_storage localbind;
     int len;
-    CHECK0(uv_udp_getsockname(&udp, (struct sockaddr *)&localbind, &len));
+    CHECK0(uv_udp_getsockname(&udp, (struct sockaddr*)&localbind, &len));
     LOG("addrlen=%d", len);
     // LOG("addr=%u", ((struct sockaddr_in*)&localbind)->sin_addr.s_addr);
 
@@ -1071,15 +1078,15 @@ int demo_multicast(int argc, const char **argv) {
     struct sockaddr_in multi_addr;
     CHECK0(uv_ip4_addr(multicast_group, port, &multi_addr));
     Str peer_id = str_from_c("mike multicast");
-    uv_buf_t buf = uv_buf_init((char *)peer_id.buf, peer_id.len);
-    CHECK0(uvco_udp_send(loop, &udp, &buf, 1, (struct sockaddr *)&multi_addr));
+    uv_buf_t buf = uv_buf_init((char*)peer_id.buf, peer_id.len);
+    CHECK0(uvco_udp_send(loop, &udp, &buf, 1, (struct sockaddr*)&multi_addr));
     LOG("sent!");
     uvco_sleep(loop, 1000);
   } else {
     struct sockaddr_in myaddr;
     CHECK0(uv_ip4_addr("0.0.0.0", port, &myaddr));
 
-    CHECK0(uv_udp_bind(&udp, (struct sockaddr *)&myaddr, 0));
+    CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&myaddr, 0));
     CHECK0(uv_udp_set_membership(&udp, multicast_group, NULL, UV_JOIN_GROUP));
 
     LOG("udp recv multicast on %s %d", multicast_group, port);
@@ -1091,8 +1098,7 @@ int demo_multicast(int argc, const char **argv) {
   return 0;
 }
 
-int demo_holepunch(int argc, const char **argv) {
-
+int demo_holepunch(int argc, const char** argv) {
   // TODO:
   // Hit discovery server to get peer_addr
 
@@ -1117,8 +1123,8 @@ int demo_holepunch(int argc, const char **argv) {
 
   LOG("udp send");
   Str peer_id = str_from_c("mike multicast");
-  uv_buf_t buf = uv_buf_init((char *)peer_id.buf, peer_id.len);
-  CHECK0(uvco_udp_send(loop, &udp, &buf, 1, (struct sockaddr *)&peer_addr));
+  uv_buf_t buf = uv_buf_init((char*)peer_id.buf, peer_id.len);
+  CHECK0(uvco_udp_send(loop, &udp, &buf, 1, (struct sockaddr*)&peer_addr));
   LOG("sent!");
 
   LOG("udp recv");
@@ -1148,7 +1154,7 @@ void do_some_allocs(Allocator a) {
   allocator_deinit(a);
 }
 
-int demo_mimalloc(int argc, const char **argv) {
+int demo_mimalloc(int argc, const char** argv) {
   // MIMALLOC_SHOW_STATS=1
   mi_option_enable(mi_option_show_stats);
 
@@ -1177,9 +1183,9 @@ int demo_mimalloc(int argc, const char **argv) {
   return 0;
 }
 
-int pw_prompt(Bytes *b) {
-  char *pw = sodium_malloc(MAX_PW_LEN);
-  b->buf = (u8 *)pw;
+int pw_prompt(Bytes* b) {
+  char* pw = sodium_malloc(MAX_PW_LEN);
+  b->buf = (u8*)pw;
   fprintf(stderr, "pw > ");
   ssize_t pw_len = getpass(pw, MAX_PW_LEN);
   if (pw_len > 0)
@@ -1189,9 +1195,9 @@ int pw_prompt(Bytes *b) {
   return 0;
 }
 
-int demo_keyread(int argc, const char **argv) {
+int demo_keyread(int argc, const char** argv) {
   CHECK(argc == 2, "must pass a path");
-  const char *path = argv[1];
+  const char* path = argv[1];
 
   usize sz = 256;
   Bytes buf = {sz, malloc(sz)};
@@ -1239,9 +1245,9 @@ int demo_keyread(int argc, const char **argv) {
   CHECK(dec.len > (crypto_pwhash_SALTBYTES + crypto_secretbox_NONCEBYTES +
                    crypto_secretbox_MACBYTES));
 
-  u8 *salt = dec.buf;
-  u8 *nonce = salt + crypto_pwhash_SALTBYTES;
-  u8 *cipher = nonce + crypto_secretbox_NONCEBYTES;
+  u8* salt = dec.buf;
+  u8* nonce = salt + crypto_pwhash_SALTBYTES;
+  u8* cipher = nonce + crypto_secretbox_NONCEBYTES;
   usize cipher_len =
       dec.len - crypto_secretbox_NONCEBYTES - crypto_pwhash_SALTBYTES;
 
@@ -1253,7 +1259,7 @@ int demo_keyread(int argc, const char **argv) {
   {
     u64 opslimit = crypto_pwhash_OPSLIMIT_INTERACTIVE;
     u64 memlimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
-    CHECK0(crypto_pwhash(key, sizeof(key), (char *)pw.buf, pw.len, salt,
+    CHECK0(crypto_pwhash(key, sizeof(key), (char*)pw.buf, pw.len, salt,
                          opslimit, memlimit, crypto_pwhash_ALG_ARGON2ID13));
   }
   sodium_free(pw.buf);
@@ -1274,7 +1280,7 @@ int demo_keyread(int argc, const char **argv) {
   return 0;
 }
 
-int demo_keygen(int argc, const char **argv) {
+int demo_keygen(int argc, const char** argv) {
   // Generate a key
   u8 pk[crypto_sign_ed25519_PUBLICKEYBYTES];
   u8 sk[crypto_sign_ed25519_SECRETKEYBYTES];
@@ -1294,7 +1300,7 @@ int demo_keygen(int argc, const char **argv) {
     {
       u64 opslimit = crypto_pwhash_OPSLIMIT_INTERACTIVE;
       u64 memlimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
-      CHECK0(crypto_pwhash(key, sizeof(key), (char *)pw.buf, pw.len, salt,
+      CHECK0(crypto_pwhash(key, sizeof(key), (char*)pw.buf, pw.len, salt,
                            opslimit, memlimit, crypto_pwhash_ALG_ARGON2ID13));
     }
     sodium_free(pw.buf);
@@ -1376,7 +1382,7 @@ int demo_keygen(int argc, const char **argv) {
   return 0;
 }
 
-int demo_pwhash(int argc, const char **argv) {
+int demo_pwhash(int argc, const char** argv) {
   Bytes pw;
   CHECK0(pw_prompt(&pw));
   CHECK(pw.len > 0);
@@ -1385,10 +1391,10 @@ int demo_pwhash(int argc, const char **argv) {
   u8 pw_hash[crypto_pwhash_STRBYTES];
   u64 opslimit = crypto_pwhash_OPSLIMIT_INTERACTIVE;
   u64 memlimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
-  CHECK0(crypto_pwhash_str((char *)pw_hash, (char *)pw.buf, pw.len, opslimit,
+  CHECK0(crypto_pwhash_str((char*)pw_hash, (char*)pw.buf, pw.len, opslimit,
                            memlimit));
-  LOGS(str_from_c((char *)pw_hash));
-  CHECK0(crypto_pwhash_str_verify((char *)pw_hash, (char *)pw.buf, pw.len));
+  LOGS(str_from_c((char*)pw_hash));
+  CHECK0(crypto_pwhash_str_verify((char*)pw_hash, (char*)pw.buf, pw.len));
 
   // Derive a key
   u8 salt[crypto_pwhash_SALTBYTES] = {0, 1, 2, 3};
@@ -1397,13 +1403,13 @@ int demo_pwhash(int argc, const char **argv) {
   {
     u64 opslimit = crypto_pwhash_OPSLIMIT_INTERACTIVE;
     u64 memlimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
-    CHECK0(crypto_pwhash(key, sizeof(key), (char *)pw.buf, pw.len, salt,
+    CHECK0(crypto_pwhash(key, sizeof(key), (char*)pw.buf, pw.len, salt,
                          opslimit, memlimit, crypto_pwhash_ALG_ARGON2ID13));
   }
   return 0;
 }
 
-static const char *const usages[] = {
+static const char* const usages[] = {
     "pk [options] [cmd] [args]\n\n    Commands:"
     "\n      - demo-b58"
     "\n      - demo-base64"
@@ -1427,41 +1433,41 @@ static const char *const usages[] = {
 };
 
 struct cmd_struct {
-  const char *cmd;
-  int (*fn)(int, const char **);
+  const char* cmd;
+  int (*fn)(int, const char**);
 };
 
 static struct cmd_struct commands[] = {
-    {"demo-b58", demo_b58},              //
-    {"demo-base64", demo_base64},        //
-    {"demo-bip39", demo_bip39},          //
-    {"demo-drat", demo_drat},            //
-    {"demo-holepunch", demo_holepunch},  //
-    {"demo-keygen", demo_keygen},        //
-    {"demo-keyread", demo_keyread},      //
-    {"demo-kv", demo_kv},                //
-    {"demo-mimalloc", demo_mimalloc},    //
-    {"demo-multicast", demo_multicast},  //
-    {"demo-nik", demo_nik},              //
-    {"demo-nikcxn", demo_nikcxn},        //
-    {"demo-pwhash", demo_pwhash},        //
-    {"demo-sshkeyread", demosshkeyread}, //
-    {"demo-vterm", demo_vterm},          //
-    {"demo-x3dh", demo_x3dh},            //
+    {"demo-b58", demo_b58},               //
+    {"demo-base64", demo_base64},         //
+    {"demo-bip39", demo_bip39},           //
+    {"demo-drat", demo_drat},             //
+    {"demo-holepunch", demo_holepunch},   //
+    {"demo-keygen", demo_keygen},         //
+    {"demo-keyread", demo_keyread},       //
+    {"demo-kv", demo_kv},                 //
+    {"demo-mimalloc", demo_mimalloc},     //
+    {"demo-multicast", demo_multicast},   //
+    {"demo-nik", demo_nik},               //
+    {"demo-nikcxn", demo_nikcxn},         //
+    {"demo-pwhash", demo_pwhash},         //
+    {"demo-sshkeyread", demosshkeyread},  //
+    {"demo-vterm", demo_vterm},           //
+    {"demo-x3dh", demo_x3dh},             //
 };
 
 typedef struct {
   int argc;
-  const char **argv;
+  const char** argv;
 } MainCoroCtx;
 
 void coro_exit(int code) { mco_push(mco_running(), &code, 1); }
 
-void main_coro(mco_coro *co) {
-  MainCoroCtx *ctx = (MainCoroCtx *)mco_get_user_data(co);
+void main_coro(mco_coro* co) {
+  MainCoroCtx* ctx = (MainCoroCtx*)mco_get_user_data(co);
 
   int argc = ctx->argc;
-  const char **argv = ctx->argv;
+  const char** argv = ctx->argv;
 
   struct argparse argparse;
   struct argparse_option options[] = {
@@ -1475,7 +1481,7 @@ void main_coro(mco_coro *co) {
     return coro_exit(1);
   }
 
-  struct cmd_struct *cmd = NULL;
+  struct cmd_struct* cmd = NULL;
   for (int i = 0; i < ARRAY_LEN(commands); i++) {
     if (!strcmp(commands[i].cmd, argv[0])) {
       cmd = &commands[i];
@@ -1491,17 +1497,17 @@ void main_coro(mco_coro *co) {
   return coro_exit(cmd->fn(argc, argv));
 }
 
-#define MAIN_STACK_SIZE 1 << 21 // 2MiB
+#define MAIN_STACK_SIZE 1 << 21  // 2MiB
 u8 main_stack[MAIN_STACK_SIZE];
 
-void *mco_alloc(size_t size, void *udata) {
+void* mco_alloc(size_t size, void* udata) {
   return calloc(1, size);
   // return CBASE_ALIGN(main_stack, 1 << 12);
 }
 
-void mco_dealloc(void *ptr, size_t size, void *udata) {}
+void mco_dealloc(void* ptr, size_t size, void* udata) {}
 
-int main(int argc, const char **argv) {
+int main(int argc, const char** argv) {
   LOG("hello");
 
   // libsodium init
@@ -1519,7 +1525,7 @@ int main(int argc, const char **argv) {
   desc.alloc_cb = mco_alloc;
   desc.dealloc_cb = mco_dealloc;
   desc.user_data = &ctx;
-  mco_coro *co;
+  mco_coro* co;
   CHECK(mco_create(&co, &desc) == MCO_SUCCESS);
 
   // run

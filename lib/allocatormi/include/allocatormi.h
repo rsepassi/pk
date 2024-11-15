@@ -5,7 +5,7 @@
 
 Allocator allocatormi_allocator(void);
 Allocator allocatormi_heap(void);
-Allocator allocatormi_heap_ex(mi_heap_t *);
+Allocator allocatormi_heap_ex(mi_heap_t*);
 
 // Must be >= 64MiB
 Allocator allocatormi_arena(Bytes arena, bool iszero);

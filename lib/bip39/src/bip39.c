@@ -10,15 +10,15 @@ typedef struct {
 } BytesIter;
 
 typedef struct {
-  u16 *words;
+  u16* words;
   usize wordi;
   usize biti;
 } WordsIter;
 
-static inline u8 bytes_next_bit(BytesIter *it) {
+static inline u8 bytes_next_bit(BytesIter* it) {
   usize bytei = it->biti / 8;
   usize bytebiti = it->biti % 8;
-  u8 *buf;
+  u8* buf;
   if (bytei >= it->bytes.len) {
     buf = it->hash.buf;
     bytei -= it->bytes.len;
@@ -30,10 +30,10 @@ static inline u8 bytes_next_bit(BytesIter *it) {
   return bit;
 }
 
-static inline void bytes_set_next_bit(BytesIter *it, u8 b) {
+static inline void bytes_set_next_bit(BytesIter* it, u8 b) {
   usize bytei = it->biti / 8;
   usize bytebiti = it->biti % 8;
-  u8 *buf;
+  u8* buf;
   if (bytei >= it->bytes.len) {
     buf = it->hash.buf;
     bytei -= it->bytes.len;
@@ -47,7 +47,7 @@ static inline void bytes_set_next_bit(BytesIter *it, u8 b) {
   it->biti++;
 }
 
-static inline void words_advance(WordsIter *it) {
+static inline void words_advance(WordsIter* it) {
   it->biti++;
   if (it->biti == 11) {
     it->biti = 0;
@@ -55,15 +55,15 @@ static inline void words_advance(WordsIter *it) {
   }
 }
 
-static inline u8 words_next_bit(WordsIter *it) {
+static inline u8 words_next_bit(WordsIter* it) {
   u16 word_bytes = it->words[it->wordi];
   u8 bit = BITGET(word_bytes, it->biti);
   words_advance(it);
   return bit;
 }
 
-static inline void words_set_next_bit(WordsIter *it, u8 b) {
-  u16 *word_bytes = &it->words[it->wordi];
+static inline void words_set_next_bit(WordsIter* it, u8 b) {
+  u16* word_bytes = &it->words[it->wordi];
   if (it->biti == 0)
     *word_bytes = 0;
 
@@ -73,7 +73,7 @@ static inline void words_set_next_bit(WordsIter *it, u8 b) {
   words_advance(it);
 }
 
-int bip39_mnemonic_idxs(Bytes b, u16 *out) {
+int bip39_mnemonic_idxs(Bytes b, u16* out) {
   if (b.len % 4 != 0 || b.len < 16)
     return 1;
 
@@ -93,7 +93,7 @@ int bip39_mnemonic_idxs(Bytes b, u16 *out) {
   return 0;
 }
 
-int bip39_mnemonic_bytes(u16 *words, usize words_len, Bytes *out) {
+int bip39_mnemonic_bytes(u16* words, usize words_len, Bytes* out) {
   if (out->len != bip39_BYTE_LEN(words_len))
     return 1;
 

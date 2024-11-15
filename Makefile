@@ -32,15 +32,13 @@ DEPS := \
 		vendor/uv \
 		vendor/vterm
 
-.PHONY: cli
+.PHONY: cli clean-all fmt
 cli:
 	$(MAKE) -C cli
 
-.PHONY: clean-all
-clean-all: clean clean-deps clean-test
+clean-all: clean-deps clean-test
 	$(MAKE) -C cli clean
 
-.PHONY: fmt
 fmt:
 	clang-format -i `find lib -type f -name '*.c'` `find lib -type f -name '*.h'`
 	clang-format -i `find cli -type f -name '*.c'` `find cli -type f -name '*.h'`

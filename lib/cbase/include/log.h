@@ -49,5 +49,5 @@
 
 #define STATIC_CHECK(x) (void)sizeof(char[(x) ? 1 : -1])
 
-char *log_get_current_time();
-void fprinthex(FILE *stream, char *tag, uint8_t *b, uint64_t len);
+char* log_get_current_time();
+void fprinthex(FILE* stream, char* tag, uint8_t* b, uint64_t len);

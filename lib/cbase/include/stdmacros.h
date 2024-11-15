@@ -19,13 +19,13 @@
 #ifndef CONTAINER_OF
 #define CONTAINER_OF(ptr, type, member)                                        \
   ({                                                                           \
-    const typeof(((type *)0)->member) *__mptr = (ptr);                         \
-    (type *)((char *)__mptr - offsetof(type, member));                         \
+    const typeof(((type*)0)->member)* __mptr = (ptr);                          \
+    (type*)((char*)__mptr - offsetof(type, member));                           \
   })
 #endif
 
-#define CBASE_ALIGN(x, align) ((x) + (-(uintptr_t)(x) & ((align) - 1)))
-#define CBASE_ALIGNB(x, align) (((x) + ((align) - 1)) & ~((align) - 1))
+#define CBASE_ALIGN(x, align) ((x) + (-(uintptr_t)(x) & ((align)-1)))
+#define CBASE_ALIGNB(x, align) (((x) + ((align)-1)) & ~((align)-1))
 
 #ifndef CLAMP
 #define CLAMP(a, x, b) (((x) < (a)) ? (a) : ((x) > (b)) ? (b) : (x))

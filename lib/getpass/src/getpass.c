@@ -7,7 +7,7 @@
 
 #include <windows.h>
 
-ssize_t getpass(char *pw, size_t maxlen) {
+ssize_t getpass(char* pw, size_t maxlen) {
   HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
   DWORD mode = 0;
   ssize_t nread;
@@ -35,7 +35,7 @@ ssize_t getpass(char *pw, size_t maxlen) {
 
 #include <termios.h>
 
-ssize_t getpass(char *pw, size_t maxlen) {
+ssize_t getpass(char* pw, size_t maxlen) {
   struct termios old, new;
   ssize_t nread;
 

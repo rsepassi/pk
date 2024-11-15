@@ -2,7 +2,6 @@
 #pragma once
 
 #include "sodium.h"
-
 #include "stdtypes.h"
 
 typedef struct {
@@ -47,7 +46,7 @@ typedef struct {
   u8 bytes[crypto_secretbox_MACBYTES];
 } CryptoAuthTag;
 
-#define CryptoBytes(x) ((Bytes){sizeof(x), (u8 *)&(x)})
+#define CryptoBytes(x) ((Bytes){sizeof(x), (u8*)&(x)})
 
 // Initializes libsodium and does some checks
 u8 crypto_init(void);
