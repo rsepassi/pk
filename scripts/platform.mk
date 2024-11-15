@@ -24,7 +24,7 @@ export EXE :=
 endif
 
 ifeq ($(TARGET), x86_64-macos)
-export CFLAGS += -isystem $(ROOTDIR)/vendor/platform/macos/include
+export CFLAGS += -isystem $(ROOTDIR)/platform/macos/include
 else ifeq ($(TARGET), aarch64-macos)
-export CFLAGS += -isystem $(ROOTDIR)/vendor/platform/macos/include
+export CFLAGS += -isystem $(ROOTDIR)/platform/macos/include
 endif
