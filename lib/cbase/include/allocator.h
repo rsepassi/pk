@@ -18,8 +18,14 @@ typedef struct {
 #define Alloc_alloc(a, b, T, n)                                                \
   allocator_alloc(a, b, sizeof(T) * n, _Alignof(T))
 
+static inline AllocStatus allocator_u8(Allocator a, Bytes *b, usize sz) {
+  b->len = 0;
+  return a.alloc(a.ctx, b, sz, 1);
+}
+
 static inline AllocStatus allocator_alloc(Allocator a, Bytes *b, usize sz,
                                           usize align) {
+  b->len = 0;
   return a.alloc(a.ctx, b, sz, align);
 }
 

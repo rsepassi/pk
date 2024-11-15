@@ -53,3 +53,15 @@
 #define ALIGN CBASE_ALIGN
 #define ALIGNB CBASE_ALIGNB
 #endif
+
+#define SWAP_U32(x)                                                            \
+  (((x) >> 24) | (((x) & 0x00FF0000) >> 8) | (((x) & 0x0000FF00) << 8) |       \
+   ((x) << 24))
+#define SWAP_U16(x) (((x) >> 8) | ((x) << 8))
+static inline uint64_t SWAP_U64(uint64_t val) {
+  val = ((val << 8) & 0xFF00FF00FF00FF00ULL) |
+        ((val >> 8) & 0x00FF00FF00FF00FFULL);
+  val = ((val << 16) & 0xFFFF0000FFFF0000ULL) |
+        ((val >> 16) & 0x0000FFFF0000FFFFULL);
+  return (val << 32) | (val >> 32);
+}

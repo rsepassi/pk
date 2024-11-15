@@ -5,11 +5,12 @@ NIK todo
   e.g. if (cxn->current.send_n >= NIK_LIMIT_REKEY_AFTER_MESSAGES)
 * Lifetime for enqueue payload
 * If both A and B initiate a handshake simultaneously what happens?
-* Implement HMAC-based KDF functions like in wg-go noise-helpers.go?
 * Review wg-go replay + flood prevention
   On init message check (ConsumeMessageInititation)
   replay := !timestamp.after(handshake.last_timestamp)
   flood := time.since(handshake.last_initiation_consumption) <= HandshakeInitiationRate (20ms)
+* Rm use of HMAC Blake2 and just used keyed Blake2? All the KDFs could do this
+  Or Implement HMAC-based KDF functions like in wg-go noise-helpers.go?
 
 Signal todo
 * Routing - consider using sender/recveiver ids like Wireguard, but maybe
@@ -19,6 +20,12 @@ Signal todo
   Wireguard
 * Out-of-order message support
 * Consider adding PQXDH: https://signal.org/docs/specifications/pqxdh/
+  https://github.com/open-quantum-safe/liboqs
+  ML-KEM, Kyber, FIPS 203
+  https://github.com/pq-crystals/kyber
+  https://github.com/cryspen/libcrux/tree/main/libcrux-ml-kem
+  https://github.com/itzmeanjan/ml-kem
+  https://github.com/GiacomoPope/kyber-py
 * Sesame session management
 
 kv
