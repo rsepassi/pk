@@ -1,0 +1,5 @@
+Name: keyio
+Version: 0.0.1
+Description: <none>
+Libs: -L${prefix} -lkeyio
+Cflags: -I${prefix}/include

@@ -1,26 +1,10 @@
 HDRS := $(wildcard src/*.h)
 SRCS := $(wildcard src/*.c)
 OBJS := $(SRCS:.c=.$(O))
-DEPS := \
-		lib/allocatormi \
-		lib/base64 \
-		lib/bip39 \
-		lib/cbase \
-		lib/crypto \
-		lib/getpass \
-		lib/nik \
-		lib/signal \
-		lib/uvco \
-		vendor/argparse \
-		vendor/base58 \
-		vendor/lmdb \
-		vendor/mimalloc \
-		vendor/minicoro \
-		vendor/plum \
-		vendor/sodium \
-		vendor/tai \
-		vendor/uv \
-		vendor/vterm
+
+DEPS_PATHS := $(wildcard $(ROOTDIR)/lib/*) \
+							$(wildcard $(ROOTDIR)/vendor/*)
+DEPS := $(DEPS_PATHS:$(ROOTDIR)/%=%)
 
 BUILD_DEPS = $(HDRS) Makefile | deps build_dir
 

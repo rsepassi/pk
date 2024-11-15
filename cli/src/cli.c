@@ -14,6 +14,7 @@
 #include "bip39.h"
 #include "crypto.h"
 #include "getpass.h"
+#include "keyio.h"
 #include "log.h"
 #include "nik.h"
 #include "nik_cxn.h"
@@ -586,9 +587,6 @@ int demo_kv(int argc, const char** argv) {
   return 0;
 }
 
-#define OPENSSH_SK_HEADER "-----BEGIN OPENSSH PRIVATE KEY-----"
-#define OPENSSH_SK_FOOTER "-----END OPENSSH PRIVATE KEY-----"
-
 int demosshkeyread(int argc, const char** argv) {
   CHECK(argc == 2, "must provide a key path");
   const char* path = argv[1];
@@ -598,6 +596,7 @@ int demosshkeyread(int argc, const char** argv) {
   usize sz = 1024;
   Bytes str;  // SECRET
   CHECK0(allocator_u8(al, &str, sz));
+  sodium_mlock(str.buf, str.len);
 
   uv_file fd;
   CHECK0(uvco_fs_open(loop, path, UV_FS_O_RDONLY, 0, &fd));
@@ -606,162 +605,14 @@ int demosshkeyread(int argc, const char** argv) {
   LOG("read %d", (int)str.len);
   CHECK(str.len < sz);
 
-  Bytes stripped;  // SECRET
-  CHECK0(allocator_u8(al, &stripped, sz));
-  stripped.len = 0;
-  {
-    // Header line
-    // memcmp OK: public line, and header starts with '-', a character that
-    // does not appear in the base64 alphabet, which makes this constant time
-    // with respect to the secret.
-    usize i = 0;
-    CHECK0(
-        memcmp(&str.buf[i], OPENSSH_SK_HEADER, sizeof(OPENSSH_SK_HEADER) - 1));
-    i += sizeof(OPENSSH_SK_HEADER) - 1;
-    ++i;  // \n
-
-    // Copy the lines into stripped, excluding the newlines
-    // memcmp OK: the footer starts with '-', a character that does not appear
-    // in the base64 alphabet, which makes this constant time with respect
-    // to the secret.
-    while (memcmp(&str.buf[i], OPENSSH_SK_FOOTER,
-                  sizeof(OPENSSH_SK_FOOTER) - 1) != 0) {
-      usize linestart = i;
-      while (i < str.len && str.buf[i] != '\n')
-        ++i;
-      usize lineend = i;
-      ++i;
-      memcpy(&stripped.buf[stripped.len], &str.buf[linestart],
-             lineend - linestart);
-      stripped.len += lineend - linestart;
-    }
-    sodium_memzero(str.buf, str.len);
-
-    LOGS(stripped);
-  }
-
-  // base64 decode
-  Bytes buf;  // SECRET
-  {
-    usize sz = base64_decoded_maxlen(stripped.len);
-    CHECK0(allocator_u8(al, &buf, sz));
-    usize len;
-    CHECK0(sodium_base642bin(buf.buf, sz, (char*)stripped.buf, stripped.len, 0,
-                             &len, 0, sodium_base64_VARIANT_ORIGINAL));
-    buf.len = len;
-    sodium_memzero(stripped.buf, stripped.len);
-  }
-
-  // Parse
-  //
-  // From https://coolaj86.com/articles/the-openssh-private-key-format/
-  // Also see: https://github.com/openssh/openssh-portable/blob/master/sshkey.c
-  // And: https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.key
-  //
-  // "openssh-key-v1"0x00    # NULL-terminated "Auth Magic" string
-  // 32-bit length, "none"   # ciphername length and string
-  // 32-bit length, "none"   # kdfname length and string
-  // 32-bit length, nil      # kdf (0 length, no kdf)
-  // 32-bit 0x01             # number of keys, hard-coded to 1 (no length)
-  // 32-bit length, sshpub   # public key in ssh format
-  //     32-bit length, keytype
-  //     32-bit length, pub0
-  //     32-bit length, pub1
-  // 32-bit length for rnd+prv+comment+pad
-  //     64-bit dummy checksum?  # a random 32-bit int, repeated
-  //     32-bit length, keytype  # the private key (including public)
-  //     32-bit length, pub0     # Public Key parts
-  //     32-bit length, pub1
-  //     32-bit length, prv0     # Private Key parts
-  //     ...                     # (number varies by type)
-  //     32-bit length, comment  # comment string
-  //     padding bytes 0x010203  # pad to blocksize (see notes below)
-
-  usize i = 0;
-  usize len = 0;
-
-  // "openssh-key-v1"0x00    # NULL-terminated "Auth Magic" string
-  while (i < buf.len && buf.buf[i] != 0)
-    ++i;
-  ++i;
-
-  // 32-bit length, "none"   # ciphername length and string
-  CHECK((i + 8) < buf.len);
-  i += 8;
-
-  // 32-bit length, "none"   # kdfname length and string
-  len = SWAP_U32(*(u32*)&buf.buf[i]);
-  i += 8;
-
-  // 32-bit length, nil      # kdf (0 length, no kdf)
-  len = SWAP_U32(*(u32*)&buf.buf[i]);
-  i += 4;
-  CHECK(len == 0, "%d", (int)len);
-
-  // 32-bit 0x01             # number of keys, hard-coded to 1 (no length)
-  len = SWAP_U32(*(u32*)&buf.buf[i]);
-  CHECK(len == 1, "%d", (int)len);
-  i += 4;
-
-  // 32-bit length, sshpub   # public key in ssh format
-  i += 4;
-
-  //     32-bit length, keytype
-  len = SWAP_U32(*(u32*)&buf.buf[i]);
-  i += 4;
-  CHECK((i + len) < buf.len);
-  i += len;
-
-  //     32-bit length, pub0
-  len = SWAP_U32(*(u32*)&buf.buf[i]);
-  CHECK(len == 32);
-  i += 4;
-  CHECK((i + len) < buf.len);
-  Bytes pk = {32, &buf.buf[i]};
-  i += len;
-
-  // 32-bit length for rnd+prv+comment+pad
-  len = SWAP_U32(*(u32*)&buf.buf[i]);
-  i += 4;
-
-  //     64-bit dummy checksum?  # a random 32-bit int, repeated
-  CHECK((i + 8) < buf.len);
-  i += 8;
-
-  //     32-bit length, keytype  # the private key (including public)
-  len = SWAP_U32(*(u32*)&buf.buf[i]);
-  i += 4;
-  CHECK((i + len) < buf.len);
-  i += len;
-
-  //     32-bit length, pub0     # Public Key parts
-  len = SWAP_U32(*(u32*)&buf.buf[i]);
-  i += 4;
-  CHECK(len == 32);
-  CHECK((i + len) < buf.len);
-  i += len;
-
-  //     32-bit length, prv0     # Private Key parts
-  len = SWAP_U32(*(u32*)&buf.buf[i]);
-  i += 4;
-  CHECK((i + 32) < buf.len);
-  Bytes sk = {32, &buf.buf[i]};
-  i += len;
-
-  // We've got our public and private keys
-  LOGB(pk);
-  LOGB(sk);
-
-  // Verify that the public key derivation matches libsodium's
-  u8 pk2[crypto_sign_ed25519_PUBLICKEYBYTES];
-  u8 sk2[crypto_sign_ed25519_SECRETKEYBYTES];
-  crypto_sign_ed25519_seed_keypair(pk2, sk2, sk.buf);
-  LOGB(bytes_from_arr(pk2));
-  LOGB(bytes_from_arr(sk2));
-  CHECK(sizeof(sk2) == sk.len * 2);
-  CHECK0(sodium_memcmp(sk2, sk.buf, sizeof(sk2)));
+  CryptoSignSK sk;
+  CHECK0(keyio_openssh_parsekey(str, al, &sk));
+  LOGB(CryptoBytes(sk));
 
   // Free
+  sodium_memzero(str.buf, str.len);
+  sodium_munlock(str.buf, str.len);
+  allocator_free(al, str);
   allocator_deinit(al);
 
   return 0;

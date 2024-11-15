@@ -19,8 +19,12 @@ static int alloc(void* ctx, Bytes* buf, usize sz, usize align) {
 }
 
 static int halloc(void* ctx, Bytes* buf, usize sz, usize align) {
-  if (sz == 0)
+  if (sz == 0) {
+    mi_free(buf->buf);
+    buf->buf = NULL;
+    buf->len = 0;
     return 0;
+  }
   void* ptr = buf->len == 0 ? NULL : buf->buf;
   mi_heap_t* h = ctx;
   buf->buf = mi_heap_realloc_aligned(h, ptr, sz, align);

@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+set -e
+ROOTDIR=$PWD make -C cli clean
+make cli
+exec ./cli/build/cli $@
