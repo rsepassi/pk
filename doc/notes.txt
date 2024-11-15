@@ -1,3 +1,6 @@
+crypto
+* Allocator for secrets that does malloc+lock and zero+free
+
 NIK todo
 * Update counter check to use algorithm in RFC 6479 as in WG-Go
   https://github.com/WireGuard/wireguard-go/blob/master/replay/replay.go

@@ -596,7 +596,7 @@ int demosshkeyread(int argc, const char **argv) {
   Allocator al = allocatormi_heap();
 
   usize sz = 1024;
-  Bytes str;
+  Bytes str; // SECRET
   CHECK0(allocator_u8(al, &str, sz));
 
   uv_file fd;
@@ -606,11 +606,14 @@ int demosshkeyread(int argc, const char **argv) {
   LOG("read %d", (int)str.len);
   CHECK(str.len < sz);
 
-  Bytes stripped;
+  Bytes stripped; // SECRET
   CHECK0(allocator_u8(al, &stripped, sz));
   stripped.len = 0;
   {
     // Header line
+    // memcmp OK: public line, and header starts with '-', a character that
+    // does not appear in the base64 alphabet, which makes this constant time
+    // with respect to the secret.
     usize i = 0;
     CHECK0(
         memcmp(&str.buf[i], OPENSSH_SK_HEADER, sizeof(OPENSSH_SK_HEADER) - 1));
@@ -618,6 +621,9 @@ int demosshkeyread(int argc, const char **argv) {
     ++i; // \n
 
     // Copy the lines into stripped, excluding the newlines
+    // memcmp OK: the footer starts with '-', a character that does not appear
+    // in the base64 alphabet, which makes this constant time with respect
+    // to the secret.
     while (memcmp(&str.buf[i], OPENSSH_SK_FOOTER,
                   sizeof(OPENSSH_SK_FOOTER) - 1) != 0) {
       usize linestart = i;
@@ -629,16 +635,21 @@ int demosshkeyread(int argc, const char **argv) {
              lineend - linestart);
       stripped.len += lineend - linestart;
     }
+    sodium_memzero(str.buf, str.len);
 
     LOGS(stripped);
   }
 
   // base64 decode
-  Bytes buf;
+  Bytes buf; // SECRET
   {
     usize sz = base64_decoded_maxlen(stripped.len);
     CHECK0(allocator_u8(al, &buf, sz));
-    CHECK0(base64_decode(stripped, &buf));
+    usize len;
+    CHECK0(sodium_base642bin(buf.buf, sz, (char *)stripped.buf, stripped.len, 0,
+                             &len, 0, sodium_base64_VARIANT_ORIGINAL));
+    buf.len = len;
+    sodium_memzero(stripped.buf, stripped.len);
   }
 
   // Parse
@@ -748,7 +759,7 @@ int demosshkeyread(int argc, const char **argv) {
   LOGB(bytes_from_arr(pk2));
   LOGB(bytes_from_arr(sk2));
   CHECK(sizeof(sk2) == sk.len * 2);
-  CHECK0(memcmp(sk2, sk.buf, sizeof(sk2)));
+  CHECK0(sodium_memcmp(sk2, sk.buf, sizeof(sk2)));
 
   // Free
   allocator_deinit(al);
