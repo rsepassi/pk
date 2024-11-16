@@ -592,11 +592,12 @@ int demosshkeyread(int argc, const char** argv) {
   const char* path = argv[1];
 
   Allocator al = allocatormi_heap();
+  CryptoAllocator cryptal = {&al};
+  Allocator sal = allocator_crypto(&cryptal);
 
   usize sz = 1024;
   Bytes str;  // SECRET
-  CHECK0(allocator_u8(al, &str, sz));
-  sodium_mlock(str.buf, str.len);
+  CHECK0(allocator_u8(sal, &str, sz));
 
   uv_file fd;
   CHECK0(uvco_fs_open(loop, path, UV_FS_O_RDONLY, 0, &fd));
@@ -606,13 +607,11 @@ int demosshkeyread(int argc, const char** argv) {
   CHECK(str.len < sz);
 
   CryptoSignSK sk;
-  CHECK0(keyio_openssh_parsekey(str, al, &sk));
+  CHECK0(keyio_keydecode_openssh(str, sal, &sk));
   LOGB(CryptoBytes(sk));
 
   // Free
-  sodium_memzero(str.buf, str.len);
-  sodium_munlock(str.buf, str.len);
-  allocator_free(al, str);
+  allocator_free(sal, str);
   allocator_deinit(al);
 
   return 0;
@@ -1050,186 +1049,80 @@ int demo_keyread(int argc, const char** argv) {
   CHECK(argc == 2, "must pass a path");
   const char* path = argv[1];
 
-  usize sz = 256;
-  Bytes buf = {sz, malloc(sz)};
+  // al is our general-purpose allocator
+  Allocator al = allocatormi_allocator();
+  CryptoAllocator cryptal_base = {al};
+  // sal is our secrets allocator
+  Allocator sal = allocator_crypto(&cryptal_base);
+
+  u8 contents_buf[256];
+  Bytes contents = bytes_from_arr(contents_buf);
 
   uv_file fd;
   CHECK0(uvco_fs_open(loop, path, UV_FS_O_RDONLY, 0, &fd));
-  CHECK0(uvco_fs_read(loop, fd, &buf, 0));
+  CHECK0(uvco_fs_read(loop, fd, &contents, 0));
   uvco_fs_close(loop, fd);
-  LOG("read %d", (int)buf.len);
-  CHECK(buf.len < sz);
+  LOG("read %d", (int)contents.len);
+  CHECK(contents.len < 256);
 
-  bool protected = false;
-  usize ctr_sz;
-  usize hdr_sz;
-  if (buf.len > sizeof(PK_SK_HEADER) &&
-      memcmp(buf.buf, PK_SK_HEADER, sizeof(PK_SK_HEADER) - 1) == 0) {
-    ctr_sz = sizeof(PK_SK_HEADER) + sizeof(PK_SK_FOOTER) - 2;
-    hdr_sz = sizeof(PK_SK_HEADER) - 1;
-  } else if (buf.len > sizeof(PK_SKP_HEADER) &&
-             memcmp(buf.buf, PK_SKP_HEADER, sizeof(PK_SKP_HEADER) - 1) == 0) {
-    protected = true;
-    ctr_sz = sizeof(PK_SKP_HEADER) + sizeof(PK_SKP_FOOTER) - 2;
-    hdr_sz = sizeof(PK_SKP_HEADER) - 1;
-  } else {
-    CHECK(false, "unrecognized");
-  }
+  CryptoSignSK sk;
+  Bytes pw = {0};
+  CHECK0(keyio_keydecode(contents, pw, &sk));
+  LOGB(CryptoBytes(sk));
 
-  CHECK(buf.len > ctr_sz);
-  usize contents_len = buf.len - ctr_sz;
-  Bytes contents = {contents_len, buf.buf + hdr_sz};
-  LOG("contents %d", (int)contents.len);
-
-  Bytes dec;
-  {
-    usize sz = base64_decoded_maxlen(contents.len);
-    dec = (Str){sz, malloc(sz)};
-    CHECK0(base64_decode(contents, &dec));
-  }
-
-  if (!protected) {
-    LOGB(dec);
-    return 0;
-  }
-
-  CHECK(dec.len > (crypto_pwhash_SALTBYTES + crypto_secretbox_NONCEBYTES +
-                   crypto_secretbox_MACBYTES));
-
-  u8* salt = dec.buf;
-  u8* nonce = salt + crypto_pwhash_SALTBYTES;
-  u8* cipher = nonce + crypto_secretbox_NONCEBYTES;
-  usize cipher_len =
-      dec.len - crypto_secretbox_NONCEBYTES - crypto_pwhash_SALTBYTES;
-
-  Bytes pw;
-  CHECK0(pw_prompt(&pw));
-  LOG("pw len=%d", (int)pw.len);
-  // Derive the key
-  u8 key[crypto_secretbox_KEYBYTES];
-  {
-    u64 opslimit = crypto_pwhash_OPSLIMIT_INTERACTIVE;
-    u64 memlimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
-    CHECK0(crypto_pwhash(key, sizeof(key), (char*)pw.buf, pw.len, salt,
-                         opslimit, memlimit, crypto_pwhash_ALG_ARGON2ID13));
-  }
-  sodium_free(pw.buf);
-
-  LOGS(contents);
-  LOGB(((Bytes){crypto_pwhash_SALTBYTES, salt}));
-  LOGB(((Bytes){crypto_secretbox_NONCEBYTES, nonce}));
-  LOGB(((Bytes){crypto_secretbox_KEYBYTES, key}));
-
-  // Decrypt
-  CHECK0(crypto_secretbox_open_easy(cipher, cipher, cipher_len, nonce, key));
-
-  cipher_len -= crypto_secretbox_MACBYTES;
-  LOGB(((Bytes){cipher_len, cipher}));
-
-  free(buf.buf);
-
+  allocator_deinit(sal);
+  allocator_deinit(al);
   return 0;
 }
 
 int demo_keygen(int argc, const char** argv) {
+  // al is our general-purpose allocator
+  Allocator al = allocatormi_allocator();
+  CryptoAllocator cryptal_base = {al};
+  // sal is our secrets allocator
+  Allocator sal = allocator_crypto(&cryptal_base);
+
   // Generate a key
-  u8 pk[crypto_sign_ed25519_PUBLICKEYBYTES];
-  u8 sk[crypto_sign_ed25519_SECRETKEYBYTES];
-  if (crypto_sign_ed25519_keypair(pk, sk))
-    return 1;
-  LOGB(((Bytes){crypto_sign_ed25519_SEEDBYTES, sk}));
+  CryptoSignKeypair* keys;
+  CHECK0(Alloc_create(sal, &keys));
+  CHECK0(crypto_sign_ed25519_keypair((u8*)&keys->pk, (u8*)&keys->sk));
+  LOGB(CryptoBytes(keys->sk));
 
-  // Prompt for password
-  Bytes pw;
-  CHECK0(pw_prompt(&pw));
-  LOG("pw len=%d", (int)pw.len);
-  if (pw.len > 0) {
-    // Derive a key
-    u8 salt[crypto_pwhash_SALTBYTES];
-    randombytes_buf(salt, sizeof(salt));
-    u8 key[crypto_secretbox_KEYBYTES];
-    {
-      u64 opslimit = crypto_pwhash_OPSLIMIT_INTERACTIVE;
-      u64 memlimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
-      CHECK0(crypto_pwhash(key, sizeof(key), (char*)pw.buf, pw.len, salt,
-                           opslimit, memlimit, crypto_pwhash_ALG_ARGON2ID13));
-    }
-    sodium_free(pw.buf);
+  // Get a passphrase
+  u8 pw_buf[2048];
+  Bytes pw = bytes_from_arr(pw_buf);
+  CHECK0(keyio_getpass(&pw));
+  LOGS(pw);
 
-    // Encrypt the private key
-    usize sk_enc_sz = crypto_sign_ed25519_SEEDBYTES + crypto_secretbox_MACBYTES;
-    Bytes sk_enc = {sk_enc_sz, malloc(sk_enc_sz)};
-    u8 nonce[crypto_secretbox_NONCEBYTES];
-    randombytes_buf(nonce, sizeof(nonce));
-    CHECK0(crypto_secretbox_easy(sk_enc.buf, sk, crypto_sign_ed25519_SEEDBYTES,
-                                 nonce, key));
+  // Copy it for use in decode (keyencode will zero it out)
+  u8 pw_buf2[2048];
+  memcpy(pw_buf2, pw_buf, sizeof(pw_buf));
+  Bytes pw2 = bytes_from_arr(pw_buf2);
+  pw2.len = pw.len;
 
-    // Write the salt+nonce+key
-    LOG("write protected priv.key");
-    usize srcsz = sizeof(salt) + sizeof(nonce) + sk_enc.len;
-    Str src = (Str){srcsz, malloc(srcsz)};
-    memcpy(src.buf, salt, sizeof(salt));
-    memcpy(src.buf + sizeof(salt), nonce, sizeof(nonce));
-    memcpy(src.buf + sizeof(salt) + sizeof(nonce), sk_enc.buf, sk_enc.len);
+  // Encode the keys
+  Str sk_str;
+  Str pk_str;
+  CHECK0(keyio_keyencode(keys, pw, sal, &sk_str, &pk_str));
+  LOGS(sk_str);
+  LOGS(pk_str);
 
-    usize sz = base64_encoded_maxlen(srcsz);
-    Str enc = (Str){sz, malloc(sz)};
-    CHECK0(base64_encode(src, &enc));
-
-    uv_file fd;
-    CHECK0(uvco_fs_open(loop, "/tmp/priv.key",
-                        UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC,
-                        UVCO_DEFAULT_FILE_MODE, &fd));
-    usize nwritten;
-    CHECK0(uvco_fs_write(loop, fd, str_from_c(PK_SKP_HEADER), -1, &nwritten));
-    CHECK0(uvco_fs_write(loop, fd, enc, -1, &nwritten));
-    CHECK0(uvco_fs_write(loop, fd, str_from_c(PK_SKP_FOOTER), -1, &nwritten));
-    uvco_fs_close(loop, fd);
-
-    free(sk_enc.buf);
-    free(enc.buf);
-  } else {
-    sodium_free(pw.buf);
-    LOG("write unprotected priv.key");
-    usize sz = base64_encoded_maxlen(crypto_sign_ed25519_SEEDBYTES);
-    Str enc = (Str){sz, malloc(sz)};
-    CHECK0(base64_encode((Bytes){crypto_sign_ed25519_SEEDBYTES, sk}, &enc));
-
-    uv_file fd;
-    CHECK0(uvco_fs_open(loop, "/tmp/priv.key",
-                        UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC,
-                        UVCO_DEFAULT_FILE_MODE, &fd));
-
-    usize nwritten;
-    CHECK0(uvco_fs_write(loop, fd, str_from_c(PK_SK_HEADER), -1, &nwritten));
-    CHECK0(uvco_fs_write(loop, fd, enc, -1, &nwritten));
-    CHECK0(uvco_fs_write(loop, fd, str_from_c(PK_SK_FOOTER), -1, &nwritten));
-
-    uvco_fs_close(loop, fd);
-
-    free(enc.buf);
-  }
-
-  LOG("write pub.key");
+  // Decode the keys
   {
-    usize sz = base64_encoded_maxlen(sizeof(pk));
-    Str enc = (Str){sz, malloc(sz)};
-    CHECK0(base64_encode((Bytes){sizeof(pk), pk}, &enc));
-
-    uv_file fd;
-    CHECK0(uvco_fs_open(loop, "/tmp/pub.key",
-                        UV_FS_O_WRONLY | UV_FS_O_CREAT | UV_FS_O_TRUNC,
-                        UVCO_DEFAULT_FILE_MODE, &fd));
-
-    usize nwritten;
-    CHECK0(uvco_fs_write(loop, fd, str_from_c("Ed25519 "), -1, &nwritten));
-    CHECK0(uvco_fs_write(loop, fd, enc, -1, &nwritten));
-    CHECK0(uvco_fs_write(loop, fd, str_from_c("\n"), -1, &nwritten));
-
-    uvco_fs_close(loop, fd);
-    free(enc.buf);
+    CryptoSignSK sk;
+    if (!keyio_key_is_pwprotected(sk_str))
+      pw2 = BytesZero;
+    CHECK0(keyio_keydecode(sk_str, pw2, &sk));
+    CHECK0(sodium_memcmp((u8*)&sk, (u8*)&keys->sk, sizeof(sk)));
   }
 
+  // Cleanup
+  allocator_free(sal, sk_str);
+  allocator_free(sal, pk_str);
+  Alloc_destroy(sal, keys);
+
+  allocator_deinit(sal);
+  allocator_deinit(al);
   return 0;
 }
 

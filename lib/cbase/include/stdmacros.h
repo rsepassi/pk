@@ -27,6 +27,11 @@
 #define CBASE_ALIGN(x, align) ((x) + (-(uintptr_t)(x) & ((align)-1)))
 #define CBASE_ALIGNB(x, align) (((x) + ((align)-1)) & ~((align)-1))
 
+#ifndef ALIGN
+#define ALIGN CBASE_ALIGN
+#define ALIGNB CBASE_ALIGNB
+#endif
+
 #ifndef CLAMP
 #define CLAMP(a, x, b) (((x) < (a)) ? (a) : ((x) > (b)) ? (b) : (x))
 #endif
@@ -49,11 +54,6 @@
 #define UNIQUENAME(prefix) CONCAT(prefix, __LINE__)
 #endif
 
-#ifndef ALIGN
-#define ALIGN CBASE_ALIGN
-#define ALIGNB CBASE_ALIGNB
-#endif
-
 #define SWAP_U32(x)                                                            \
   (((x) >> 24) | (((x) & 0x00FF0000) >> 8) | (((x) & 0x0000FF00) << 8) |       \
    ((x) << 24))
@@ -65,3 +65,13 @@ static inline uint64_t SWAP_U64(uint64_t val) {
         ((val >> 16) & 0x0000FFFF0000FFFFULL);
   return (val << 32) | (val >> 32);
 }
+
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__)
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define BYTE_ORDER_BE
+#else
+#define BYTE_ORDER_LE
+#endif
+#else
+#error "Cannot determine endianness"
+#endif

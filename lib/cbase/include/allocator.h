@@ -17,6 +17,11 @@ typedef struct {
 
 #define Alloc_alloc(a, b, T, n)                                                \
   allocator_alloc(a, b, sizeof(T) * n, _Alignof(T))
+#define Alloc_create(a, pptr)                                                  \
+  allocator_create(a, (void**)pptr, sizeof(__typeof__(**pptr)),                \
+                   _Alignof(__typeof__(**pptr)))
+#define Alloc_destroy(a, ptr)                                                  \
+  allocator_destroy(a, (void*)ptr, sizeof(__typeof__(*ptr)))
 
 static inline AllocStatus allocator_u8(Allocator a, Bytes* b, usize sz) {
   b->len = 0;
@@ -29,7 +34,25 @@ static inline AllocStatus allocator_alloc(Allocator a, Bytes* b, usize sz,
   return a.alloc(a.ctx, b, sz, align);
 }
 
+static inline AllocStatus allocator_realloc(Allocator a, Bytes* b, usize sz,
+                                            usize align) {
+  return a.alloc(a.ctx, b, sz, align);
+}
+
+static inline AllocStatus allocator_create(Allocator a, void** p, usize sz,
+                                           usize align) {
+  Bytes b;
+  AllocStatus rc = allocator_alloc(a, &b, sz, align);
+  *p = b.buf;
+  return rc;
+}
+
 static inline AllocStatus allocator_free(Allocator a, Bytes b) {
+  return a.alloc(a.ctx, &b, 0, 0);
+}
+
+static inline AllocStatus allocator_destroy(Allocator a, void* p, usize sz) {
+  Bytes b = {sz, p};
   return a.alloc(a.ctx, &b, 0, 0);
 }
 

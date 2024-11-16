@@ -9,3 +9,23 @@ u8 crypto_init() {
 
   return sodium_init();
 }
+
+static AllocStatus alloc_crypto(void* ctx, Bytes* buf, usize sz, usize align) {
+  CryptoAllocator* al = ctx;
+
+  if (sz == 0)
+    sodium_munlock(buf->buf, buf->len);
+
+  AllocStatus rc = al->base.alloc(al->base.ctx, buf, sz, align);
+  if (rc)
+    return rc;
+
+  if (sz)
+    if (sodium_mlock(buf->buf, buf->len))
+      return 1;
+  return 0;
+}
+
+Allocator allocator_crypto(CryptoAllocator* base) {
+  return (Allocator){base, alloc_crypto, 0};
+}

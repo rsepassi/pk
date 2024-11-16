@@ -19,6 +19,10 @@ typedef struct __attribute__((packed)) {
   CryptoSignPK pk;
 } CryptoSignSK;
 typedef struct {
+  CryptoSignPK pk;
+  CryptoSignSK sk;
+} CryptoSignKeypair;
+typedef struct {
   u8 bytes[crypto_sign_ed25519_BYTES];
 } CryptoSig;
 
@@ -50,3 +54,8 @@ typedef struct {
 
 // Initializes libsodium and does some checks
 u8 crypto_init(void);
+
+typedef struct {
+  Allocator base;
+} CryptoAllocator;
+Allocator allocator_crypto(CryptoAllocator* base);

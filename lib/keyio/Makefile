@@ -1,7 +1,7 @@
 HDRS := $(wildcard include/*.h) $(wildcard src/*.h)
 SRCS := $(wildcard src/*.c)
 OBJS := $(SRCS:.c=.$(O))
-DEPS := lib/cbase lib/crypto lib/base64 vendor/sodium
+DEPS := lib/cbase lib/crypto lib/base64 lib/getpass vendor/sodium
 
 libkeyio.a: $(OBJS) Makefile | deps
 	$(AR) rcs $@ $(OBJS)
