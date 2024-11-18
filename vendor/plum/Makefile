@@ -10,4 +10,5 @@ libplum.a: $(OBJS) Makefile
 %.$(O): %.c $(HDRS) Makefile
 	$(CC) -c $(CFLAGS) -Iinclude/plum -o $@ $<
 
+include $(ROOTDIR)/scripts/nodeps.mk
 include $(ROOTDIR)/scripts/clean.mk

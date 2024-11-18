@@ -8,7 +8,8 @@ HDRS := $(wildcard include/*.h) $(wildcard include/uv/*.h)
 
 zig-out/lib/libuv.a: $(SRCS) $(HDRS) Makefile
 	zig build -Doptimize=$(ZIG_OPT) -Dtarget=$(TARGET)
+	touch zig-out/lib/libuv.a
 	touch .build
 
-clean:
-	rm -rf .zig-cache zig-out .build
+include $(ROOTDIR)/scripts/nodeps.mk
+include $(ROOTDIR)/scripts/clean.mk

@@ -15,4 +15,5 @@ libtai.a: $(OBJS) Makefile
 %.$(O): %.c $(HDRS) Makefile
 	$(CC) -c $(CFLAGS) -Iinclude -o $@ $<
 
+include $(ROOTDIR)/scripts/nodeps.mk
 include $(ROOTDIR)/scripts/clean.mk

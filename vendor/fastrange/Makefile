@@ -1,3 +1,4 @@
-.PHONY: default clean
+.PHONY: default clean deps
 default:
 clean:
+deps:

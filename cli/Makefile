@@ -6,7 +6,7 @@ DEPS_PATHS := $(wildcard $(ROOTDIR)/lib/*) \
 							$(wildcard $(ROOTDIR)/vendor/*)
 DEPS := $(DEPS_PATHS:$(ROOTDIR)/%=%)
 
-BUILD_DEPS = $(HDRS) Makefile | deps build_dir
+BUILD_DEPS = $(HDRS) Makefile build/.keep .deps.ok
 
 build/cli$(EXE): $(OBJS) $(SRCS) $(BUILD_DEPS)
 	$(CC) -o $@ $(CFLAGS) $(OBJS) $(LDFLAGS) $(DEPS_LDFLAGS) -lc
@@ -14,9 +14,9 @@ build/cli$(EXE): $(OBJS) $(SRCS) $(BUILD_DEPS)
 %.$(O): %.c $(BUILD_DEPS)
 	$(CC) -c $(CFLAGS) -o $@ $(DEPS_CFLAGS) $<
 
-.PHONY: build_dir
-build_dir:
+build/.keep:
 	mkdir -p build
+	touch build/.keep
 
 include $(ROOTDIR)/scripts/deps.mk
 include $(ROOTDIR)/scripts/clean.mk

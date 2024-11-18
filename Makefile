@@ -15,8 +15,9 @@ DEPS_PATHS := $(wildcard $(ROOTDIR)/lib/*) \
 							$(wildcard $(ROOTDIR)/vendor/*)
 DEPS := $(DEPS_PATHS:$(ROOTDIR)/%=%)
 
-.PHONY: cli clean-all fmt
+.PHONY: cli clean-all fmt dir
 cli:
+	$(MAKE) -C cli deps
 	$(MAKE) -C cli
 
 clean-all: clean-deps clean-test
@@ -25,6 +26,10 @@ clean-all: clean-deps clean-test
 fmt:
 	clang-format -i `find lib -type f -name '*.c'` `find lib -type f -name '*.h'`
 	clang-format -i `find cli -type f -name '*.c'` `find cli -type f -name '*.h'`
+
+dir:
+	$(MAKE) -C $(DIR) deps
+	$(MAKE) -C $(DIR)
 
 include $(ROOTDIR)/scripts/deps.mk
 include $(ROOTDIR)/scripts/test.mk

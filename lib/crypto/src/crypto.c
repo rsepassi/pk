@@ -16,7 +16,7 @@ static AllocStatus alloc_crypto(void* ctx, Bytes* buf, usize sz, usize align) {
   if (sz == 0)
     sodium_munlock(buf->buf, buf->len);
 
-  AllocStatus rc = al->base.alloc(al->base.ctx, buf, sz, align);
+  AllocStatus rc = allocator_realloc(al->base, buf, sz, align);
   if (rc)
     return rc;
 

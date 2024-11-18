@@ -19,8 +19,8 @@ test/%: test/%.c vendor/unity
 test/%.ok: test/%
 	./$< && touch $@
 
-.PHONY: vendor/unity unity-clean clean-test
-vendor/unity:
+.PHONY: unity-build unity-clean clean-test
+unity-build:
 	$(MAKE) -C $(ROOTDIR)/$@
 
 unity-clean:

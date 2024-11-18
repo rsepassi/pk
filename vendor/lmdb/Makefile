@@ -4,11 +4,12 @@ OBJS := $(SRCS:.c=.$(O))
 CFLAGS += -Wno-unused-but-set-variable \
 					-Wno-unused-label
 
-src/%.$(O): src/%.c Makefile
-	$(CC) -c -Iinclude $(CFLAGS) -o $@ $<
-
 liblmdb.a: $(OBJS) Makefile
 	$(AR) rcs $@ $(OBJS)
 	touch .build
 
+src/%.$(O): src/%.c Makefile
+	$(CC) -c -Iinclude $(CFLAGS) -o $@ $<
+
+include $(ROOTDIR)/scripts/nodeps.mk
 include $(ROOTDIR)/scripts/clean.mk

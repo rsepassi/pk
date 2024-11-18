@@ -3,4 +3,5 @@ libunity.a: src/unity.c
 	$(AR) rcs $@ unity.$(O)
 	touch .build
 
+include $(ROOTDIR)/scripts/nodeps.mk
 include $(ROOTDIR)/scripts/clean.mk

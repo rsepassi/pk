@@ -1,15 +1,21 @@
 # Cross-platform support
 
-ifndef OPT
-export OPT := -O2
-export ZIG_OPT := ReleaseFast
-else
-export OPT
-export ZIG_OPT
-endif
-
 ifndef TARGET
-export TARGET := x86_64-linux-musl
+	OS := $(shell uname)
+	ARCH := $(shell uname -m)
+	ifeq ($(OS), Darwin)
+		ifeq ($(ARCH), arm64)
+			export TARGET := aarch64-macos
+		else
+			export TARGET := x86_64-macos
+		endif
+	else
+		ifeq ($(ARCH), arm64)
+			export TARGET := aarch64-linux-musl
+		else
+			export TARGET := x86_64-linux-musl
+		endif
+	endif
 else
 export TARGET
 endif

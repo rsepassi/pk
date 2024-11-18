@@ -31,4 +31,6 @@ libmimalloc.a: $(OBJS) Makefile
 	$(CC) -c $(CFLAGS) -Iinclude -o $@ $<
 
 CLEAN_EXTRAS := src/prim/*.o src/prim/*.obj
+
+include $(ROOTDIR)/scripts/nodeps.mk
 include $(ROOTDIR)/scripts/clean.mk

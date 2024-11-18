@@ -3,4 +3,5 @@ libargparse.a: src/argparse.c | Makefile
 	$(AR) rcs $@ argparse.$(O)
 	touch .build
 
+include $(ROOTDIR)/scripts/nodeps.mk
 include $(ROOTDIR)/scripts/clean.mk

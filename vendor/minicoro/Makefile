@@ -3,4 +3,5 @@ libminicoro.a: minicoro.c minicoro.h Makefile
 	$(AR) rcs $@ minicoro.$(O)
 	touch .build
 
+include $(ROOTDIR)/scripts/nodeps.mk
 include $(ROOTDIR)/scripts/clean.mk

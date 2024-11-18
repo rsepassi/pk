@@ -1,7 +1,11 @@
 pk
 ---
 
+Build CLI:
 make cli && ./cli/build/cli
+
+Build a library:
+make dir DIR=lib/cbase
 
 cli/: cli code
 doc/: notes and documentation

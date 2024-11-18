@@ -592,7 +592,7 @@ int demosshkeyread(int argc, const char** argv) {
   const char* path = argv[1];
 
   Allocator al = allocatormi_heap();
-  CryptoAllocator cryptal = {&al};
+  CryptoAllocator cryptal = {al};
   Allocator sal = allocator_crypto(&cryptal);
 
   usize sz = 1024;

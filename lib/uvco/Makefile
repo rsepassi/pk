@@ -3,11 +3,11 @@ SRCS := $(wildcard src/*.c)
 OBJS := $(SRCS:.c=.$(O))
 DEPS := lib/cbase vendor/uv vendor/minicoro
 
-libuvco.a: $(OBJS) Makefile | deps
+libuvco.a: $(OBJS) Makefile .deps.ok
 	$(AR) rcs $@ $(OBJS)
 	touch .build
 
-%.$(O): %.c $(HDRS) Makefile | deps
+%.$(O): %.c $(HDRS) Makefile .deps.ok
 	$(CC) -c $(CFLAGS) -Iinclude $(DEPS_CFLAGS) -o $@ $<
 
 include $(ROOTDIR)/scripts/deps.mk
