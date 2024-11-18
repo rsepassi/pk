@@ -11,9 +11,6 @@
 #define KEEPALIVE_MS (NIK_LIMIT_KEEPALIVE_TIMEOUT_SECS * MS_PER_SEC)
 #define REJECT_MS (NIK_LIMIT_REJECT_AFTER_SECS * MS_PER_SEC)
 
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
-#define MAX(x, y) ((x) > (y) ? (x) : (y))
-
 typedef struct {
   u64 keepalive;
   u64 startwait;
@@ -79,6 +76,7 @@ static inline u64 keepalive_delay(NIK_Cxn* cxn, u64 now) {
 
 #define DELAY_FMT(x) (int)(x)
 static inline void debug_log_timers(TimerDelays delays) {
+  (void)delays;
   DLOG(
       "TimerDelays(startwait=%d, reconnect=%d, responsewait=%d, "
       "expiration=%d, keepalive=%d)",
@@ -145,7 +143,7 @@ static void error(NIK_Cxn* cxn, Bytes err) {
 static void handshake_init(NIK_Cxn* cxn) {
   if (nik_handshake_init(&cxn->handshake.initiator.handshake, cxn->keys,
                          cxn->id, &cxn->handshake.initiator.msg)) {
-    error(cxn, str_from_c("bad handshake init"));
+    error(cxn, Str("bad handshake init"));
     return;
   }
 
@@ -167,11 +165,11 @@ static void handshake_respond_checked(NIK_Cxn* cxn, NIK_Handshake* state,
     return;
   if (nik_handshake_respond(state, cxn->id, msg1,
                             &cxn->handshake.responder.msg)) {
-    error(cxn, str_from_c("bad handshake response"));
+    error(cxn, Str("bad handshake response"));
     return;
   }
   if (nik_handshake_final(state, &cxn->next)) {
-    error(cxn, str_from_c("bad handshake response"));
+    error(cxn, Str("bad handshake response"));
     return;
   }
 
@@ -213,18 +211,18 @@ static void handshake_init_send(NIK_Cxn* cxn, Bytes* msg, u64 now) {
   cxn->handshake_state = NIK_CxnHState_I_R2IWait;
 }
 
-static void handshake_response_send(NIK_Cxn* cxn, Bytes* msg, u64 now) {
+static void handshake_response_send(NIK_Cxn* cxn, Bytes* msg) {
   msg->len = sizeof(NIK_HandshakeMsg2);
   msg->buf = malloc(msg->len);
   memcpy(msg->buf, &cxn->handshake.responder.msg, msg->len);
   cxn->handshake_state = NIK_CxnHState_R_DataWait;
 }
 
-static NIK_Cxn_Status keepalive_send(NIK_Cxn* cxn, Bytes* msg, u64 now) {
+static NIK_Cxn_Status keepalive_send(NIK_Cxn* cxn, Bytes* msg) {
   msg->len = sizeof(NIK_MsgHeader);
   msg->buf = malloc(msg->len);
   if (nik_msg_send(&cxn->current, BytesZero, *msg)) {
-    error(cxn, str_from_c("could not create keepalive"));
+    error(cxn, Str("could not create keepalive"));
     return 1;
   }
   msg->buf[0] = NIK_Msg_Keepalive;
@@ -242,7 +240,7 @@ static void cxn_init(NIK_Cxn* cxn, NIK_Keys keys, NIK_CxnCb cb,
 }
 
 static void cxn_expire(NIK_Cxn* cxn) {
-  error(cxn, str_from_c("connection expired"));
+  error(cxn, Str("connection expired"));
 
   sodium_memzero(&cxn->current, sizeof(cxn->current));
   sodium_memzero(&cxn->prev, sizeof(cxn->prev));
@@ -356,12 +354,12 @@ u64 nik_cxn_get_next_wait_delay(NIK_Cxn* cxn, u64 now, u64 maxdelay) {
 
 void nik_cxn_incoming(NIK_Cxn* cxn, Bytes msg, u64 now) {
   if (session_expired(cxn, now))
-    error(cxn, str_from_c("session expired"));
+    error(cxn, Str("session expired"));
 
   expire_timers(cxn, now);
 
   if (msg.len <= 0) {
-    error(cxn, str_from_c("received empty message"));
+    error(cxn, Str("received empty message"));
     return;
   }
 
@@ -432,7 +430,7 @@ void nik_cxn_incoming(NIK_Cxn* cxn, Bytes msg, u64 now) {
 
 NIK_Cxn_Status nik_cxn_outgoing(NIK_Cxn* cxn, Bytes* msg, u64 now) {
   if (session_expired(cxn, now)) {
-    error(cxn, str_from_c("session expired"));
+    error(cxn, Str("session expired"));
     return 0;
   }
 
@@ -447,7 +445,7 @@ NIK_Cxn_Status nik_cxn_outgoing(NIK_Cxn* cxn, Bytes* msg, u64 now) {
   }
   // 2. Handshake response
   if (cxn->handshake_state == NIK_CxnHState_R_R2IReady) {
-    handshake_response_send(cxn, msg, now);
+    handshake_response_send(cxn, msg);
     return NIK_Cxn_Status_MsgReady;
   }
 
@@ -457,11 +455,11 @@ NIK_Cxn_Status nik_cxn_outgoing(NIK_Cxn* cxn, Bytes* msg, u64 now) {
 
   // 3. Keepalive
   if (keepalive_delay(cxn, now) == 0) {
-    if (!keepalive_send(cxn, msg, now)) {
+    if (!keepalive_send(cxn, msg)) {
       log_keepalivesend(cxn, now);
       return NIK_Cxn_Status_MsgReady;
     } else {
-      error(cxn, str_from_c("could not send keepalive"));
+      error(cxn, Str("could not send keepalive"));
     }
   }
 
@@ -474,7 +472,7 @@ NIK_Cxn_Status nik_cxn_outgoing(NIK_Cxn* cxn, Bytes* msg, u64 now) {
   msg->buf = malloc(msg->len);
   NIK_Status status = nik_msg_send(&cxn->current, payload, *msg);
   if (status != NIK_OK) {
-    error(cxn, str_from_c("unable to encrypt payload"));
+    error(cxn, Str("unable to encrypt payload"));
     goto err;
   }
   log_datasend(cxn, now);

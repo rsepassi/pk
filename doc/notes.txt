@@ -1,3 +1,7 @@
+cli
+* Consider switching from argparse to optparse
+  https://github.com/skeeto/optparse
+
 crypto
 * Allocator for secrets that does malloc+lock and zero+free
 

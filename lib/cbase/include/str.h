@@ -1,5 +1,7 @@
 #pragma once
 
+#include "stdmacros.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -11,6 +13,8 @@ typedef struct {
 
 typedef Str Bytes;
 #define BytesZero ((Bytes){0, 0})
+
+#define Str(s) ((Str){STRLEN((s)), (u8*)(s)})
 
 static inline Str str_from_c(const char* buf) {
   return (Str){.len = strlen(buf), .buf = (uint8_t*)buf};

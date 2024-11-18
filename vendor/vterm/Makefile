@@ -1,6 +1,10 @@
 HDRS := $(wildcard include/*.h) $(wildcard src/*.h)
 SRCS := $(wildcard src/*.c)
 OBJS := $(SRCS:.c=.$(O))
+CFLAGS += -Wno-unused-parameter \
+					-Wno-conversion \
+					-Wno-missing-field-initializers \
+					-Wno-sign-compare
 
 libvterm.a: $(OBJS) Makefile
 	$(AR) rcs $@ $(OBJS)

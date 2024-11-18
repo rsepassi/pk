@@ -7,6 +7,7 @@ DEPS_PATHS := $(wildcard $(ROOTDIR)/lib/*) \
 DEPS := $(DEPS_PATHS:$(ROOTDIR)/%=%)
 
 BUILD_DEPS = $(HDRS) Makefile build/.keep .deps.ok
+CFLAGS += -Wno-unused-parameter
 
 build/cli$(EXE): $(OBJS) $(SRCS) $(BUILD_DEPS)
 	$(CC) -o $@ $(CFLAGS) $(OBJS) $(LDFLAGS) $(DEPS_LDFLAGS) -lc

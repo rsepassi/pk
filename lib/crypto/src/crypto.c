@@ -2,7 +2,7 @@
 
 #include "log.h"
 
-u8 crypto_init() {
+int crypto_init() {
   // sanity checks
   STATIC_CHECK(crypto_sign_ed25519_SECRETKEYBYTES == sizeof(CryptoSignSK));
   STATIC_CHECK(sizeof(CryptoSeed) == sizeof(CryptoSignSeed));

@@ -26,7 +26,7 @@ static void udp_send_cb(uv_udp_send_t* req, int status) {
 }
 
 ssize_t uvco_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path) {
-  co_wait_t wait = {mco_running(), 0};
+  co_wait_t wait = {mco_running(), 0, 0};
   req->data = &wait;
   ssize_t rc = uv_fs_stat(loop, req, path, fs_cb);
   if (rc != 0)
@@ -36,18 +36,18 @@ ssize_t uvco_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path) {
 }
 
 int uvco_fs_mkdir(uv_loop_t* loop, const char* path, int mode) {
-  co_wait_t wait = {mco_running(), 0};
+  co_wait_t wait = {mco_running(), 0, 0};
   uv_fs_t req;
   req.data = &wait;
   if (uv_fs_mkdir(loop, &req, path, mode, fs_cb) != 0)
     return 1;
   CO_AWAIT(&wait);
   uv_fs_req_cleanup(&req);
-  return req.result;
+  return (int)req.result;
 }
 
 void uvco_sleep(uv_loop_t* loop, u64 ms) {
-  co_wait_t wait = {mco_running(), 0};
+  co_wait_t wait = {mco_running(), 0, 0};
   uv_timer_t* timer = malloc(sizeof(uv_timer_t));
   uv_timer_init(loop, timer);
   timer->data = &wait;
@@ -57,9 +57,9 @@ void uvco_sleep(uv_loop_t* loop, u64 ms) {
   uv_close((uv_handle_t*)timer, del_handle_cb);
 }
 
-int uvco_udp_send(uv_loop_t* loop, uv_udp_t* handle, const uv_buf_t bufs[],
-                  unsigned int nbufs, const struct sockaddr* addr) {
-  co_wait_t wait = {mco_running(), 0};
+int uvco_udp_send(uv_udp_t* handle, const uv_buf_t bufs[], unsigned int nbufs,
+                  const struct sockaddr* addr) {
+  co_wait_t wait = {mco_running(), 0, 0};
   uv_udp_send_t req;
   req.data = &wait;
   CHECK0(uv_udp_send(&req, handle, bufs, nbufs, addr, udp_send_cb));
@@ -71,7 +71,7 @@ int uvco_udp_send(uv_loop_t* loop, uv_udp_t* handle, const uv_buf_t bufs[],
 int uvco_fs_open(uv_loop_t* loop, const char* path, int flags, int mode,
                  uv_file* fd) {
   int rc = 1;
-  co_wait_t wait = {mco_running(), 0};
+  co_wait_t wait = {mco_running(), 0, 0};
   uv_fs_t* req = malloc(sizeof(uv_fs_t));
   req->data = &wait;
   if (uv_fs_open(loop, req, path, flags, mode, fs_cb))
@@ -79,7 +79,7 @@ int uvco_fs_open(uv_loop_t* loop, const char* path, int flags, int mode,
   CO_AWAIT(&wait);
   if (req->result < 0)
     goto end;
-  *fd = req->result;
+  *fd = (uv_file)req->result;
   rc = 0;
 end:
   uv_fs_req_cleanup(req);
@@ -90,10 +90,10 @@ end:
 int uvco_fs_write(uv_loop_t* loop, uv_file fd, Bytes contents, usize offset,
                   usize* nwritten) {
   int rc = 1;
-  co_wait_t wait = {mco_running(), 0};
+  co_wait_t wait = {mco_running(), 0, 0};
   uv_fs_t* req = malloc(sizeof(uv_fs_t));
   req->data = &wait;
-  uv_buf_t buf = uv_buf_init((char*)contents.buf, contents.len);
+  uv_buf_t buf = uv_buf_init((char*)contents.buf, (uint)contents.len);
   if (uv_fs_write(loop, req, fd, &buf, 1, offset, fs_cb))
     goto end;
   CO_AWAIT(&wait);
@@ -108,7 +108,7 @@ end:
 }
 
 void uvco_fs_close(uv_loop_t* loop, uv_file fd) {
-  co_wait_t wait = {mco_running(), 0};
+  co_wait_t wait = {mco_running(), 0, 0};
   uv_fs_t* req = malloc(sizeof(uv_fs_t));
   req->data = &wait;
   if (uv_fs_close(loop, req, fd, fs_cb))
@@ -135,10 +135,10 @@ int uvco_fs_writefull(uv_loop_t* loop, const char* path, Bytes contents) {
 
 int uvco_fs_read(uv_loop_t* loop, uv_file fd, Bytes* contents, usize offset) {
   int rc = 1;
-  co_wait_t wait = {mco_running(), 0};
+  co_wait_t wait = {mco_running(), 0, 0};
   uv_fs_t* req = malloc(sizeof(uv_fs_t));
   req->data = &wait;
-  uv_buf_t buf = uv_buf_init((char*)contents->buf, contents->len);
+  uv_buf_t buf = uv_buf_init((char*)contents->buf, (uint)contents->len);
   if (uv_fs_read(loop, req, fd, &buf, 1, offset, fs_cb))
     goto end;
   CO_AWAIT(&wait);

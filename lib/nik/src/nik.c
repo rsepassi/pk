@@ -2,6 +2,7 @@
 
 #include "log.h"
 #include "sodium.h"
+#include "stdmacros.h"
 #include "taia.h"
 
 #define NIK_IDENTIFIER "nik xos v1"
@@ -283,7 +284,7 @@ NIK_Status nik_handshake_init(NIK_Handshake* state, const NIK_Keys keys,
   // C_i := Hash(Construction)
   u8* C_i = state->chaining_key;
   if (crypto_generichash_blake2b(C_i, NIK_CHAIN_SZ, (u8*)NIK_CONSTRUCTION,
-                                 sizeof(NIK_CONSTRUCTION) - 1, 0, 0))
+                                 STRLEN(NIK_CONSTRUCTION), 0, 0))
     return 1;
   // H_i
   crypto_generichash_blake2b_state* H_state = &state->hash;
@@ -291,11 +292,11 @@ NIK_Status nik_handshake_init(NIK_Handshake* state, const NIK_Keys keys,
     return 1;
   // C_i := Hash(Construction)
   if (crypto_generichash_blake2b_update(H_state, (u8*)NIK_CONSTRUCTION,
-                                        sizeof(NIK_CONSTRUCTION) - 1))
+                                        STRLEN(NIK_CONSTRUCTION)))
     return 1;
   // H_i := Hash(C_i || Identifier)
   if (crypto_generichash_blake2b_update(H_state, (u8*)NIK_IDENTIFIER,
-                                        sizeof(NIK_IDENTIFIER) - 1))
+                                        STRLEN(NIK_IDENTIFIER)))
     return 1;
   // H_i := Hash(H_i || S_pub_r)
   if (crypto_generichash_blake2b_update(H_state, (u8*)S_pub_r,
@@ -564,7 +565,7 @@ NIK_Status nik_handshake_init_check(NIK_Handshake* state, const NIK_Keys keys,
   // C_i := Hash(Construction)
   u8* C_i = state->chaining_key;
   if (crypto_generichash_blake2b(C_i, NIK_CHAIN_SZ, (u8*)NIK_CONSTRUCTION,
-                                 sizeof(NIK_CONSTRUCTION) - 1, 0, 0))
+                                 STRLEN(NIK_CONSTRUCTION), 0, 0))
     return 1;
   // H_i
   crypto_generichash_blake2b_state* H_state = &state->hash;
@@ -572,11 +573,11 @@ NIK_Status nik_handshake_init_check(NIK_Handshake* state, const NIK_Keys keys,
     return 1;
   // C_i := Hash(Construction)
   if (crypto_generichash_blake2b_update(H_state, (u8*)NIK_CONSTRUCTION,
-                                        sizeof(NIK_CONSTRUCTION) - 1))
+                                        STRLEN(NIK_CONSTRUCTION)))
     return 1;
   // H_i := Hash(C_i || Identifier)
   if (crypto_generichash_blake2b_update(H_state, (u8*)NIK_IDENTIFIER,
-                                        sizeof(NIK_IDENTIFIER) - 1))
+                                        STRLEN(NIK_IDENTIFIER)))
     return 1;
   // H_i := Hash(H_i || S_pub_r)
   if (crypto_generichash_blake2b_update(H_state, (u8*)S_pub_r,
@@ -728,7 +729,7 @@ NIK_Status nik_msg_send(NIK_Session* session, Str payload, Str send) {
   u8* crypt = (u8*)(send.buf + sizeof(NIK_MsgHeader));
   u64 payload_len = send.len - sizeof(NIK_MsgHeader);
   memcpy(crypt, payload.buf, payload.len);
-  header->payload_len = payload.len;
+  header->payload_len = (u16)payload.len;
 
   header->type = NIK_Msg_Data;
   header->receiver = session->remote_idx;

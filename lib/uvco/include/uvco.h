@@ -39,5 +39,5 @@ void uvco_fs_close(uv_loop_t* loop, uv_file fd);
 int uvco_fs_writefull(uv_loop_t* loop, const char* path, Bytes contents);
 
 // UDP
-int uvco_udp_send(uv_loop_t* loop, uv_udp_t* handle, const uv_buf_t bufs[],
-                  unsigned int nbufs, const struct sockaddr* addr);
+int uvco_udp_send(uv_udp_t* handle, const uv_buf_t bufs[], unsigned int nbufs,
+                  const struct sockaddr* addr);

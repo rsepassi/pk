@@ -6,6 +6,7 @@ CFLAGS += -std=c89 \
 					-Wno-return-type \
 					-Wno-inconsistent-dllimport \
 					-Wno-incompatible-pointer-types \
+					-Wno-conversion \
 					-D_GNU_SOURCE
 
 libtai.a: $(OBJS) Makefile

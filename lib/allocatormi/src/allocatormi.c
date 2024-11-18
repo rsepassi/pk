@@ -5,6 +5,8 @@
 #include <sys/mman.h>
 
 static int alloc(void* ctx, Bytes* buf, usize sz, usize align) {
+  (void)ctx;
+
   if (sz == 0) {
     mi_free(buf->buf);
     buf->buf = NULL;

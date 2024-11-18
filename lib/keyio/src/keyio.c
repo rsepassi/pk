@@ -3,6 +3,7 @@
 #include "base64.h"
 #include "getpass.h"
 #include "log.h"
+#include "stdmacros.h"
 
 #include <arpa/inet.h>
 #include <stdio.h>
@@ -20,7 +21,7 @@ int keyio_getpass(Bytes* pw) {
   fprintf(stderr, "passphrase > ");
   ssize_t pw_len = getpass((char*)pw->buf, pw->len);
   if (pw_len < 0)
-    return pw_len;
+    return (int)pw_len;
   pw->len = pw_len;
   return 0;
 }
@@ -49,7 +50,7 @@ static int encode(Bytes bin, Allocator al, Str header, Str footer, Str* out) {
   memcpy(outp, footer.buf, footer.len);
   outp += footer.len;
 
-  CHECK(outp - out->buf == outlen);
+  CHECK((usize)(outp - out->buf) == outlen);
   return 0;
 }
 
@@ -106,8 +107,8 @@ static int sk_pw_encode(const CryptoSignSK* sk, Str password, Allocator al,
   }
 
   // Prepare our final textual output
-  if (encode(bytes_from_arr(src), al, str_from_c(PK_SKP_HEADER),
-             str_from_c(PK_SKP_FOOTER), sk_out))
+  if (encode(bytes_from_arr(src), al, Str(PK_SKP_HEADER), Str(PK_SKP_FOOTER),
+             sk_out))
     return 1;
   sodium_memzero(src, sizeof(src));
 
@@ -118,15 +119,15 @@ static int sk_pw_encode(const CryptoSignSK* sk, Str password, Allocator al,
 }
 
 static int sk_encode(const CryptoSignSK* sk, Allocator al, Str* sk_out) {
-  if (encode(CryptoBytes(*sk), al, str_from_c(PK_SK_HEADER),
-             str_from_c(PK_SK_FOOTER), sk_out))
+  if (encode(CryptoBytes(*sk), al, Str(PK_SK_HEADER), Str(PK_SK_FOOTER),
+             sk_out))
     return 1;
   return 0;
 }
 
 static int pk_encode(const CryptoSignPK* pk, Allocator al, Str* pk_out) {
-  if (encode(CryptoBytes(*pk), al, str_from_c(PK_PK_HEADER),
-             str_from_c(PK_PK_FOOTER), pk_out))
+  if (encode(CryptoBytes(*pk), al, Str(PK_PK_HEADER), Str(PK_PK_FOOTER),
+             pk_out))
     return 1;
   return 0;
 }
@@ -149,7 +150,7 @@ int keyio_keyencode(const CryptoSignKeypair* keys, Str password, Allocator al,
 
 bool keyio_key_is_pwprotected(Str buf) {
   return (buf.len > sizeof(PK_SKP_HEADER) &&
-          memcmp(buf.buf, PK_SKP_HEADER, sizeof(PK_SKP_HEADER) - 1) == 0);
+          memcmp(buf.buf, PK_SKP_HEADER, STRLEN(PK_SKP_HEADER)) == 0);
 }
 
 int keyio_keydecode(Str buf, Str password, CryptoSignSK* out) {
@@ -158,15 +159,15 @@ int keyio_keydecode(Str buf, Str password, CryptoSignSK* out) {
   usize ctr_sz;
   usize hdr_sz;
   if (buf.len > sizeof(PK_SK_HEADER) &&
-      memcmp(buf.buf, PK_SK_HEADER, sizeof(PK_SK_HEADER) - 1) == 0) {
+      memcmp(buf.buf, PK_SK_HEADER, STRLEN(PK_SK_HEADER)) == 0) {
     protected = false;
     ctr_sz = sizeof(PK_SK_HEADER) + sizeof(PK_SK_FOOTER) - 2;
-    hdr_sz = sizeof(PK_SK_HEADER) - 1;
+    hdr_sz = STRLEN(PK_SK_HEADER);
   } else if (buf.len > sizeof(PK_SKP_HEADER) &&
-             memcmp(buf.buf, PK_SKP_HEADER, sizeof(PK_SKP_HEADER) - 1) == 0) {
+             memcmp(buf.buf, PK_SKP_HEADER, STRLEN(PK_SKP_HEADER)) == 0) {
     protected = true;
     ctr_sz = sizeof(PK_SKP_HEADER) + sizeof(PK_SKP_FOOTER) - 2;
-    hdr_sz = sizeof(PK_SKP_HEADER) - 1;
+    hdr_sz = STRLEN(PK_SKP_HEADER);
   } else {
     // Unrecognized header
     return 1;
@@ -263,17 +264,17 @@ int keyio_keydecode_openssh(Str str, Allocator al, CryptoSignSK* out) {
     // does not appear in the base64 alphabet, which makes this constant time
     // with respect to the secret.
     usize i = 0;
-    if (memcmp(&str.buf[i], OPENSSH_SK_HEADER, sizeof(OPENSSH_SK_HEADER) - 1))
+    if (memcmp(&str.buf[i], OPENSSH_SK_HEADER, STRLEN(OPENSSH_SK_HEADER)))
       goto end;
-    i += sizeof(OPENSSH_SK_HEADER) - 1;
+    i += STRLEN(OPENSSH_SK_HEADER);
     ++i;  // \n
 
     // Copy the lines into stripped, excluding the newlines
     // memcmp OK: the footer starts with '-', a character that does not appear
     // in the base64 alphabet, which makes this constant time with respect
     // to the secret.
-    while (memcmp(&str.buf[i], OPENSSH_SK_FOOTER,
-                  sizeof(OPENSSH_SK_FOOTER) - 1) != 0) {
+    while (memcmp(&str.buf[i], OPENSSH_SK_FOOTER, STRLEN(OPENSSH_SK_FOOTER)) !=
+           0) {
       usize linestart = i;
       while (i < str.len && str.buf[i] != '\n')
         ++i;

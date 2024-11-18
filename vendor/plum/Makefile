@@ -1,7 +1,7 @@
 HDRS := $(wildcard include/plum/*.h) $(wildcard src/*.h)
 SRCS := $(wildcard src/*.c)
 OBJS := $(SRCS:.c=.$(O))
-CFLAGS += -D_GNU_SOURCE -DPLUM_STATIC
+CFLAGS += -D_GNU_SOURCE -DPLUM_STATIC -Wno-conversion
 
 libplum.a: $(OBJS) Makefile
 	$(AR) rcs $@ $(OBJS)

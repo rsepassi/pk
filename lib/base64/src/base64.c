@@ -90,9 +90,9 @@ Base64_Status base64_decode(Bytes in, Bytes* out) {
     u8 c = b64_dec[in.buf[k + 2]];
     u8 d = b64_dec[in.buf[k + 3]];
 
-    out->buf[j++] = (a << 2) | ((b & 0xf0) >> 4);
-    out->buf[j++] = ((b & 0x0f) << 4) | ((c & 0x3c) >> 2);
-    out->buf[j++] = ((c & 0x03) << 6) | (d & 0x3f);
+    out->buf[j++] = (u8)(a << 2) | ((b & 0xf0) >> 4);
+    out->buf[j++] = (u8)((b & 0x0f) << 4) | ((c & 0x3c) >> 2);
+    out->buf[j++] = (u8)((c & 0x03) << 6) | (d & 0x3f);
   }
 
   if (padded) {
@@ -101,13 +101,13 @@ Base64_Status base64_decode(Bytes in, Bytes* out) {
     if (npad == 2) {
       u8 a = b64_dec[in.buf[k]];
       u8 b = b64_dec[in.buf[k + 1]];
-      out->buf[j++] = a << 2 | ((b & 0xf0) >> 4);
+      out->buf[j++] = (u8)(a << 2) | ((b & 0xf0) >> 4);
     } else if (npad == 1) {
       u8 a = b64_dec[in.buf[k]];
       u8 b = b64_dec[in.buf[k + 1]];
       u8 c = b64_dec[in.buf[k + 2]];
-      out->buf[j++] = a << 2 | ((b & 0xf0) >> 4);
-      out->buf[j++] = ((b & 0x0f) << 4) | ((c & 0x3c) >> 2);
+      out->buf[j++] = (u8)(a << 2) | ((b & 0xf0) >> 4);
+      out->buf[j++] = ((u8)((b & 0x0f) << 4)) | ((c & 0x3c) >> 2);
     }
   }
 

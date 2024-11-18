@@ -7,8 +7,9 @@ export ZIG_OPT := ReleaseFast
 
 include $(ROOTDIR)/scripts/platform.mk
 
-export CFLAGS += -std=c99 -nostdinc -nostdinc++ \
-	-Wall -Werror \
+export CFLAGS += -std=c11 -nostdinc -nostdinc++ -g3 \
+	-Wall -Werror -Wextra \
+	-Wdouble-promotion -Wconversion -Wno-sign-conversion \
 	$(OPT) -target $(TARGET)
 
 DEPS_PATHS := $(wildcard $(ROOTDIR)/lib/*) \

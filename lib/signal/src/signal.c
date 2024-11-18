@@ -2,6 +2,7 @@
 
 #include "fastrange.h"
 #include "log.h"
+#include "stdmacros.h"
 
 #define X3DH_KDF_PREFIX "000000000000000000000000pksignal"
 #define DRAT_KDF_ROOT "drat-kdf-root"
@@ -210,11 +211,10 @@ static Signal_Status drat_kdf_rk(u8* rk, CryptoKxTx* dh, u8* rk_out,
     return 1;
 
   if (crypto_kdf_hkdf_sha256_expand((u8*)rk_out, SIGNAL_DRAT_CHAIN_SZ,
-                                    DRAT_KDF_ROOT, sizeof(DRAT_KDF_ROOT) - 1,
-                                    key))
+                                    DRAT_KDF_ROOT, STRLEN(DRAT_KDF_ROOT), key))
     return 1;
   if (crypto_kdf_hkdf_sha256_expand((u8*)chain_out, SIGNAL_DRAT_CHAIN_SZ,
-                                    DRAT_KDF_CHAIN, sizeof(DRAT_KDF_CHAIN) - 1,
+                                    DRAT_KDF_CHAIN, STRLEN(DRAT_KDF_CHAIN),
                                     key))
     return 1;
   return 0;

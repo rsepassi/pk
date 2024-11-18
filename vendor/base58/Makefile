@@ -1,6 +1,7 @@
 HDRS := $(wildcard include/*.h) $(wildcard src/*.h)
 SRCS := $(wildcard src/*.c)
 OBJS := $(SRCS:.c=.$(O))
+CFLAGS += -Wno-unused-parameter
 
 libbase58.a: $(OBJS) Makefile
 	$(AR) rcs $@ $(OBJS)

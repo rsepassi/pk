@@ -16,6 +16,8 @@
 #define ARRAY_LEN(x) (sizeof(x) / sizeof(x[0]))
 #endif
 
+#define STRLEN(x) (sizeof(x) - 1)
+
 #ifndef CONTAINER_OF
 #define CONTAINER_OF(ptr, type, member)                                        \
   ((type*)((char*)(ptr) - offsetof(type, member)))
@@ -41,7 +43,7 @@
 #ifndef BIT
 #define BIT(x) (1 << (x))
 #define BITGET(x, i) (((x) >> (i)) & 1)
-#define BITSET(x, i) ((x) | (1 << (i)))
+#define BITSET(x, i) ((x) | (__typeof__(x))(1 << (i)))
 #define BITCLEAR(x, i) ((x) & (~(1 << (i))))
 #define BITTOGGLE(x, i) ((x) ^ (1 << (i)))
 #endif
@@ -72,3 +74,5 @@ static inline uint64_t SWAP_U64(uint64_t val) {
 #else
 #error "Cannot determine endianness"
 #endif
+
+#define UNUSED(x) (void)x

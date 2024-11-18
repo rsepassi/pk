@@ -95,8 +95,8 @@ int demo_nikcxn(int argc, const char** argv) {
     CHECK0(nik_keys_kx_from_seed(&B_seed, &kx_keys_r));
   }
 
-  NIK_Keys hkeys_A = {&kx_keys_i.pk, &kx_keys_i.sk, &kx_keys_r.pk};
-  NIK_Keys hkeys_B = {&kx_keys_r.pk, &kx_keys_r.sk, &kx_keys_i.pk};
+  NIK_Keys hkeys_A = {&kx_keys_i.pk, &kx_keys_i.sk, &kx_keys_r.pk, 0};
+  NIK_Keys hkeys_B = {&kx_keys_r.pk, &kx_keys_r.sk, &kx_keys_i.pk, 0};
 
   NIK_Cxn cxn_A;
   u64 ctx_A;
@@ -116,7 +116,7 @@ int demo_nikcxn(int argc, const char** argv) {
   Bytes hs1;
   {
     // A enqueues message
-    Bytes msg1 = str_from_c("hi from A");
+    Bytes msg1 = Str("hi from A");
     nik_cxn_enqueue(&cxn_A, msg1);
     LOG("A initiates handshake");
     ++now;
@@ -238,7 +238,7 @@ int demo_nikcxn(int argc, const char** argv) {
     CHECK(initiator->handshake_state == NIK_CxnHState_Null);
 
     LOG("Initiator sends data");
-    nik_cxn_enqueue(initiator, str_from_c("complete"));
+    nik_cxn_enqueue(initiator, Str("complete"));
     CHECK(nik_cxn_outgoing(initiator, &data, now) == NIK_Cxn_Status_MsgReady);
     LOG("Responder finalizes");
     nik_cxn_incoming(responder, data, now);
@@ -276,8 +276,8 @@ int demo_nik(int argc, const char** argv) {
 
   u32 id_i = 1;
   u32 id_r = 2;
-  NIK_Keys hkeys_A = {&kx_keys_i.pk, &kx_keys_i.sk, &kx_keys_r.pk};
-  NIK_Keys hkeys_B = {&kx_keys_r.pk, &kx_keys_r.sk, &kx_keys_i.pk};
+  NIK_Keys hkeys_A = {&kx_keys_i.pk, &kx_keys_i.sk, &kx_keys_r.pk, 0};
+  NIK_Keys hkeys_B = {&kx_keys_r.pk, &kx_keys_r.sk, &kx_keys_i.pk, 0};
 
   // I
   LOG("i2r");
@@ -327,7 +327,7 @@ int demo_nik(int argc, const char** argv) {
   CHECK(tx_i.remote_idx == tx_r.local_idx);
 
   // I: Send a message
-  Str payload = str_from_c("hello!");
+  Str payload = Str("hello!");
   Str send_msg;
   {
     LOG("send: %.*s", (int)payload.len, payload.buf);
@@ -346,7 +346,7 @@ int demo_nik(int argc, const char** argv) {
   free(send_msg.buf);
 
   // I: Send another
-  payload = str_from_c("ahoy!");
+  payload = Str("ahoy!");
   {
     LOG("send: %.*s", (int)payload.len, payload.buf);
     u64 send_sz = nik_sendmsg_sz(payload.len);
@@ -646,7 +646,7 @@ int demo_bip39(int argc, const char** argv) {
 }
 
 int demo_base64(int argc, const char** argv) {
-  Str a = str_from_c("hello world!");
+  Str a = Str("hello world!");
 
   Str enc;
   {
@@ -690,7 +690,7 @@ int demo_vterm(int argc, const char** argv) {
   // VTermState *vt_state = vterm_obtain_state(vt);
   // vterm_state_reset(vt_state, 1);
 
-  Str txt = str_from_c("hi!");
+  Str txt = Str("hi!");
   vterm_input_write(vt, (char*)txt.buf, txt.len);
 
   vterm_output_set_callback(vt, vt_cb, NULL);
@@ -777,25 +777,25 @@ int demo_drat(int argc, const char** argv) {
   // Send some messages back and forth
   CHECK0(drat_a_to_b(&B_state, &B_x, &A_state,
                      &A_x,  //
-                     str_from_c("hello from Bob! secret number is 77")));
+                     Str("hello from Bob! secret number is 77")));
   CHECK0(drat_a_to_b(&B_state, &B_x, &A_state,
                      &A_x,  //
-                     str_from_c("hello from Bob! secret number is 79")));
+                     Str("hello from Bob! secret number is 79")));
   CHECK0(drat_a_to_b(&A_state, &A_x, &B_state,
                      &B_x,  //
-                     str_from_c("hello from Alice!")));
+                     Str("hello from Alice!")));
   CHECK0(drat_a_to_b(&B_state, &B_x, &A_state,
                      &A_x,  //
-                     str_from_c("roger roger")));
+                     Str("roger roger")));
   CHECK0(drat_a_to_b(&B_state, &B_x, &A_state,
                      &A_x,  //
-                     str_from_c("roger roger 2")));
+                     Str("roger roger 2")));
   CHECK0(drat_a_to_b(&A_state, &A_x, &B_state,
                      &B_x,  //
-                     str_from_c("1")));
+                     Str("1")));
   CHECK0(drat_a_to_b(&A_state, &A_x, &B_state,
                      &B_x,  //
-                     str_from_c("2")));
+                     Str("2")));
 
   return 0;
 }
@@ -848,7 +848,7 @@ int demo_b58(int argc, const char** argv) {
   b58_sha256_impl = libb58_sha256_impl;
 
   // Hex string encodes 1-byte version + payload
-  Str hex = str_from_c("165a1fc5dd9e6f03819fca94a2d89669469667f9a0");
+  Str hex = Str("165a1fc5dd9e6f03819fca94a2d89669469667f9a0");
   u8 bin[21];
   CHECK(sizeof(bin) * 2 == hex.len);
   bytes_from_hex(hex, bin, sizeof(bin));
@@ -876,7 +876,7 @@ int demo_b58(int argc, const char** argv) {
 }
 
 void alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
-  *buf = uv_buf_init(malloc(suggested_size), suggested_size);
+  *buf = uv_buf_init(malloc(suggested_size), (uint)suggested_size);
 }
 
 void recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
@@ -927,9 +927,9 @@ int demo_multicast(int argc, const char** argv) {
     LOG("udp send");
     struct sockaddr_in multi_addr;
     CHECK0(uv_ip4_addr(multicast_group, port, &multi_addr));
-    Str peer_id = str_from_c("mike multicast");
-    uv_buf_t buf = uv_buf_init((char*)peer_id.buf, peer_id.len);
-    CHECK0(uvco_udp_send(loop, &udp, &buf, 1, (struct sockaddr*)&multi_addr));
+    Str peer_id = Str("mike multicast");
+    uv_buf_t buf = uv_buf_init((char*)peer_id.buf, (uint)peer_id.len);
+    CHECK0(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&multi_addr));
     LOG("sent!");
     uvco_sleep(loop, 1000);
   } else {
@@ -972,9 +972,9 @@ int demo_holepunch(int argc, const char** argv) {
   CHECK0(uv_udp_init(loop, &udp));
 
   LOG("udp send");
-  Str peer_id = str_from_c("mike multicast");
-  uv_buf_t buf = uv_buf_init((char*)peer_id.buf, peer_id.len);
-  CHECK0(uvco_udp_send(loop, &udp, &buf, 1, (struct sockaddr*)&peer_addr));
+  Str peer_id = Str("mike multicast");
+  uv_buf_t buf = uv_buf_init((char*)peer_id.buf, (uint)peer_id.len);
+  CHECK0(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&peer_addr));
   LOG("sent!");
 
   LOG("udp recv");
@@ -1226,7 +1226,7 @@ void main_coro(mco_coro* co) {
   }
 
   struct cmd_struct* cmd = NULL;
-  for (int i = 0; i < ARRAY_LEN(commands); i++) {
+  for (usize i = 0; i < ARRAY_LEN(commands); i++) {
     if (!strcmp(commands[i].cmd, argv[0])) {
       cmd = &commands[i];
       break;

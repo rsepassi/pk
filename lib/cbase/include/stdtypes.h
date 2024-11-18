@@ -16,5 +16,8 @@
 #define i64 int64_t
 #define isize ssize_t
 
+#define f32 float
+#define f64 double
+
 #include "allocator.h"
 #include "str.h"

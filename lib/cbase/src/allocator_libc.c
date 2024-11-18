@@ -6,6 +6,8 @@
 #include <stdlib.h>
 
 static int alloc_libc(void* ctx, Bytes* buf, usize sz, usize align) {
+  (void)ctx;
+
   bool exists = buf->buf && buf->len > 0;
 
   // Free

@@ -53,7 +53,7 @@ typedef struct {
 #define CryptoBytes(x) ((Bytes){sizeof(x), (u8*)&(x)})
 
 // Initializes libsodium and does some checks
-u8 crypto_init(void);
+int crypto_init(void);
 
 typedef struct {
   Allocator base;

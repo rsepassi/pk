@@ -21,7 +21,7 @@ SRCS := \
 	src/prim/prim.c
 OBJS := $(SRCS:.c=.$(O))
 CFLAGS += -Wall -Werror -fvisibility=hidden -ftls-model=local-dynamic \
-					-Wno-unknown-pragmas
+					-Wno-unknown-pragmas -Wno-conversion
 
 libmimalloc.a: $(OBJS) Makefile
 	$(AR) rcs $@ $(OBJS)
