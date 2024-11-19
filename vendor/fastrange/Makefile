@@ -1,4 +1,7 @@
-.PHONY: default clean deps
-default:
+default: .build
+.build:
+	touch .build
+
+.PHONY: clean deps
 clean:
 deps:
