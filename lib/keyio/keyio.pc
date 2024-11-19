@@ -3,3 +3,4 @@ Version: 0.0.1
 Description: <none>
 Libs: -L${prefix} -lkeyio
 Cflags: -I${prefix}/include
+Requirez: lib/cbase lib/crypto lib/base64 lib/getpass vendor/sodium

@@ -30,7 +30,7 @@ fmt:
 
 dir:
 	$(MAKE) -C $(DIR) deps
-	$(MAKE) -C $(DIR)
+	$(MAKE) -C $(DIR) $(DIRTARGET)
 
 include $(ROOTDIR)/scripts/deps.mk
 include $(ROOTDIR)/scripts/test.mk

@@ -3,3 +3,4 @@ Version: 0.0.1
 Description: <none>
 Libs: -L${prefix} -lsignal
 Cflags: -I${prefix}/include
+Requirez: lib/cbase lib/crypto vendor/sodium vendor/fastrange

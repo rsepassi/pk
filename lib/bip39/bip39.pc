@@ -3,3 +3,4 @@ Version: 0.0.1
 Description: <none>
 Libs: -L${prefix} -lbip39
 Cflags: -I${prefix}/include
+Requirez: lib/cbase vendor/sodium

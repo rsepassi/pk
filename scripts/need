@@ -16,5 +16,10 @@ fi
 
 PKG_CONFIG_PATH=$dir pkg-config --define-variable=prefix=$dir $flag $lib
 
+for dep in $(grep Requirez: $dir/$lib.pc | cut -c 11-)
+do
+  need $flag $dep
+done
+
 shift
 done

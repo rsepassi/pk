@@ -1,5 +1,0 @@
-#!/usr/bin/env sh
-set -e
-
-./scripts/mk cli
-exec ./cli/build/cli $@
