@@ -3,7 +3,10 @@ cli
   https://github.com/skeeto/optparse
 
 crypto
-* Allocator for secrets that does malloc+lock and zero+free
+* Consider using paseto or similar for stateless capabilities
+  https://github.com/paseto-standard/paseto-spec
+* Consider using (x)chacha20+blake3 (instead of chacha20+poly1305) for aead
+  to add committment to the crypto properties
 
 NIK todo
 * Update counter check to use algorithm in RFC 6479 as in WG-Go
@@ -38,6 +41,8 @@ Signal todo
 kv
 * libkv interface
 * lmdb impl
+* Consider CipherSweet for searchable db
+  https://ciphersweet.paragonie.com
 
 key usability
 * password-protected key
