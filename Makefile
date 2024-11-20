@@ -1,36 +1,42 @@
+include scripts/platform.mk
+
+export ROOTDIR := $(CURDIR)
+export PATH := $(CURDIR)/scripts:$(PATH)
+
 export CC := zig cc
 export AR := zig ar
-export PATH := $(CURDIR)/scripts:$(PATH)
-export ROOTDIR := $(CURDIR)
 export OPT := -O2
 export ZIG_OPT := ReleaseFast
 
-include $(ROOTDIR)/scripts/platform.mk
-
-export CFLAGS += -std=c11 -nostdinc -nostdinc++ -g3 \
+export CFLAGS += \
+	$(OPT) \
+	-target $(TARGET) \
+	-std=c11 \
+	-g3 \
+	-nostdinc -nostdinc++ \
 	-Wall -Werror -Wextra \
-	-Wdouble-promotion -Wconversion -Wno-sign-conversion \
-	$(OPT) -target $(TARGET)
+	-Wdouble-promotion -Wconversion -Wno-sign-conversion
+export LDFLAGS += $(OPT) -target $(TARGET)
 
-DEPS_PATHS := $(wildcard $(ROOTDIR)/lib/*) \
-							$(wildcard $(ROOTDIR)/vendor/*)
+DEPS_PATHS := $(dir $(shell find cli lib vendor -type f -name Makefile))
 DEPS := $(DEPS_PATHS:$(ROOTDIR)/%=%)
 
-.PHONY: cli clean-all fmt dir
-cli:
-	$(MAKE) -C cli deps
-	$(MAKE) -C cli
-
-clean-all: clean-deps clean-test
-	$(MAKE) -C cli clean
-
-fmt:
-	clang-format -i `find lib -type f -name '*.c'` `find lib -type f -name '*.h'`
-	clang-format -i `find cli -type f -name '*.c'` `find cli -type f -name '*.h'`
+.PHONY: default dir clean fmt cli
+default: cli
 
 dir:
 	$(MAKE) -C $(DIR) deps
-	$(MAKE) -C $(DIR) $(DIRTARGET)
+	$(MAKE) -C $(DIR) $(T)
 
-include $(ROOTDIR)/scripts/deps.mk
-include $(ROOTDIR)/scripts/test.mk
+clean: clean-deps clean-test
+	$(MAKE) -C cli clean
+
+fmt:
+	clang-format -i `find lib cli -type f -name '*.c' -o -name '*.h'`
+
+cli:
+	$(MAKE) dir DIR=cli
+	ls -l cli/build
+
+include scripts/deps.mk
+include scripts/test.mk

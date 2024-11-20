@@ -30,7 +30,7 @@ export EXE :=
 endif
 
 ifeq ($(TARGET), x86_64-macos)
-export CFLAGS += -isystem $(ROOTDIR)/platform/macos/include
+export CFLAGS += -isystem $(CURDIR)/platform/macos/include
 else ifeq ($(TARGET), aarch64-macos)
-export CFLAGS += -isystem $(ROOTDIR)/platform/macos/include
+export CFLAGS += -isystem $(CURDIR)/platform/macos/include
 endif
