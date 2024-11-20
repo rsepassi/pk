@@ -20,11 +20,11 @@
 
 #ifndef CONTAINER_OF
 #define CONTAINER_OF(ptr, type, member)                                        \
-  ((type*)((char*)(ptr) - offsetof(type, member)))
+  ((type*)((char*)(ptr)-offsetof(type, member)))
 #endif
 
-#define CBASE_ALIGN(x, align) ((x) + (-(uintptr_t)(x) & ((align) - 1)))
-#define CBASE_ALIGNB(x, align) (((x) + ((align) - 1)) & ~((align) - 1))
+#define CBASE_ALIGN(x, align) ((x) + (-(uintptr_t)(x) & ((align)-1)))
+#define CBASE_ALIGNB(x, align) (((x) + ((align)-1)) & ~((align)-1))
 
 #ifndef ALIGN
 #define ALIGN CBASE_ALIGN
