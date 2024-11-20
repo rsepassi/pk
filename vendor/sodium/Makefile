@@ -1,5 +1,4 @@
-SRCS := $(shell find src/libsodium -type f -name '*.c') \
-				$(shell find src/libsodium -type f -name '*.h')
+SRCS := $(shell find src/libsodium -type f -name '*.c' -o -name '*.h')
 
 include $(ROOTDIR)/scripts/zig.mk
 include $(ROOTDIR)/scripts/nodeps.mk
