@@ -2,4 +2,4 @@ Name: minicoro
 Version: ff5321d
 Description: asymmetric coroutines for C
 Libs: -L${prefix} -lminicoro
-Cflags: -I${prefix}
+Cflags: -I${prefix}/include

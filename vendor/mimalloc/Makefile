@@ -1,7 +1,6 @@
 # https://github.com/microsoft/mimalloc
 # https://microsoft.github.io/mimalloc/
 
-HDRS := $(wildcard include/*.h) $(wildcard src/*.h)
 SRCS := \
 	src/alloc-aligned.c \
 	src/alloc-posix.c \
@@ -19,18 +18,11 @@ SRCS := \
 	src/segment.c \
 	src/stats.c \
 	src/prim/prim.c
-OBJS := $(SRCS:.c=.$(O))
 CFLAGS += -Wall -Werror -fvisibility=hidden -ftls-model=local-dynamic \
 					-Wno-unknown-pragmas -Wno-conversion
 
-libmimalloc.a: $(OBJS) Makefile
-	$(AR) rcs $@ $(OBJS)
-	touch .build
-
-%.$(O): %.c $(HDRS) Makefile
-	$(CC) -c $(CFLAGS) -Iinclude -o $@ $<
-
 CLEAN_EXTRAS := src/prim/*.o src/prim/*.obj
 
+include $(ROOTDIR)/scripts/cc.mk
 include $(ROOTDIR)/scripts/nodeps.mk
 include $(ROOTDIR)/scripts/clean.mk

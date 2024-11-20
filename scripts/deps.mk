@@ -2,9 +2,10 @@ DEPS_CFLAGS := `need --cflags $(DEPS)`
 DEPS_LDFLAGS := `need --libs $(DEPS)`
 DEPS_CLEAN := $(addsuffix -clean, $(DEPS))
 DEPS_BUILDS := $(addprefix $(ROOTDIR)/, $(addsuffix /.build, $(DEPS)))
+DEPS_OK := .deps.ok
 
 .deps.ok: $(DEPS_BUILDS)
-	touch .deps.ok
+	touch $(DEPS_OK)
 
 .PHONY: deps $(DEPS)
 deps: $(DEPS)

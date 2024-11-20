@@ -1,15 +1,7 @@
-SRCS := $(wildcard src/*.c) \
-				$(wildcard src/*.h) \
-				$(wildcard src/unix/*.c) \
-				$(wildcard src/unix/*.h) \
-				$(wildcard src/win/*.c) \
-				$(wildcard src/win/*.h)
-HDRS := $(wildcard include/*.h) $(wildcard include/uv/*.h)
+SRCS := $(shell find src -type f -name '*.c') \
+				$(shell find src -type f -name '*.h') \
+				$(shell find include -type f -name '*.h')
 
-zig-out/lib/libuv.a: $(SRCS) $(HDRS) Makefile
-	zig build -Doptimize=$(ZIG_OPT) -Dtarget=$(TARGET)
-	touch zig-out/lib/libuv.a
-	touch .build
-
+include $(ROOTDIR)/scripts/zig.mk
 include $(ROOTDIR)/scripts/nodeps.mk
 include $(ROOTDIR)/scripts/clean.mk
