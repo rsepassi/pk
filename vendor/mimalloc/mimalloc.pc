@@ -1,5 +1,5 @@
 Name: mimalloc
 Version: 188
 Description: memory allocator
-Libs: -L${prefix} -lmimalloc
-Cflags: -I${prefix}/include
+Libs: -L${build_prefix} -lmimalloc
+Cflags: -I${src_prefix}/include

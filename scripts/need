@@ -6,17 +6,26 @@ shift
 while [ -n "$1" ]
 do
 
-dir=$1
-lib=$(basename $dir)
+dep=$1
+
+srcdir=$dep
+builddir=build/$dep
+
+lib=$(basename $dep)
 
 if [ -n "$ROOTDIR" ]
 then
-  dir=$ROOTDIR/$dir
+  srcdir=$ROOTDIR/$srcdir
+  builddir=$ROOTDIR/$builddir
 fi
 
-PKG_CONFIG_PATH=$dir pkg-config --define-variable=prefix=$dir $flag $lib
+PKG_CONFIG_PATH="$srcdir" \
+  pkg-config \
+  --define-variable=src_prefix=$srcdir \
+  --define-variable=build_prefix=$builddir \
+  $flag $lib
 
-for dep in $(grep Requirez: $dir/$lib.pc | cut -c 11-)
+for dep in $(grep Requirez: $srcdir/$lib.pc | cut -c 11-)
 do
   need $flag $dep
 done

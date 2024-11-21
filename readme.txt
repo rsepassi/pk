@@ -2,7 +2,7 @@ pk
 ---
 
 Build CLI:
-make cli && ./cli/build/cli
+make cli && ./build/cli/bin/cli
 
 Build a library:
 make dir DIR=lib/cbase

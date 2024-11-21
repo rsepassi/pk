@@ -1,5 +1,5 @@
 Name: getpass
 Version: 1.0.0
 Description: portable getpass
-Libs: -L${prefix} -lgetpass
-Cflags: -I${prefix}/include
+Libs: -L${build_prefix} -lgetpass
+Cflags: -I${src_prefix}/include

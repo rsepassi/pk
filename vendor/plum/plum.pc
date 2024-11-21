@@ -1,5 +1,5 @@
 Name: plum
 Version: ae6320d
 Description: port mapping
-Libs: -L${prefix} -lplum
-Cflags: -I${prefix}/include -DPLUM_STATIC
+Libs: -L${build_prefix} -lplum
+Cflags: -I${src_prefix}/include -DPLUM_STATIC

@@ -1,6 +1,6 @@
 Name: crypto
 Version: 0.0.1
 Description: <none>
-Libs: -L${prefix} -lcrypto
-Cflags: -I${prefix}/include
+Libs: -L${build_prefix} -lcrypto
+Cflags: -I${src_prefix}/include
 Requirez: lib/cbase vendor/sodium

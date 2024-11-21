@@ -1,10 +1,14 @@
+include $(ROOTDIR)/scripts/bdir.mk
+
 DEPS_CFLAGS := `need --cflags $(DEPS)`
 DEPS_LDFLAGS := `need --libs $(DEPS)`
-DEPS_CLEAN := $(addsuffix -clean, $(DEPS))
-DEPS_BUILDS := $(addprefix $(ROOTDIR)/, $(addsuffix /.build, $(DEPS)))
-DEPS_OK := .deps.ok
 
-.deps.ok: $(DEPS_BUILDS)
+DEPS_CLEAN := $(addsuffix -clean, $(DEPS))
+DEPS_BUILDS := $(addprefix $(ROOTDIR)/build/, $(addsuffix /.build, $(DEPS)))
+DEPS_OK := $(BDIR)/.deps.ok
+
+$(DEPS_OK): $(DEPS_BUILDS)
+	mkdir -p $(dir $(DEPS_OK))
 	touch $(DEPS_OK)
 
 .PHONY: deps $(DEPS)

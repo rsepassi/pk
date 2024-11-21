@@ -1,6 +1,6 @@
 Name: base64
 Version: 0.0.1
 Description: <none>
-Libs: -L${prefix} -lbase64
-Cflags: -I${prefix}/include
+Libs: -L${build_prefix} -lbase64
+Cflags: -I${src_prefix}/include
 Requirez: lib/cbase

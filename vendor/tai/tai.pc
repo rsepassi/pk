@@ -1,5 +1,5 @@
 Name: tai
 Version: 0.60.0
 Description: a library for storing and manipulating dates and times
-Libs: -L${prefix} -ltai
-Cflags: -isystem ${prefix}/include
+Libs: -L${build_prefix} -ltai
+Cflags: -isystem ${src_prefix}/include

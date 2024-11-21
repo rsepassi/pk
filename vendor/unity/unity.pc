@@ -1,5 +1,5 @@
 Name: unity
 Version: c546414
 Description: C unit testing
-Libs: -L${prefix} -lunity
-Cflags: -I${prefix}/include
+Libs: -L${build_prefix} -lunity
+Cflags: -I${src_prefix}/include

@@ -1,15 +1,20 @@
+include $(ROOTDIR)/scripts/bdir.mk
+
 LIBNAME ?= $(notdir $(CURDIR))
+
 HDRS ?= $(wildcard include/*.h) $(wildcard src/*.h)
 SRCS ?= $(wildcard src/*.c)
-OBJS := $(SRCS:.c=.$(O))
+
+OBJS := $(addprefix $(BDIR)/, $(SRCS:.c=.$(O)))
 
 ifdef DEPS
-	DEPS_OK := .deps.ok
+	DEPS_OK := $(BDIR)/.deps.ok
 endif
 
-lib$(LIBNAME).a: $(OBJS) $(SRCS) $(HDRS) $(DEPS_OK) Makefile
+$(BDIR)/lib$(LIBNAME).a: $(OBJS) $(SRCS) $(HDRS) $(DEPS_OK) Makefile
 	$(AR) rcs $@ $(OBJS)
-	touch .build
+	touch $(BDIR)/.build
 
-%.$(O): %.c $(HDRS) $(DEPS_OK) Makefile
+$(BDIR)/%.$(O): %.c $(HDRS) $(DEPS_OK) Makefile
+	mkdir -p $(dir $@)
 	$(CC) -c -o $@ -Iinclude $(CFLAGS) $(DEPS_CFLAGS) $<

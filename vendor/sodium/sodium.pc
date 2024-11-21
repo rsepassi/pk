@@ -1,5 +1,5 @@
 Name: libsodium
 Version: 1.0.20
 Description: cryptography
-Libs: -L${prefix}/zig-out/lib -lsodium
-Cflags: -I${prefix}/zig-out/include
+Libs: -L${build_prefix}/lib -lsodium
+Cflags: -I${build_prefix}/include

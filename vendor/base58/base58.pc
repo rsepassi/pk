@@ -1,5 +1,5 @@
 Name: base58
 Version: 0.1.4
 Description: Bitcoin's base58 encoding
-Libs: -L${prefix} -lbase58
-Cflags: -I${prefix}/include
+Libs: -L${build_prefix} -lbase58
+Cflags: -I${src_prefix}/include

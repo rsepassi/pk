@@ -1,6 +1,6 @@
 Name: bip39
 Version: 0.0.1
 Description: <none>
-Libs: -L${prefix} -lbip39
-Cflags: -I${prefix}/include
+Libs: -L${build_prefix} -lbip39
+Cflags: -I${src_prefix}/include
 Requirez: lib/cbase vendor/sodium

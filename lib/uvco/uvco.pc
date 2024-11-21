@@ -1,6 +1,6 @@
 Name: uvco
 Version: 0.0.1
 Description: <none>
-Libs: -L${prefix} -luvco
-Cflags: -I${prefix}/include
+Libs: -L${build_prefix} -luvco
+Cflags: -I${src_prefix}/include
 Requirez: lib/cbase vendor/uv vendor/minicoro

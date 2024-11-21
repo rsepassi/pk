@@ -1,6 +1,6 @@
 Name: allocatormi
 Version: 0.0.1
 Description: <none>
-Libs: -L${prefix} -lallocatormi
-Cflags: -I${prefix}/include
+Libs: -L${build_prefix} -lallocatormi
+Cflags: -I${src_prefix}/include
 Requirez: lib/cbase vendor/mimalloc

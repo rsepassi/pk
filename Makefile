@@ -29,6 +29,7 @@ dir:
 	$(MAKE) -C $(DIR) $(T)
 
 clean: clean-deps clean-test
+	rm -rf build
 	$(MAKE) -C cli clean
 
 fmt:
@@ -36,7 +37,7 @@ fmt:
 
 cli:
 	$(MAKE) dir DIR=cli
-	ls -l cli/build
+	ls -l build/cli/bin
 
 include scripts/deps.mk
 include scripts/test.mk

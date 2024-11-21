@@ -1,6 +1,6 @@
 Name: nik
 Version: 0.0.1
 Description: <none>
-Libs: -L${prefix} -lnik
-Cflags: -I${prefix}/include
+Libs: -L${build_prefix} -lnik
+Cflags: -I${src_prefix}/include
 Requirez: lib/cbase lib/crypto vendor/sodium vendor/tai

@@ -1,5 +1,5 @@
 Name: lmdb
 Version: 0.9.70
 Description: kv store
-Libs: -L${prefix} -llmdb
-Cflags: -I${prefix}/include
+Libs: -L${build_prefix} -llmdb
+Cflags: -I${src_prefix}/include

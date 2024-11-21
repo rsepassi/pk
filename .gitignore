@@ -1,11 +1,2 @@
 # build artifacts
 build/
-zig-out/
-.zig-cache/
-*.o
-*.obj
-*.a
-*.lib
-*.exe
-*.build
-*.ok

@@ -1,7 +1,11 @@
-default: .build
-.build:
-	touch .build
+include $(ROOTDIR)/scripts/bdir.mk
 
-.PHONY: clean deps
+
+.PHONY: default clean deps
+default: $(BDIR)/.build
 clean:
 deps:
+
+$(BDIR)/.build:
+	mkdir -p $(BDIR)
+	touch $@
