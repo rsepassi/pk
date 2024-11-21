@@ -1,0 +1,6 @@
+Name: picoquic
+Version: 297bd802
+Description: QUIC
+Libs: -L${build_prefix} -lpicoquic
+Cflags: -I${src_prefix}/include
+Requirez: vendor/sodium
