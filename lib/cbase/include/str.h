@@ -15,6 +15,7 @@ typedef Str Bytes;
 #define BytesZero ((Bytes){0, 0})
 
 #define Str(s) ((Str){STRLEN((s)), (u8*)(s)})
+#define Bytes(b, l) ((Str){(l), (u8*)(b)})
 
 static inline Str str_from_c(const char* buf) {
   return (Str){.len = strlen(buf), .buf = (uint8_t*)buf};
