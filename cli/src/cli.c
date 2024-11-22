@@ -1,3 +1,9 @@
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 199309L
+#endif
+
+#include <time.h>
+
 // vendor deps
 #include "argparse.h"
 #include "libbase58.h"
