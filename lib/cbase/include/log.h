@@ -10,8 +10,8 @@
 
 #define LOG_PREFIX_(level, fd)                                                 \
   do {                                                                         \
-    fprintf(fd, "%s[%s %s:%d] ", #level, log_get_current_time(), __FILENAME__, \
-            __LINE__);                                                         \
+    fprintf(fd, "%s[%s %s:%04d %-10s] ", #level, log_get_current_time(),       \
+            __FILENAME__, __LINE__, __func__);                                 \
   } while (0)
 #define LOG_(level, fd, fmt, ...)                                              \
   do {                                                                         \

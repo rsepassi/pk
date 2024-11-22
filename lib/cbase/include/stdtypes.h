@@ -9,7 +9,6 @@
 #define u64 uint64_t
 #define usize size_t
 #define uptr uintptr_t
-#define uint unsigned int
 
 #define i8 int8_t
 #define i16 int16_t
@@ -19,6 +18,10 @@
 
 #define f32 float
 #define f64 double
+
+#ifndef __APPLE__
+#define uint unsigned int
+#endif
 
 #include "allocator.h"
 #include "str.h"
