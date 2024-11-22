@@ -1,2 +1,2 @@
-BDIR := $(ROOTDIR)/build/$(CURDIR:$(ROOTDIR)/%=%)
+BDIR ?= $(ROOTDIR)/build/$(CURDIR:$(ROOTDIR)/%=%)
 
