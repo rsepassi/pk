@@ -5,8 +5,8 @@ export PATH := $(CURDIR)/scripts:$(PATH)
 
 export CC := zig cc
 export AR := zig ar
-export OPT := -O2
-export ZIG_OPT := ReleaseFast
+export OPT := -O0
+export ZIG_OPT := Debug
 
 export CFLAGS += \
 	$(OPT) \
@@ -36,7 +36,8 @@ fmt:
 	clang-format -i `find lib cli -type f -name '*.c' -o -name '*.h'`
 
 cli:
-	$(MAKE) dir DIR=cli
+	$(MAKE) -C cli deps
+	$(MAKE) -C cli
 	ls -l build/cli/bin
 
 include scripts/deps.mk
