@@ -4,6 +4,7 @@
 #include "lmdb.h"
 #include "mimalloc.h"
 #include "minicoro.h"
+#include "ngtcp2/ngtcp2.h"
 #include "plum/plum.h"
 #include "uv.h"
 #include "vterm.h"
@@ -1153,6 +1154,320 @@ int demo_pwhash(int argc, const char** argv) {
   return 0;
 }
 
+typedef struct {
+  void* x;
+} Tcp2Ctx;
+
+int tcp2_client_initial(ngtcp2_conn* conn, void* user_data) {
+  LOG("");
+  // ngtcp2_conn_install_initial_key
+  // ngtcp2_conn_submit_crypto_data
+  return 0;
+}
+
+int tcp2_recv_retry(ngtcp2_conn* conn, const ngtcp2_pkt_hd* hd,
+                    void* user_data) {
+  LOG("");
+  // hd->scid
+  // ngtcp2_conn_install_initial_key
+  return 0;
+}
+
+int tcp2_recv_client_initial(ngtcp2_conn* conn, const ngtcp2_cid* dcid,
+                             void* user_data) {
+  LOG("");
+  // ngtcp2_conn_install_initial_key
+  return 0;
+}
+
+int tcp2_recv_crypto_data(ngtcp2_conn* conn,
+                          ngtcp2_encryption_level encryption_level,
+                          uint64_t offset, const uint8_t* data, size_t datalen,
+                          void* user_data) {
+  LOG("");
+  // ngtcp2_crypto_derive_and_install_rx_key
+  // ngtcp2_crypto_derive_and_install_tx_key
+  // ngtcp2_conn_submit_crypto_data
+  return 0;
+}
+
+int tcp2_encrypt(uint8_t* dest, const ngtcp2_crypto_aead* aead,
+                 const ngtcp2_crypto_aead_ctx* aead_ctx,
+                 const uint8_t* plaintext, size_t plaintextlen,
+                 const uint8_t* nonce, size_t noncelen, const uint8_t* aad,
+                 size_t aadlen) {
+  LOG("");
+  return 0;
+}
+
+int tcp2_decrypt(uint8_t* dest, const ngtcp2_crypto_aead* aead,
+                 const ngtcp2_crypto_aead_ctx* aead_ctx,
+                 const uint8_t* ciphertext, size_t ciphertextlen,
+                 const uint8_t* nonce, size_t noncelen, const uint8_t* aad,
+                 size_t aadlen) {
+  LOG("");
+  return 0;
+}
+
+int tcp2_hp_mask(uint8_t* dest, const ngtcp2_crypto_cipher* hp,
+                 const ngtcp2_crypto_cipher_ctx* hp_ctx,
+                 const uint8_t* sample) {
+  LOG("");
+  return 0;
+}
+
+void tcp2_rand(uint8_t* dest, size_t destlen, const ngtcp2_rand_ctx* rand_ctx) {
+  (void)rand_ctx;
+  randombytes_buf(dest, destlen);
+}
+
+int tcp2_get_new_connection_id(ngtcp2_conn* conn, ngtcp2_cid* cid,
+                               uint8_t* token, size_t cidlen, void* user_data) {
+  LOG("");
+  return 0;
+}
+
+int tcp2_update_key(ngtcp2_conn* conn, uint8_t* rx_secret, uint8_t* tx_secret,
+                    ngtcp2_crypto_aead_ctx* rx_aead_ctx, uint8_t* rx_iv,
+                    ngtcp2_crypto_aead_ctx* tx_aead_ctx, uint8_t* tx_iv,
+                    const uint8_t* current_rx_secret,
+                    const uint8_t* current_tx_secret, size_t secretlen,
+                    void* user_data) {
+  LOG("");
+  return 0;
+}
+
+void tcp2_delete_crypto_aead_ctx(ngtcp2_conn* conn,
+                                 ngtcp2_crypto_aead_ctx* aead_ctx,
+                                 void* user_data) {
+  LOG("");
+}
+
+void tcp2_delete_crypto_cipher_ctx(ngtcp2_conn* conn,
+                                   ngtcp2_crypto_cipher_ctx* cipher_ctx,
+                                   void* user_data) {
+  LOG("");
+}
+
+int tcp2_get_path_challenge_data(ngtcp2_conn* conn, uint8_t* data,
+                                 void* user_data) {
+  LOG("");
+  return 0;
+}
+
+int tcp2_version_negotiation(ngtcp2_conn* conn, uint32_t version,
+                             const ngtcp2_cid* client_dcid, void* user_data) {
+  LOG("");
+  // ngtcp2_conn_install_vneg_initial_key
+  return 0;
+}
+
+void tcp2_log_printf(void* user_data, const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+}
+
+u64 tcp2_current_time() {
+  struct timespec sp;
+  clock_gettime(CLOCK_MONOTONIC, &sp);
+  return sp.tv_sec * NGTCP2_SECONDS + sp.tv_nsec;
+}
+
+void tcp2_set_callbacks(ngtcp2_callbacks* cb, bool client) {
+  if (client) {
+    cb->client_initial = tcp2_client_initial;
+    cb->recv_retry = tcp2_recv_retry;
+  } else {
+    cb->recv_client_initial = tcp2_recv_client_initial;
+  }
+
+  cb->recv_crypto_data = tcp2_recv_crypto_data;
+  cb->encrypt = tcp2_encrypt;
+  cb->decrypt = tcp2_decrypt;
+  cb->hp_mask = tcp2_hp_mask;
+  cb->rand = tcp2_rand;
+  cb->get_new_connection_id = tcp2_get_new_connection_id;
+  cb->update_key = tcp2_update_key;
+  cb->delete_crypto_aead_ctx = tcp2_delete_crypto_aead_ctx;
+  cb->delete_crypto_cipher_ctx = tcp2_delete_crypto_cipher_ctx;
+  cb->get_path_challenge_data = tcp2_get_path_challenge_data;
+  cb->version_negotiation = tcp2_version_negotiation;
+
+  // Callback error: NGTCP2_ERR_CALLBACK_FAILURE
+
+  // Optional
+  // ngtcp2_handshake_completed handshake_completed;
+  // ngtcp2_recv_version_negotiation recv_version_negotiation;
+  // ngtcp2_recv_stream_data recv_stream_data;
+  // ngtcp2_acked_stream_data_offset acked_stream_data_offset;
+  // ngtcp2_stream_open stream_open;
+  // ngtcp2_stream_close stream_close;
+  // ngtcp2_recv_stateless_reset recv_stateless_reset;
+  // ngtcp2_extend_max_streams extend_max_local_streams_bidi;
+  // ngtcp2_extend_max_streams extend_max_local_streams_uni;
+  // ngtcp2_remove_connection_id remove_connection_id;
+  // ngtcp2_path_validation path_validation;
+  // ngtcp2_select_preferred_addr select_preferred_addr;
+  // ngtcp2_stream_reset stream_reset;
+  // ngtcp2_extend_max_streams extend_max_remote_streams_bidi;
+  // ngtcp2_extend_max_streams extend_max_remote_streams_uni;
+  // ngtcp2_extend_max_stream_data extend_max_stream_data;
+  // ngtcp2_connection_id_status dcid_status;
+  // ngtcp2_handshake_confirmed handshake_confirmed;
+  // ngtcp2_recv_new_token recv_new_token;
+  // ngtcp2_recv_datagram recv_datagram;
+  // ngtcp2_ack_datagram ack_datagram;
+  // ngtcp2_lost_datagram lost_datagram;
+  // ngtcp2_stream_stop_sending stream_stop_sending;
+  // ngtcp2_recv_key recv_rx_key;
+  // ngtcp2_recv_key recv_tx_key;
+  // ngtcp2_tls_early_data_rejected tls_early_data_rejected;
+}
+
+int demo_tcp2(int argc, const char** argv) {
+  LOG("tcp2");
+
+  // https://nghttp2.org/ngtcp2/programmers-guide.html
+
+  // Send
+  // ngtcp2_conn_open_bidi_stream()
+  // ngtcp2_conn_open_uni_stream()
+  // ngtcp2_conn_writev_stream() or ngtcp2_conn_write_pkt()
+  // ngtcp2_settings.max_tx_udp_payload_size byte packets (1200)
+  //
+  // Cannot open a stream until handshake completed
+  // extend_max_local_streams{uni,bidi} also indicate streams are open
+  //
+  // An application should pace sending packets. ngtcp2_conn_get_send_quantum()
+  // returns the number of bytes that can be sent without packet spacing. After
+  // one or more calls of ngtcp2_conn_writev_stream() (it can be called
+  // multiple times to fill the buffer sized up to
+  // ngtcp2_conn_get_send_quantum() bytes), call
+  // ngtcp2_conn_update_pkt_tx_time() to set the timer when the next packet
+  // should be sent. The timer is integrated into ngtcp2_conn_get_expiry().
+
+  // Recv
+  // ngtcp2_pkt_decode_version_cid()
+  // If NGTCP2_ERR_VERSION_NEGOTIATION, ngtcp2_pkt_write_version_negotiation()
+  // If existing conn id, ngtcp2_conn_read_pkt()
+  // Otherwise, ngtcp2_accept() then ngtcp2_conn_read_pkt()
+
+  // Timers
+  // ngtcp2_conn_get_expiry
+  // Call ngtcp2_conn_handle_expiry() upon expiry
+  //   And then ngtcp2_conn_writev_stream() (or ngtcp2_conn_writev_datagram()
+  // If it returns NGTCP2_ERR_IDLE_CLOSE, drop connection without calling write
+
+  // 0rtt
+  //   ngtcp2_conn_encode_0rtt_transport_params
+  //   ngtcp2_conn_decode_and_set_0rtt_transport_params
+  //   ngtcp2_conn_decode_and_set_remote_transport_params
+  //   ngtcp2_conn_tls_early_data_rejected
+  // Connection migration
+  //   ngtcp2_conn_initiate_migration
+
+  // Other
+  // ngtcp2_conn_initiate_key_update
+  // ngtcp2_conn_install_0rtt_key
+  // ngtcp2_conn_install_initial_key
+  // ngtcp2_conn_install_rx_handshake_key
+  // ngtcp2_conn_install_rx_key
+  // ngtcp2_conn_install_tx_handshake_key
+  // ngtcp2_conn_install_tx_key
+  // ngtcp2_conn_install_vneg_initial_key
+  // ngtcp2_conn_set_0rtt_crypto_ctx
+  // ngtcp2_conn_set_crypto_ctx
+  // ngtcp2_conn_set_initial_crypto_ctx
+  // ngtcp2_conn_set_keep_alive_timeout
+  // ngtcp2_conn_set_local_addr
+  // ngtcp2_conn_set_local_transport_params
+  // ngtcp2_conn_set_path_user_data
+  // ngtcp2_conn_set_retry_aead
+  // ngtcp2_conn_set_stream_user_data
+  // ngtcp2_conn_set_tls_alert
+  // ngtcp2_conn_set_tls_error
+  // ngtcp2_conn_set_tls_native_handle
+  // ngtcp2_conn_submit_crypto_data
+  // ngtcp2_conn_submit_new_token
+  // ngtcp2_conn_tls_handshake_completed
+  // ngtcp2_conn_update_pkt_tx_time
+
+  ngtcp2_cid client_cid = {0};
+  client_cid.datalen = 8;
+  randombytes_buf(client_cid.data, client_cid.datalen);
+
+  uint32_t client_version = NGTCP2_PROTO_VER_V1;
+
+  ngtcp2_sockaddr_union client_addru;
+  client_addru.in.sin_family = AF_INET;
+  client_addru.in.sin_port = 2222;
+  inet_aton("127.0.0.1", &client_addru.in.sin_addr);
+  ngtcp2_sockaddr_union server_addru;
+  server_addru.in.sin_family = AF_INET;
+  server_addru.in.sin_port = 3333;
+  inet_aton("127.0.0.1", &server_addru.in.sin_addr);
+
+  ngtcp2_addr client_addr = {&client_addru.sa, sizeof(client_addru.in)};
+  ngtcp2_addr server_addr = {&server_addru.sa, sizeof(server_addru.in)};
+
+  ngtcp2_settings settings = {0};
+  ngtcp2_settings_default_versioned(NGTCP2_SETTINGS_VERSION, &settings);
+  settings.initial_ts = tcp2_current_time();
+  settings.log_printf = tcp2_log_printf;
+
+  const ngtcp2_mem* mem = ngtcp2_mem_default();
+
+  ngtcp2_cid dcid = {0};
+  dcid.datalen = 8;
+  randombytes_buf(dcid.data, dcid.datalen);
+
+  Tcp2Ctx client_ctx = {0};
+  ngtcp2_conn* client;
+  {
+    ngtcp2_path path = {.local = client_addr, .remote = server_addr};
+    ngtcp2_callbacks callbacks = {0};
+    tcp2_set_callbacks(&callbacks, true);
+    ngtcp2_transport_params tparams = {0};
+    ngtcp2_transport_params_default_versioned(NGTCP2_TRANSPORT_PARAMS_VERSION,
+                                              &tparams);
+
+    LOG("create client");
+    CHECK0(ngtcp2_conn_client_new_versioned(
+        &client, &dcid, &client_cid, &path, client_version,
+        NGTCP2_CALLBACKS_VERSION, &callbacks, NGTCP2_SETTINGS_VERSION,
+        &settings, NGTCP2_TRANSPORT_PARAMS_VERSION, &tparams, mem,
+        &client_ctx));
+  }
+
+  Tcp2Ctx server_ctx = {0};
+  ngtcp2_conn* server;
+  {
+    ngtcp2_cid scid = {0};
+    scid.datalen = 8;
+    randombytes_buf(scid.data, scid.datalen);
+
+    ngtcp2_path path = {.local = server_addr, .remote = client_addr};
+    ngtcp2_callbacks callbacks = {0};
+    tcp2_set_callbacks(&callbacks, false);
+    ngtcp2_transport_params tparams = {0};
+    ngtcp2_transport_params_default_versioned(NGTCP2_TRANSPORT_PARAMS_VERSION,
+                                              &tparams);
+    tparams.original_dcid = dcid;
+    tparams.original_dcid_present = 1;
+
+    LOG("create server");
+    CHECK0(ngtcp2_conn_server_new_versioned(
+        &server, &client_cid, &scid, &path, client_version,
+        NGTCP2_CALLBACKS_VERSION, &callbacks, NGTCP2_SETTINGS_VERSION,
+        &settings, NGTCP2_TRANSPORT_PARAMS_VERSION, &tparams, mem,
+        &server_ctx));
+  }
+
+  return 0;
+}
+
 static const char* const usages[] = {
     "pk [options] [cmd] [args]\n\n    Commands:"
     "\n      - demo-b58"
@@ -1171,6 +1486,7 @@ static const char* const usages[] = {
     "\n      - demo-sshkeyread"
     "\n      - demo-vterm"
     "\n      - demo-x3dh"
+    "\n      - demo-tcp2"
     //
     ,
     NULL,
@@ -1198,6 +1514,7 @@ static struct cmd_struct commands[] = {
     {"demo-sshkeyread", demosshkeyread},  //
     {"demo-vterm", demo_vterm},           //
     {"demo-x3dh", demo_x3dh},             //
+    {"demo-tcp2", demo_tcp2},             //
 };
 
 typedef struct {
