@@ -19,9 +19,5 @@
 #define f32 float
 #define f64 double
 
-#ifndef __APPLE__
-#define uint unsigned int
-#endif
-
 #include "allocator.h"
 #include "str.h"
