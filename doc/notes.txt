@@ -52,6 +52,7 @@ uvco
 * consider storing handles in the coroutine frame? instead of malloc
 
 ngtcp2
+* Allocator
 * ngtcp2_conn_set_tls_error
 * 0RTT
   session ticket
