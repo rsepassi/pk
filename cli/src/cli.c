@@ -1168,8 +1168,9 @@ typedef struct {
 
 typedef struct {
   Tcp2MsgQ outgoing;
-  ngtcp2_path path;
   ngtcp2_conn* conn;
+  u8 zerortt_buf[256];
+  Bytes zerortt_params;
 } Tcp2Ctx;
 
 static void tcp2_outgoing_enqueue(Tcp2Ctx* ctx, Bytes data, i64 stream) {
@@ -1382,8 +1383,9 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
 
         // Save 0RTT params
         {
-          u8* zerortt_params = malloc(data[256]);
-          memcpy(zerortt_params, &data[257], data[256]);
+          ctx->zerortt_params.len = data[256];
+          ctx->zerortt_params.buf = ctx->zerortt_buf;
+          memcpy(ctx->zerortt_params.buf, &data[257], ctx->zerortt_params.len);
         }
 
         // Mark complete
@@ -1481,8 +1483,7 @@ static int tcp2_recv_crypto_data(ngtcp2_conn* conn,
                                  uint64_t offset, const uint8_t* data,
                                  size_t datalen, void* user_data) {
   LOG("");
-  return tcp2_crypto_rw(conn, encryption_level, data + offset, datalen - offset,
-                        user_data);
+  return tcp2_crypto_rw(conn, encryption_level, data, datalen, user_data);
 }
 
 static int tcp2_encrypt(uint8_t* dest, const ngtcp2_crypto_aead* aead,
@@ -1596,11 +1597,6 @@ static int tcp2_recv_stream_data(ngtcp2_conn* conn, uint32_t flags,
   // NGTCP2_STREAM_DATA_FLAG_0RTT
 
   Tcp2Ctx* ctx = user_data;
-
-  data += offset;
-  datalen -= offset;
-  (void)data;
-  (void)datalen;
 
   LOG("DATA: %.*s", (int)datalen, data);
 
@@ -1741,9 +1737,10 @@ static int tcp2_outgoing_process(Tcp2Ctx* ctx, Bytes* pkt, u64 now, u64 bytes) {
 
     ngtcp2_ssize sz;
     if (msg->stream == TCP2_STREAM_DATAGRAM) {
-      sz = ngtcp2_conn_write_datagram(
-          ctx->conn, &ctx->path, 0, pkt->buf, pkt->len, 0,
-          NGTCP2_WRITE_DATAGRAM_FLAG_MORE, 0, data, datalen, now);
+      ngtcp2_path path = *ngtcp2_conn_get_path(ctx->conn);
+      sz = ngtcp2_conn_write_datagram(ctx->conn, &path, 0, pkt->buf, pkt->len,
+                                      0, NGTCP2_WRITE_DATAGRAM_FLAG_MORE, 0,
+                                      data, datalen, now);
     } else {
       sz = ngtcp2_conn_write_stream(
           ctx->conn, 0, 0, pkt->buf, pkt->len, &stream_write,
@@ -1811,7 +1808,6 @@ static int tcp2_connect(ngtcp2_conn** client, const ngtcp2_path* path,
   ngtcp2_settings_default(&settings);
   settings.initial_ts = now;
   settings.log_printf = tcp2_log_printf;
-  ctx->path = *path;
 
   int rc = 0;
   LOGB(Bytes(scid.data, scid.datalen));
@@ -1849,7 +1845,6 @@ static int tcp2_recv_connect(ngtcp2_conn** server, const ngtcp2_path* path,
   ngtcp2_cid scid = {0};
   scid.datalen = TCP2_CIDLEN;
   randombytes_buf(scid.data, scid.datalen);
-  ctx->path = *path;
 
   ngtcp2_callbacks callbacks = {0};
   tcp2_set_callbacks(&callbacks, false);
@@ -1955,8 +1950,8 @@ static int demo_tcp2(int argc, const char** argv) {
                                   pkt_connect_reply.buf, pkt_connect_reply.len,
                                   now));
   LOG("client send some data");
+  i64 stream;
   {
-    i64 stream;
     CHECK_TCP2(ngtcp2_conn_open_bidi_stream(client, &stream, &client_ctx));
     tcp2_outgoing_enqueue(&client_ctx, Str("hi from client"), stream);
     CHECK_TCP2(tcp2_outgoing_process(&client_ctx, &msg, now, 0));
@@ -1978,6 +1973,56 @@ static int demo_tcp2(int argc, const char** argv) {
   now = tcp2_current_time();
   CHECK_TCP2(
       ngtcp2_conn_read_pkt(client, &client_path, 0, msg2.buf, msg2.len, now));
+
+  // Let's try a connection migration
+  now = tcp2_current_time();
+  ngtcp2_sockaddr_union client_addru_new;
+  ngtcp2_addr client_addr_new =
+      tcp2_ipv4(TCP2_LOCALHOST, 2223, &client_addru_new);
+  ngtcp2_path client_path_new = {.local = client_addr_new,
+                                 .remote = server_addr};
+  ngtcp2_path server_path_new = {.local = server_addr,
+                                 .remote = client_addr_new};
+  CHECK_TCP2(ngtcp2_conn_initiate_migration(client, &client_path_new, now));
+  msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
+  CHECK_TCP2(tcp2_outgoing_process(&client_ctx, &msg2, now, 0));
+
+  for (int i = 0; i < 5; ++i) {
+    if (msg2.len) {
+      // Server recv
+      now = tcp2_current_time();
+      CHECK_TCP2(ngtcp2_conn_read_pkt(server, &server_path_new, 0, msg2.buf,
+                                      msg2.len, now));
+      msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
+      CHECK_TCP2(tcp2_outgoing_process(&server_ctx, &msg2, now, 0));
+    } else
+      LOG("skip");
+
+    if (msg2.len) {
+      // Client recv
+      now = tcp2_current_time();
+      CHECK_TCP2(ngtcp2_conn_read_pkt(client, &client_path_new, 0, msg2.buf,
+                                      msg2.len, now));
+      msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
+      CHECK_TCP2(tcp2_outgoing_process(&client_ctx, &msg2, now, 0));
+    } else
+      LOG("skip");
+  }
+
+  now = tcp2_current_time();
+  tcp2_outgoing_enqueue(&client_ctx, Str("hi2 from client"), stream);
+  msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
+  CHECK_TCP2(tcp2_outgoing_process(&client_ctx, &msg2, now, 0));
+
+  now = tcp2_current_time();
+  CHECK_TCP2(ngtcp2_conn_read_pkt(server, &server_path_new, 0, msg2.buf,
+                                  msg2.len, now));
+  msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
+  CHECK_TCP2(tcp2_outgoing_process(&server_ctx, &msg2, now, 0));
+
+  now = tcp2_current_time();
+  CHECK_TCP2(ngtcp2_conn_read_pkt(client, &client_path_new, 0, msg2.buf,
+                                  msg2.len, now));
   msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
   CHECK_TCP2(tcp2_outgoing_process(&client_ctx, &msg2, now, 0));
 

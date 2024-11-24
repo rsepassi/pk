@@ -58,4 +58,3 @@ ngtcp2
   session ticket
   ngtcp2_conn_decode_and_set_0rtt_transport_params
   ngtcp2_tls_early_data_rejected
-* connection migration
