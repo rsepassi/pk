@@ -1172,8 +1172,8 @@ typedef struct {
 } Tcp2Ctx;
 
 typedef struct {
-  u8 secret[32];
-  u8 iv[32];
+  u8 secret[1];
+  u8 iv[8];
   ngtcp2_crypto_aead_ctx aead;
   ngtcp2_crypto_cipher_ctx cipher;
 } Tcp2Key;
@@ -1209,6 +1209,15 @@ int tcp2_crypto_rw(ngtcp2_conn* conn, ngtcp2_encryption_level encryption_level,
             return rc;
         }
 
+        // Install 0RTT key
+        {
+          Tcp2Key* rx = calloc(1, sizeof(Tcp2Key));
+          rc = ngtcp2_conn_install_0rtt_key(
+              conn, &rx->aead, rx->iv, sizeof(rx->iv), &rx->cipher);
+          if (rc != 0)
+            return -1;
+        }
+
         // Install the handshake keys
         {
           Tcp2Key* tx = calloc(1, sizeof(Tcp2Key));
@@ -1224,17 +1233,29 @@ int tcp2_crypto_rw(ngtcp2_conn* conn, ngtcp2_encryption_level encryption_level,
             return -1;
         }
 
-        // Send the handshake message
+        // Send the handshake message with transport params + 0rtt params
         {
           Bytes resp;
-          resp.len = 256;
+          resp.len = 512;
           resp.buf = calloc(1, resp.len);
 
-          ngtcp2_ssize nwrite = ngtcp2_conn_encode_local_transport_params(
-              conn, &resp.buf[1], 255);
-          if (nwrite < 0)
-            return -1;
-          resp.buf[0] = (u8)nwrite;
+          // Transport params
+          {
+            ngtcp2_ssize nwrite = ngtcp2_conn_encode_local_transport_params(
+                conn, &resp.buf[1], 255);
+            if (nwrite < 0)
+              return -1;
+            resp.buf[0] = (u8)nwrite;
+          }
+
+          // 0RTT Transport params
+          {
+            ngtcp2_ssize nwrite = ngtcp2_conn_encode_0rtt_transport_params(
+                conn, &resp.buf[257], 255);
+            if (nwrite < 0)
+              return -1;
+            resp.buf[256] = (u8)nwrite;
+          }
 
           rc = ngtcp2_conn_submit_crypto_data(
               conn, NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE, resp.buf, resp.len);
@@ -1281,7 +1302,7 @@ int tcp2_crypto_rw(ngtcp2_conn* conn, ngtcp2_encryption_level encryption_level,
           return -1;
         break;
       case NGTCP2_ENCRYPTION_LEVEL_0RTT:
-        LOG("server received 0RTT");
+        // unexpected
         break;
     }
   } else {
@@ -1333,6 +1354,12 @@ int tcp2_crypto_rw(ngtcp2_conn* conn, ngtcp2_encryption_level encryption_level,
             return -1;
         }
 
+        // Save 0RTT params
+        {
+          u8* zerortt_params = malloc(data[256]);
+          memcpy(zerortt_params, &data[257], data[256]);
+        }
+
         // Mark complete
         {
           Tcp2Key* rx = calloc(1, sizeof(Tcp2Key));
@@ -1368,7 +1395,7 @@ int tcp2_crypto_rw(ngtcp2_conn* conn, ngtcp2_encryption_level encryption_level,
         }
         break;
       case NGTCP2_ENCRYPTION_LEVEL_0RTT:
-        LOG("client 0RTT");
+        // unexpected
         break;
     }
   }
@@ -1424,7 +1451,8 @@ int tcp2_recv_crypto_data(ngtcp2_conn* conn,
                           uint64_t offset, const uint8_t* data, size_t datalen,
                           void* user_data) {
   LOG("");
-  return tcp2_crypto_rw(conn, encryption_level, data, datalen, user_data);
+  return tcp2_crypto_rw(conn, encryption_level, data + offset, datalen - offset,
+                        user_data);
 }
 
 int tcp2_encrypt(uint8_t* dest, const ngtcp2_crypto_aead* aead,
@@ -1513,6 +1541,64 @@ int tcp2_version_negotiation(ngtcp2_conn* conn, uint32_t version,
   return rc;
 }
 
+int tcp2_recv_datagram(ngtcp2_conn* conn, uint32_t flags, const uint8_t* data,
+                       size_t datalen, void* user_data) {
+  LOG("");
+  // NGTCP2_DATAGRAM_FLAG_0RTT
+
+  Tcp2Ctx* ctx = user_data;
+  (void)ctx;
+
+  return 0;
+}
+
+int tcp2_recv_stream_data(ngtcp2_conn* conn, uint32_t flags, int64_t stream_id,
+                          uint64_t offset, const uint8_t* data, size_t datalen,
+                          void* user_data, void* stream_user_data) {
+  LOG("");
+  // NGTCP2_STREAM_DATA_FLAG_FIN
+  // NGTCP2_STREAM_DATA_FLAG_0RTT
+
+  Tcp2Ctx* ctx = user_data;
+  (void)ctx;
+
+  data += offset;
+  datalen -= offset;
+  (void)data;
+  (void)datalen;
+
+  LOG("DATA: %.*s", (int)datalen, data);
+
+  return 0;
+}
+
+int tcp2_handshake_confirmed(ngtcp2_conn* conn, void* user_data) {
+  LOG("");
+  return 0;
+}
+
+int tcp2_handshake_completed(ngtcp2_conn* conn, void* user_data) {
+  // for client, completed, but not confirmed
+  // for server, completed and confirmed
+  LOG("");
+  bool server = ngtcp2_conn_is_server(conn);
+  if (server)
+    return tcp2_handshake_confirmed(conn, user_data);
+  return 0;
+}
+
+int tcp2_acked_stream_data_offset(ngtcp2_conn* conn, int64_t stream_id,
+                                  uint64_t offset, uint64_t datalen,
+                                  void* user_data, void* stream_user_data) {
+  LOG("");
+
+  // data[offset..offset+datalen] has been acknowledged
+  Tcp2Ctx* ctx = user_data;
+  (void)ctx;
+
+  return 0;
+}
+
 void tcp2_log_printf(void* user_data, const char* format, ...) {
   va_list args;
   va_start(args, format);
@@ -1528,9 +1614,13 @@ u64 tcp2_current_time() {
 }
 
 void tcp2_set_callbacks(ngtcp2_callbacks* cb, bool client) {
+  // Callback error: NGTCP2_ERR_CALLBACK_FAILURE
+
   if (client) {
     cb->client_initial = tcp2_client_initial;
     cb->recv_retry = tcp2_recv_retry;
+    // Optional
+    cb->handshake_confirmed = tcp2_handshake_confirmed;
   } else {
     cb->recv_client_initial = tcp2_recv_client_initial;
   }
@@ -1547,19 +1637,24 @@ void tcp2_set_callbacks(ngtcp2_callbacks* cb, bool client) {
   cb->get_path_challenge_data = tcp2_get_path_challenge_data;
   cb->version_negotiation = tcp2_version_negotiation;
 
-  // Callback error: NGTCP2_ERR_CALLBACK_FAILURE
-
   // Optional
-  // ngtcp2_handshake_completed handshake_completed;
-  // ngtcp2_recv_version_negotiation recv_version_negotiation;
-  // ngtcp2_recv_stream_data recv_stream_data;
-  // ngtcp2_acked_stream_data_offset acked_stream_data_offset;
+  cb->recv_stream_data = tcp2_recv_stream_data;
+  cb->recv_datagram = tcp2_recv_datagram;
+  cb->acked_stream_data_offset = tcp2_acked_stream_data_offset;
+  cb->handshake_completed = tcp2_handshake_completed;
+
   // ngtcp2_stream_open stream_open;
   // ngtcp2_stream_close stream_close;
+  //
+  // ngtcp2_remove_connection_id remove_connection_id;
+  //
+  // ngtcp2_stream_stop_sending stream_stop_sending;
+  // ngtcp2_tls_early_data_rejected tls_early_data_rejected;
+  //
+  // ngtcp2_recv_version_negotiation recv_version_negotiation;
   // ngtcp2_recv_stateless_reset recv_stateless_reset;
   // ngtcp2_extend_max_streams extend_max_local_streams_bidi;
   // ngtcp2_extend_max_streams extend_max_local_streams_uni;
-  // ngtcp2_remove_connection_id remove_connection_id;
   // ngtcp2_path_validation path_validation;
   // ngtcp2_select_preferred_addr select_preferred_addr;
   // ngtcp2_stream_reset stream_reset;
@@ -1567,15 +1662,11 @@ void tcp2_set_callbacks(ngtcp2_callbacks* cb, bool client) {
   // ngtcp2_extend_max_streams extend_max_remote_streams_uni;
   // ngtcp2_extend_max_stream_data extend_max_stream_data;
   // ngtcp2_connection_id_status dcid_status;
-  // ngtcp2_handshake_confirmed handshake_confirmed;
   // ngtcp2_recv_new_token recv_new_token;
-  // ngtcp2_recv_datagram recv_datagram;
   // ngtcp2_ack_datagram ack_datagram;
   // ngtcp2_lost_datagram lost_datagram;
-  // ngtcp2_stream_stop_sending stream_stop_sending;
   // ngtcp2_recv_key recv_rx_key;
   // ngtcp2_recv_key recv_tx_key;
-  // ngtcp2_tls_early_data_rejected tls_early_data_rejected;
 }
 
 int tcp2_write(ngtcp2_conn* conn, Bytes* pkt, Bytes data, i64 stream) {
@@ -1631,38 +1722,13 @@ void tcp2_transport_params_default(ngtcp2_transport_params* params) {
 }
 
 int demo_tcp2(int argc, const char** argv) {
+  // https://nghttp2.org/ngtcp2/programmers-guide.html
   LOG("tcp2");
 
-  // https://nghttp2.org/ngtcp2/programmers-guide.html
-
-  // Send
-  // ngtcp2_conn_open_bidi_stream()
-  // ngtcp2_conn_open_uni_stream()
-  // ngtcp2_conn_writev_stream() or ngtcp2_conn_write_pkt()
-  // ngtcp2_settings.max_tx_udp_payload_size byte packets (1200)
-  //
-  // Cannot open a stream until handshake completed
-  // extend_max_local_streams{uni,bidi} also indicate streams are open
-  //
-  // An application should pace sending packets. ngtcp2_conn_get_send_quantum()
-  // returns the number of bytes that can be sent without packet spacing. After
-  // one or more calls of ngtcp2_conn_writev_stream() (it can be called
-  // multiple times to fill the buffer sized up to
-  // ngtcp2_conn_get_send_quantum() bytes), call
-  // ngtcp2_conn_update_pkt_tx_time() to set the timer when the next packet
-  // should be sent. The timer is integrated into ngtcp2_conn_get_expiry().
-
-  // Recv
-  // ngtcp2_pkt_decode_version_cid()
-  // If NGTCP2_ERR_VERSION_NEGOTIATION, ngtcp2_pkt_write_version_negotiation()
-  // If existing conn id, ngtcp2_conn_read_pkt()
-  // Otherwise, ngtcp2_accept() then ngtcp2_conn_read_pkt()
-
-  // Timers
+  // ngtcp2_conn_get_send_quantum
   // ngtcp2_conn_get_expiry
-  // Call ngtcp2_conn_handle_expiry() upon expiry
-  //   And then ngtcp2_conn_writev_stream() (or ngtcp2_conn_writev_datagram()
-  // If it returns NGTCP2_ERR_IDLE_CLOSE, drop connection without calling write
+  // NGTCP2_ERR_VERSION_NEGOTIATION, ngtcp2_pkt_write_version_negotiation
+  // NGTCP2_ERR_IDLE_CLOSE, drop connection without calling write
 
   // 0rtt
   //   ngtcp2_conn_encode_0rtt_transport_params
@@ -1729,10 +1795,6 @@ int demo_tcp2(int argc, const char** argv) {
     ngtcp2_version_cid vcid;
     CHECK_TCP2(
         ngtcp2_pkt_decode_version_cid(&vcid, pkt.buf, pkt.len, TCP2_CIDLEN));
-    // Could return NGTCP2_ERR_VERSION_NEGOTIATION,
-    // ngtcp2_pkt_write_version_negotiation
-    bool short_header = vcid.version == 0;
-    CHECK(!short_header);
     LOGB(Bytes(vcid.scid, vcid.scidlen));
 
     LOG("accepting connection");
@@ -1762,8 +1824,6 @@ int demo_tcp2(int argc, const char** argv) {
 
     LOG("send response");
     CHECK0(tcp2_dummy_write(server, &resp));
-
-    // TODO: server send some data? or illegal (bc of QUIC or Noise/Wireguard)?
   }
 
   // Client finish
@@ -1774,10 +1834,6 @@ int demo_tcp2(int argc, const char** argv) {
     ngtcp2_version_cid vcid;
     CHECK_TCP2(
         ngtcp2_pkt_decode_version_cid(&vcid, resp.buf, resp.len, TCP2_CIDLEN));
-    // Could return NGTCP2_ERR_VERSION_NEGOTIATION,
-    // ngtcp2_pkt_write_version_negotiation
-    bool short_header = vcid.version == 0;
-    CHECK(!short_header);
     LOGB(Bytes(vcid.scid, vcid.scidlen));
 
     LOG("client process packet");

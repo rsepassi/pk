@@ -50,3 +50,11 @@ key usability
 
 uvco
 * consider storing handles in the coroutine frame? instead of malloc
+
+ngtcp2
+* ngtcp2_conn_set_tls_error
+* 0RTT
+  session ticket
+  ngtcp2_conn_decode_and_set_0rtt_transport_params
+  ngtcp2_tls_early_data_rejected
+* connection migration

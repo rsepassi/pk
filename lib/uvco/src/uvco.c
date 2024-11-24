@@ -93,7 +93,7 @@ int uvco_fs_write(uv_loop_t* loop, uv_file fd, Bytes contents, usize offset,
   co_wait_t wait = {mco_running(), 0, 0};
   uv_fs_t* req = malloc(sizeof(uv_fs_t));
   req->data = &wait;
-  uv_buf_t buf = uv_buf_init((char*)contents.buf, (uint)contents.len);
+  uv_buf_t buf = uv_buf_init((char*)contents.buf, (u32)contents.len);
   if (uv_fs_write(loop, req, fd, &buf, 1, offset, fs_cb))
     goto end;
   CO_AWAIT(&wait);
@@ -138,7 +138,7 @@ int uvco_fs_read(uv_loop_t* loop, uv_file fd, Bytes* contents, usize offset) {
   co_wait_t wait = {mco_running(), 0, 0};
   uv_fs_t* req = malloc(sizeof(uv_fs_t));
   req->data = &wait;
-  uv_buf_t buf = uv_buf_init((char*)contents->buf, (uint)contents->len);
+  uv_buf_t buf = uv_buf_init((char*)contents->buf, (u32)contents->len);
   if (uv_fs_read(loop, req, fd, &buf, 1, offset, fs_cb))
     goto end;
   CO_AWAIT(&wait);
