@@ -33,7 +33,7 @@ cat <<EOF > $name.pc
 Name: $name
 Version: 0.0.1
 Description: <none>
-Libs: -L\${prefix} -l$name
-Cflags: -I\${prefix}/include
+Libs: -L\${build_prefix} -l$name
+Cflags: -I\${src_prefix}/include
 Requirez: lib/cbase
 EOF

@@ -34,3 +34,8 @@ export CFLAGS += -isystem $(CURDIR)/platform/macos/include
 else ifeq ($(TARGET), aarch64-macos)
 export CFLAGS += -isystem $(CURDIR)/platform/macos/include
 endif
+
+ifdef VALGRIND
+export VALGRIND := 1
+export CFLAGS += -isystem $(CURDIR)/platform/valgrind/include
+endif

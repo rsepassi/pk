@@ -21,6 +21,10 @@ SRCS := \
 CFLAGS += -Wall -Werror -fvisibility=hidden -ftls-model=local-dynamic \
 					-Wno-unknown-pragmas -Wno-conversion
 
+ifdef VALGRIND
+CFLAGS += -DMI_STAT=2 -DMI_SECURE=4 -DMI_DEBUG=3 -DMI_TRACK_VALGRIND=1
+endif
+
 CLEAN_EXTRAS := src/prim/*.o src/prim/*.obj
 
 include $(ROOTDIR)/scripts/cc.mk
