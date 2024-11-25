@@ -1205,6 +1205,7 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
                           ngtcp2_encryption_level encryption_level,
                           const uint8_t* data, size_t datalen,
                           void* user_data) {
+  // TODO: ngtcp2_conn_set_tls_error on error
   LOG("level=%d", encryption_level);
   Tcp2Ctx* ctx = user_data;
   (void)ctx;
@@ -1353,6 +1354,15 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
           if (rc != 0)
             return rc;
 
+          // Install 0RTT key
+          {
+            Tcp2Key* tx = tcp2_key_new();
+            ngtcp2_conn_set_0rtt_crypto_ctx(conn, &tx->ctx);
+            rc = ngtcp2_conn_install_0rtt_key(conn, &tx->aead, tx->iv,
+                                              sizeof(tx->iv), &tx->cipher);
+            if (rc != 0)
+              return -1;
+          }
         } else {
           // Server response
           LOG("server crypto repsonse arrived");
@@ -1592,9 +1602,10 @@ static int tcp2_recv_stream_data(ngtcp2_conn* conn, uint32_t flags,
                                  int64_t stream_id, uint64_t offset,
                                  const uint8_t* data, size_t datalen,
                                  void* user_data, void* stream_user_data) {
-  LOG("");
-  // NGTCP2_STREAM_DATA_FLAG_FIN
-  // NGTCP2_STREAM_DATA_FLAG_0RTT
+  bool stream_end = flags & NGTCP2_STREAM_DATA_FLAG_FIN;
+  bool zerortt = flags & NGTCP2_STREAM_DATA_FLAG_0RTT;
+  (void)stream_end;
+  (void)zerortt;
 
   Tcp2Ctx* ctx = user_data;
 
@@ -1792,7 +1803,7 @@ static void tcp2_transport_params_default(ngtcp2_transport_params* params) {
 
 static int tcp2_connect(ngtcp2_conn** client, const ngtcp2_path* path,
                         const ngtcp2_mem* mem, Tcp2Ctx* ctx, Bytes* pkt,
-                        u64 now) {
+                        Bytes zerortt_data, u64 now) {
   LOG("");
   ngtcp2_cid scid = {0};
   scid.datalen = TCP2_CIDLEN;
@@ -1818,6 +1829,22 @@ static int tcp2_connect(ngtcp2_conn** client, const ngtcp2_path* path,
 
   ctx->conn = *client;
 
+  if (zerortt_data.len) {
+    if (!ctx->zerortt_params.len)
+      return -1;
+
+    LOG("setting 0rtt params");
+    rc = ngtcp2_conn_decode_and_set_0rtt_transport_params(
+        *client, ctx->zerortt_params.buf, ctx->zerortt_params.len);
+    if (rc != 0)
+      return rc;
+    i64 stream;
+    rc = ngtcp2_conn_open_bidi_stream(*client, &stream, ctx);
+    if (rc != 0)
+      return rc;
+    tcp2_outgoing_enqueue(ctx, zerortt_data, stream);
+  }
+
   // Send
   pkt->len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
   pkt->buf = malloc(pkt->len);
@@ -1830,9 +1857,9 @@ static int tcp2_connect(ngtcp2_conn** client, const ngtcp2_path* path,
   return 0;
 }
 
-static int tcp2_recv_connect(ngtcp2_conn** server, const ngtcp2_path* path,
-                             const ngtcp2_mem* mem, Tcp2Ctx* ctx, Bytes pkt,
-                             Bytes* resp, u64 now) {
+static int tcp2_accept(ngtcp2_conn** server, const ngtcp2_path* path,
+                       const ngtcp2_mem* mem, Tcp2Ctx* ctx, Bytes pkt,
+                       Bytes* resp, u64 now) {
   LOG("");
 
   int rc = 0;
@@ -1926,8 +1953,8 @@ static int demo_tcp2(int argc, const char** argv) {
   ngtcp2_conn* client;
   Bytes pkt_connect;
   ngtcp2_path client_path = {.local = client_addr, .remote = server_addr};
-  CHECK_TCP2(
-      tcp2_connect(&client, &client_path, mem, &client_ctx, &pkt_connect, now));
+  CHECK_TCP2(tcp2_connect(&client, &client_path, mem, &client_ctx, &pkt_connect,
+                          BytesZero, now));
 
   // Server reply
   now = tcp2_current_time();
@@ -1936,8 +1963,8 @@ static int demo_tcp2(int argc, const char** argv) {
   Bytes pkt_connect_reply;
   ngtcp2_path server_path = {.local = server_addr, .remote = client_addr};
   LOG("receiving packet");
-  CHECK_TCP2(tcp2_recv_connect(&server, &server_path, mem, &server_ctx,
-                               pkt_connect, &pkt_connect_reply, now));
+  CHECK_TCP2(tcp2_accept(&server, &server_path, mem, &server_ctx, pkt_connect,
+                         &pkt_connect_reply, now));
   free(pkt_connect.buf);
 
   // Client finish and send data
@@ -2017,14 +2044,45 @@ static int demo_tcp2(int argc, const char** argv) {
   now = tcp2_current_time();
   CHECK_TCP2(ngtcp2_conn_read_pkt(server, &server_path_new, 0, msg2.buf,
                                   msg2.len, now));
+  now = tcp2_current_time();
   msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
   CHECK_TCP2(tcp2_outgoing_process(&server_ctx, &msg2, now, 0));
 
   now = tcp2_current_time();
   CHECK_TCP2(ngtcp2_conn_read_pkt(client, &client_path_new, 0, msg2.buf,
                                   msg2.len, now));
+
+  // Close the connection
+  now = tcp2_current_time();
   msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
-  CHECK_TCP2(tcp2_outgoing_process(&client_ctx, &msg2, now, 0));
+  msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
+  ngtcp2_ccerr ccerr = {0};
+  ccerr.type = NGTCP2_CCERR_TYPE_APPLICATION;
+  ngtcp2_ssize sz = ngtcp2_conn_write_connection_close(
+      client, &client_path_new, 0, msg2.buf, msg2.len, &ccerr, now);
+  CHECK_TCP2(sz);
+  msg2.len = sz;
+  ngtcp2_conn_del(client);
+
+  now = tcp2_current_time();
+  CHECK(ngtcp2_conn_read_pkt(server, &server_path_new, 0, msg2.buf, msg2.len,
+                             now) == NGTCP2_ERR_DRAINING);
+  ngtcp2_conn_del(server);
+
+  // Attempt a 0-RTT data send
+  LOG("0rtt send");
+  now = tcp2_current_time();
+  CHECK_TCP2(tcp2_connect(&client, &client_path, mem, &client_ctx, &pkt_connect,
+                          Str("zero!"), now));
+  LOG("0rtt recv");
+  now = tcp2_current_time();
+  CHECK_TCP2(tcp2_accept(&server, &server_path, mem, &server_ctx, pkt_connect,
+                         &pkt_connect_reply, now));
+
+  now = tcp2_current_time();
+  CHECK_TCP2(ngtcp2_conn_read_pkt(client, &client_path, 0,
+                                  pkt_connect_reply.buf, pkt_connect_reply.len,
+                                  now));
 
   return 0;
 }
