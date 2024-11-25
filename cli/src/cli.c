@@ -21,10 +21,13 @@
 #include "bip39.h"
 #include "crypto.h"
 #include "getpass.h"
+#include "hashmap.h"
 #include "keyio.h"
+#include "list.h"
 #include "log.h"
 #include "nik.h"
 #include "nik_cxn.h"
+#include "queue.h"
 #include "signal.h"
 #include "stdmacros.h"
 #include "stdtypes.h"
@@ -2027,47 +2030,167 @@ static int demo_tcp2(int argc, const char** argv) {
   CHECK_TCP2(tcp2_outgoing_process(&client_ctx, &msg2, now, 0));
 
   now = tcp2_current_time();
-  CHECK_TCP2(ngtcp2_conn_read_pkt(server, &server_path_new, 0, msg2.buf,
-                                  msg2.len, now));
+  CHECK_TCP2(ngtcp2_conn_read_pkt(server_ctx.conn, &server_path_new, 0,
+                                  msg2.buf, msg2.len, now));
   now = tcp2_current_time();
   msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
   CHECK_TCP2(tcp2_outgoing_process(&server_ctx, &msg2, now, 0));
 
   now = tcp2_current_time();
-  CHECK_TCP2(ngtcp2_conn_read_pkt(client, &client_path_new, 0, msg2.buf,
-                                  msg2.len, now));
+  CHECK_TCP2(ngtcp2_conn_read_pkt(client_ctx.conn, &client_path_new, 0,
+                                  msg2.buf, msg2.len, now));
 
   // Close the connection
   now = tcp2_current_time();
   msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
-  msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
   ngtcp2_ccerr ccerr = {0};
   ccerr.type = NGTCP2_CCERR_TYPE_APPLICATION;
   ngtcp2_ssize sz = ngtcp2_conn_write_connection_close(
-      client, &client_path_new, 0, msg2.buf, msg2.len, &ccerr, now);
+      client_ctx.conn, &client_path_new, 0, msg2.buf, msg2.len, &ccerr, now);
   CHECK_TCP2(sz);
   msg2.len = sz;
-  ngtcp2_conn_del(client);
 
   now = tcp2_current_time();
-  CHECK(ngtcp2_conn_read_pkt(server, &server_path_new, 0, msg2.buf, msg2.len,
-                             now) == NGTCP2_ERR_DRAINING);
-  ngtcp2_conn_del(server);
+  CHECK(ngtcp2_conn_read_pkt(server_ctx.conn, &server_path_new, 0, msg2.buf,
+                             msg2.len, now) == NGTCP2_ERR_DRAINING);
+
+  // Cleanup
+
+  allocator_free(client_ctx.allocator, msg2);
+
+  ngtcp2_conn_del(client_ctx.conn);
+  ngtcp2_conn_del(server_ctx.conn);
+
+  tcp2_sent_free(&client_ctx);
+  tcp2_sent_free(&server_ctx);
+
+  tcp2_outgoing_free(&client_ctx);
+  tcp2_outgoing_free(&server_ctx);
 
   // Attempt a 0-RTT data send
   LOG("0rtt send");
   now = tcp2_current_time();
-  CHECK_TCP2(tcp2_connect(&client, &client_path, mem, &client_ctx, &pkt_connect,
-                          Str("zero!"), now));
+  CHECK_TCP2(
+      tcp2_connect(&client_ctx, &client_path, &pkt_connect, Str("zero!"), now));
   LOG("0rtt recv");
   now = tcp2_current_time();
-  CHECK_TCP2(tcp2_accept(&server, &server_path, mem, &server_ctx, pkt_connect,
+  CHECK_TCP2(tcp2_accept(&server_ctx, &server_path, pkt_connect,
                          &pkt_connect_reply, now));
-
+  LOG("0rtt reply");
   now = tcp2_current_time();
-  CHECK_TCP2(ngtcp2_conn_read_pkt(client, &client_path, 0,
+  CHECK_TCP2(ngtcp2_conn_read_pkt(client_ctx.conn, &client_path, 0,
                                   pkt_connect_reply.buf, pkt_connect_reply.len,
                                   now));
+
+  allocator_free(client_ctx.allocator, pkt_connect);
+  allocator_free(server_ctx.allocator, pkt_connect_reply);
+
+  ngtcp2_conn_del(client_ctx.conn);
+  ngtcp2_conn_del(server_ctx.conn);
+
+  tcp2_sent_free(&client_ctx);
+  tcp2_sent_free(&server_ctx);
+  tcp2_outgoing_free(&client_ctx);
+  tcp2_outgoing_free(&server_ctx);
+
+  hashmap_deinit(&client_ctx.sent);
+  hashmap_deinit(&server_ctx.sent);
+
+  return 0;
+}
+
+static int demo_containers(int argc, const char** argv) {
+  Allocator al = allocatormi_allocator();
+  {
+    List a;
+    List_init(&a, i32, al, 16);
+
+    i32* a0 = list_get(&a, 0);
+    CHECK0(a0);
+
+    i32* an;
+    CHECK0(list_addn(&a, 8, (void**)&an));
+    for (i32 i = 0; i < 8; ++i) {
+      an[i] = i + 22;
+    }
+
+    for (i32 i = 0; i < 8; ++i) {
+      CHECK(*(i32*)list_get(&a, i) == i + 22);
+    }
+
+    CHECK0(list_addn(&a, 16, (void**)&an));
+
+    i32 x = 7;
+    list_set(&a, 22, &x);
+    CHECK(*(i32*)list_get(&a, 22) == 7);
+
+    list_deinit(&a);
+  }
+
+  {
+    Hashmap a;
+    CHECK0(Hashmap_i32_create(&a, i32, al));
+    CHECK0(a.n_buckets);
+
+    {
+      i32* x;
+      i32* y;
+      hashmap_foreach(&a, x, y, { CHECK((*x + *y) == 10); });
+    }
+
+    {
+      i32 x = 0;
+      HashmapStatus s;
+      HashmapIter it = hashmap_put(&a, &x, &s);
+      CHECK(it != hashmap_end(&a));
+      CHECK(s == HashmapStatus_New);
+      CHECK(a.n_buckets == 4);
+      *(i32*)hashmap_val(&a, it) = 10;
+    }
+
+    for (i32 i = 1; i < 10; ++i) {
+      HashmapStatus s;
+      HashmapIter it = hashmap_put(&a, &i, &s);
+      CHECK(it != hashmap_end(&a));
+      CHECK(s == HashmapStatus_New);
+      *(i32*)hashmap_val(&a, it) = 10 - i;
+    }
+
+    {
+      i32 n = 0;
+      i32* x;
+      i32* y;
+      hashmap_foreach(&a, x, y, {
+        CHECK((*x + *y) == 10);
+        ++n;
+      });
+      CHECK(n == 10);
+    }
+
+    hashmap_deinit(&a);
+  }
+
+  {
+    typedef struct {
+      i64 x;
+      Node n;
+    } A;
+
+    Queue q = {0};
+
+    A vals[8] = {0};
+    for (usize i = 0; i < ARRAY_LEN(vals); ++i) {
+      vals[i].x = i + 22;
+      q_enq(&q, &vals[i].n);
+    }
+
+    Node* n;
+    i64 i = 0;
+    while ((n = q_deq(&q))) {
+      CHECK(CONTAINER_OF(n, A, n)->x == i + 22);
+      ++i;
+    }
+  }
 
   return 0;
 }
@@ -2091,6 +2214,7 @@ static const char* const usages[] = {
     "\n      - demo-vterm"
     "\n      - demo-x3dh"
     "\n      - demo-tcp2"
+    "\n      - demo-containers"
     //
     ,
     NULL,
@@ -2102,23 +2226,24 @@ struct cmd_struct {
 };
 
 static struct cmd_struct commands[] = {
-    {"demo-b58", demo_b58},               //
-    {"demo-base64", demo_base64},         //
-    {"demo-bip39", demo_bip39},           //
-    {"demo-drat", demo_drat},             //
-    {"demo-holepunch", demo_holepunch},   //
-    {"demo-keygen", demo_keygen},         //
-    {"demo-keyread", demo_keyread},       //
-    {"demo-kv", demo_kv},                 //
-    {"demo-mimalloc", demo_mimalloc},     //
-    {"demo-multicast", demo_multicast},   //
-    {"demo-nik", demo_nik},               //
-    {"demo-nikcxn", demo_nikcxn},         //
-    {"demo-pwhash", demo_pwhash},         //
-    {"demo-sshkeyread", demosshkeyread},  //
-    {"demo-vterm", demo_vterm},           //
-    {"demo-x3dh", demo_x3dh},             //
-    {"demo-tcp2", demo_tcp2},             //
+    {"demo-b58", demo_b58},                //
+    {"demo-base64", demo_base64},          //
+    {"demo-bip39", demo_bip39},            //
+    {"demo-drat", demo_drat},              //
+    {"demo-holepunch", demo_holepunch},    //
+    {"demo-keygen", demo_keygen},          //
+    {"demo-keyread", demo_keyread},        //
+    {"demo-kv", demo_kv},                  //
+    {"demo-mimalloc", demo_mimalloc},      //
+    {"demo-multicast", demo_multicast},    //
+    {"demo-nik", demo_nik},                //
+    {"demo-nikcxn", demo_nikcxn},          //
+    {"demo-pwhash", demo_pwhash},          //
+    {"demo-sshkeyread", demosshkeyread},   //
+    {"demo-vterm", demo_vterm},            //
+    {"demo-x3dh", demo_x3dh},              //
+    {"demo-tcp2", demo_tcp2},              //
+    {"demo-containers", demo_containers},  //
 };
 
 typedef struct {
