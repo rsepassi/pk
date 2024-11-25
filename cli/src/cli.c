@@ -1208,15 +1208,14 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
   // TODO: ngtcp2_conn_set_tls_error on error
   LOG("level=%d", encryption_level);
   Tcp2Ctx* ctx = user_data;
-  (void)ctx;
-  bool server = ngtcp2_conn_is_server(conn);
   int rc;
 
-  if (server) {
+  if (ngtcp2_conn_is_server(conn)) {
     // Server
     switch (encryption_level) {
       case NGTCP2_ENCRYPTION_LEVEL_INITIAL: {
         // Respond to client initial message
+
         u8 tparams_len = data[0];
         rc = ngtcp2_conn_decode_and_set_remote_transport_params(conn, &data[1],
                                                                 tparams_len);
@@ -1290,7 +1289,7 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
             return rc;
         }
 
-        // Mark complete
+        // Install the txrx keys
         {
           Tcp2Key* tx = tcp2_key_new();
           Tcp2Key* rx = tcp2_key_new();
@@ -1306,31 +1305,20 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
             return -1;
 
           ngtcp2_conn_set_crypto_ctx(conn, &tx->ctx);
-          ngtcp2_conn_tls_handshake_completed(conn);
-        }
-
-        // OK
-        {
-          Str ok = Str("ok");
-          rc = ngtcp2_conn_submit_crypto_data(
-              conn, NGTCP2_ENCRYPTION_LEVEL_1RTT, ok.buf, ok.len);
-          if (rc != 0)
-            return rc;
         }
 
         break;
       }
       case NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE: {
-        LOG("server received handshake finish");
+        ngtcp2_conn_tls_handshake_completed(conn);
+        LOG("server handshake completed");
         break;
       }
       case NGTCP2_ENCRYPTION_LEVEL_1RTT:
-        LOG("server received 1RTT");
-        if (!str_eq(Bytes(data, datalen), Str("ok")))
-          return -1;
+        // unexpected, tcp2 never sends at this level
         break;
       case NGTCP2_ENCRYPTION_LEVEL_0RTT:
-        // unexpected
+        // unexpected, ngtcp2 never sends at this level
         break;
     }
   } else {
@@ -1339,6 +1327,7 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
       case NGTCP2_ENCRYPTION_LEVEL_INITIAL: {
         if (data == NULL) {
           // First message out
+
           Bytes data;
           data.len = 256;
           data.buf = calloc(1, data.len);
@@ -1398,6 +1387,15 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
           memcpy(ctx->zerortt_params.buf, &data[257], ctx->zerortt_params.len);
         }
 
+        // Ack
+        {
+          Str data = Str("ok");
+          rc = ngtcp2_conn_submit_crypto_data(
+              conn, NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE, data.buf, data.len);
+          if (rc != 0)
+            return rc;
+        }
+
         // Mark complete
         {
           Tcp2Key* rx = tcp2_key_new();
@@ -1421,21 +1419,10 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
         }
         break;
       case NGTCP2_ENCRYPTION_LEVEL_1RTT:
-        LOG("client received 1RTT");
-        if (!str_eq(Bytes(data, datalen), Str("ok")))
-          return -1;
-
-        // OK
-        {
-          Str ok = Str("ok");
-          rc = ngtcp2_conn_submit_crypto_data(
-              conn, NGTCP2_ENCRYPTION_LEVEL_1RTT, ok.buf, ok.len);
-          if (rc != 0)
-            return rc;
-        }
+        // unexpected, tcp2 never sends at this level
         break;
       case NGTCP2_ENCRYPTION_LEVEL_0RTT:
-        // unexpected
+        // unexpected, ngtcp2 never sends at this level
         break;
     }
   }
@@ -1472,10 +1459,9 @@ static int tcp2_client_initial(ngtcp2_conn* conn, void* user_data) {
 static int tcp2_recv_retry(ngtcp2_conn* conn, const ngtcp2_pkt_hd* hd,
                            void* user_data) {
   LOG("");
-  CHECK(false);
   // hd->scid
   // ngtcp2_conn_install_initial_key
-  return 0;
+  return -1;
 }
 
 static int tcp2_recv_client_initial(ngtcp2_conn* conn, const ngtcp2_cid* dcid,
@@ -1604,11 +1590,10 @@ static int tcp2_recv_stream_data(ngtcp2_conn* conn, uint32_t flags,
                                  void* user_data, void* stream_user_data) {
   bool stream_end = flags & NGTCP2_STREAM_DATA_FLAG_FIN;
   bool zerortt = flags & NGTCP2_STREAM_DATA_FLAG_0RTT;
-  (void)stream_end;
-  (void)zerortt;
 
   Tcp2Ctx* ctx = user_data;
 
+  LOG("FIN=%d 0RTT=%d", stream_end, zerortt);
   LOG("DATA: %.*s", (int)datalen, data);
 
   if (ngtcp2_conn_is_server(conn))
