@@ -1170,22 +1170,65 @@ typedef struct {
 } Tcp2MsgQ;
 
 typedef struct {
-  Tcp2MsgQ outgoing;
   ngtcp2_conn* conn;
+  Allocator allocator;
+  ngtcp2_mem mem;
+  Tcp2MsgQ outgoing;
+  Hashmap sent;  // i64 -> Tcp2MsgQ
   u8 zerortt_buf[256];
   Bytes zerortt_params;
 } Tcp2Ctx;
 
+static void tcp2_msgq_enqueue(Tcp2MsgQ* q, Tcp2Msg* node) {
+  node->_next = 0;
+  if (q->tail) {
+    q->tail->_next = node;
+  } else {
+    q->head = node;
+    q->tail = node;
+  }
+}
+
 static void tcp2_outgoing_enqueue(Tcp2Ctx* ctx, Bytes data, i64 stream) {
-  Tcp2Msg* node = calloc(1, sizeof(Tcp2Msg));
+  Tcp2Msg* node;
+  CHECK0(Alloc_create(ctx->allocator, &node));
   node->data = data;
   node->stream = stream;
-  if (ctx->outgoing.tail) {
-    ctx->outgoing.tail->_next = node;
-  } else {
-    ctx->outgoing.head = node;
-    ctx->outgoing.tail = node;
+  tcp2_msgq_enqueue(&ctx->outgoing, node);
+}
+
+static Tcp2Msg* tcp2_msgq_dequeue(Tcp2MsgQ* q) {
+  if (q->head == 0)
+    return 0;
+
+  Tcp2Msg* msg = q->head;
+  if (q->head == q->tail) {
+    q->head = 0;
+    q->tail = 0;
+    return msg;
   }
+
+  q->head = msg->_next;
+  return msg;
+}
+
+static void tcp2_outgoing_free(Tcp2Ctx* ctx) {
+  Tcp2Msg* msg;
+  while ((msg = tcp2_msgq_dequeue(&ctx->outgoing))) {
+    Alloc_destroy(ctx->allocator, msg);
+  }
+}
+
+static void tcp2_sent_free(Tcp2Ctx* ctx) {
+  Tcp2Msg* msg;
+
+  i64* stream;
+  Tcp2MsgQ* q;
+
+  hashmap_foreach(&ctx->sent, stream, q, {
+    while ((msg = tcp2_msgq_dequeue(q)))
+      Alloc_destroy(ctx->allocator, msg);
+  });
 }
 
 typedef struct {
@@ -1624,11 +1667,26 @@ static int tcp2_acked_stream_data_offset(ngtcp2_conn* conn, int64_t stream_id,
                                          uint64_t offset, uint64_t datalen,
                                          void* user_data,
                                          void* stream_user_data) {
+  // data[offset..offset+datalen] has been acknowledged, can free
   LOG("");
 
-  // data[offset..offset+datalen] has been acknowledged, can free
   Tcp2Ctx* ctx = user_data;
-  (void)ctx;
+
+  HashmapIter it = hashmap_get(&ctx->sent, &stream_id);
+  if (it == hashmap_end(&ctx->sent))
+    return -1;
+
+  Tcp2MsgQ* q = hashmap_val(&ctx->sent, it);
+  Tcp2Msg* msg;
+  while (datalen && (msg = q->head)) {
+    usize nacked = MIN(msg->data.len, datalen);
+    msg->_offset -= nacked;
+    datalen -= nacked;
+    if (msg->_offset == 0) {
+      Tcp2Msg* acked = tcp2_msgq_dequeue(q);
+      Alloc_destroy(ctx->allocator, acked);
+    }
+  }
 
   return 0;
 }
@@ -1645,6 +1703,46 @@ static u64 tcp2_current_time() {
   struct timespec sp;
   clock_gettime(CLOCK_MONOTONIC, &sp);
   return sp.tv_sec * NGTCP2_SECONDS + sp.tv_nsec;
+}
+
+void* tcp2_allocator_malloc(size_t size, void* user_data) {
+  Allocator* alloc = user_data;
+  Bytes mem = {0};
+  if (allocator_u8(*alloc, &mem, size))
+    return 0;
+  return mem.buf;
+}
+
+void* tcp2_allocator_calloc(size_t nmemb, size_t size, void* user_data) {
+  void* p = tcp2_allocator_malloc(nmemb * size, user_data);
+  if (p == NULL)
+    return p;
+  memset(p, 0, nmemb * size);
+  return p;
+}
+
+void* tcp2_allocator_realloc(void* ptr, size_t size, void* user_data) {
+  Allocator* alloc = user_data;
+  Bytes mem = Bytes(ptr, 0);
+  if (allocator_realloc(*alloc, &mem, size, 1))
+    return 0;
+  return mem.buf;
+}
+
+void tcp2_allocator_free(void* p, void* user_data) {
+  Allocator* alloc = user_data;
+  Bytes mem = Bytes(p, 1);
+  allocator_free(*alloc, mem);
+}
+
+static ngtcp2_mem tcp2_allocator(Allocator* alloc) {
+  ngtcp2_mem mem = {0};
+  mem.user_data = alloc;
+  mem.malloc = tcp2_allocator_malloc;
+  mem.free = tcp2_allocator_free;
+  mem.realloc = tcp2_allocator_realloc;
+  mem.calloc = tcp2_allocator_calloc;
+  return mem;
 }
 
 static void tcp2_set_callbacks(ngtcp2_callbacks* cb, bool client) {
@@ -1703,21 +1801,6 @@ static void tcp2_set_callbacks(ngtcp2_callbacks* cb, bool client) {
   // ngtcp2_recv_key recv_tx_key;
 }
 
-Tcp2Msg* tcp2_outgoing_dequeue(Tcp2Ctx* ctx) {
-  if (ctx->outgoing.head == 0)
-    return 0;
-
-  Tcp2Msg* msg = ctx->outgoing.head;
-  if (ctx->outgoing.head == ctx->outgoing.tail) {
-    ctx->outgoing.head = 0;
-    ctx->outgoing.tail = 0;
-    return msg;
-  }
-
-  ctx->outgoing.head = msg->_next;
-  return msg;
-}
-
 static int tcp2_outgoing_process(Tcp2Ctx* ctx, Bytes* pkt, u64 now, u64 bytes) {
   if (pkt->len != NGTCP2_MAX_UDP_PAYLOAD_SIZE)
     return -1;
@@ -1736,10 +1819,9 @@ static int tcp2_outgoing_process(Tcp2Ctx* ctx, Bytes* pkt, u64 now, u64 bytes) {
 
     ngtcp2_ssize sz;
     if (msg->stream == TCP2_STREAM_DATAGRAM) {
-      ngtcp2_path path = *ngtcp2_conn_get_path(ctx->conn);
-      sz = ngtcp2_conn_write_datagram(ctx->conn, &path, 0, pkt->buf, pkt->len,
-                                      0, NGTCP2_WRITE_DATAGRAM_FLAG_MORE, 0,
-                                      data, datalen, now);
+      sz = ngtcp2_conn_write_datagram(ctx->conn, 0, 0, pkt->buf, pkt->len, 0,
+                                      NGTCP2_WRITE_DATAGRAM_FLAG_MORE, 0, data,
+                                      datalen, now);
     } else {
       sz = ngtcp2_conn_write_stream(
           ctx->conn, 0, 0, pkt->buf, pkt->len, &stream_write,
@@ -1753,9 +1835,25 @@ static int tcp2_outgoing_process(Tcp2Ctx* ctx, Bytes* pkt, u64 now, u64 bytes) {
       msg->_offset += stream_write;
       bytes += sz;
       if (msg->_offset == msg->data.len) {
-        // TODO:
-        // Need to hang on to this until it's acked
-        tcp2_outgoing_dequeue(ctx);
+        Tcp2Msg* done = tcp2_msgq_dequeue(&ctx->outgoing);
+        if (done->stream == TCP2_STREAM_DATAGRAM) {
+          // All done, no need to wait for ack
+          Alloc_destroy(ctx->allocator, done);
+        } else {
+          // Add the message to the sent queue to hold onto it until ack
+          HashmapStatus s = 0;
+          HashmapIter it = hashmap_put(&ctx->sent, &msg->stream, &s);
+          if (it == hashmap_end(&ctx->sent)) {
+            CHECK(false, "oom");
+            return -1;
+          }
+
+          Tcp2MsgQ* sent = hashmap_val(&ctx->sent, it);
+          if (s != HashmapStatus_Present)
+            *sent = (Tcp2MsgQ){0};
+
+          tcp2_msgq_enqueue(sent, done);
+        }
       }
     } else if (sz < 0) {
       CHECK_TCP2(sz);
@@ -1789,8 +1887,7 @@ static void tcp2_transport_params_default(ngtcp2_transport_params* params) {
   params->max_datagram_frame_size = 1024;
 }
 
-static int tcp2_connect(ngtcp2_conn** client, const ngtcp2_path* path,
-                        const ngtcp2_mem* mem, Tcp2Ctx* ctx, Bytes* pkt,
+static int tcp2_connect(Tcp2Ctx* ctx, const ngtcp2_path* path, Bytes* pkt,
                         Bytes zerortt_data, u64 now) {
   LOG("");
   ngtcp2_cid scid = {0};
@@ -1808,10 +1905,13 @@ static int tcp2_connect(ngtcp2_conn** client, const ngtcp2_path* path,
   settings.initial_ts = now;
   settings.log_printf = tcp2_log_printf;
 
+  ngtcp2_conn** client = &ctx->conn;
+  ctx->mem = tcp2_allocator(&ctx->allocator);
+
   int rc = 0;
   LOGB(Bytes(scid.data, scid.datalen));
   rc = ngtcp2_conn_client_new(client, &dcid, &scid, path, NGTCP2_PROTO_VER_V1,
-                              &callbacks, &settings, &tparams, mem, ctx);
+                              &callbacks, &settings, &tparams, &ctx->mem, ctx);
   if (rc != 0)
     return rc;
 
@@ -1834,19 +1934,18 @@ static int tcp2_connect(ngtcp2_conn** client, const ngtcp2_path* path,
   }
 
   // Send
-  pkt->len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
-  pkt->buf = malloc(pkt->len);
+  if (allocator_u8(ctx->allocator, pkt, NGTCP2_MAX_UDP_PAYLOAD_SIZE))
+    return -1;
   rc = tcp2_outgoing_process(ctx, pkt, now, 0);
   if (rc != 0) {
-    free(pkt->buf);
+    allocator_free(ctx->allocator, *pkt);
     ngtcp2_conn_del(*client);
     return rc;
   }
   return 0;
 }
 
-static int tcp2_accept(ngtcp2_conn** server, const ngtcp2_path* path,
-                       const ngtcp2_mem* mem, Tcp2Ctx* ctx, Bytes pkt,
+static int tcp2_accept(Tcp2Ctx* ctx, const ngtcp2_path* path, Bytes pkt,
                        Bytes* resp, u64 now) {
   LOG("");
 
@@ -1872,9 +1971,12 @@ static int tcp2_accept(ngtcp2_conn** server, const ngtcp2_path* path,
   settings.initial_ts = now;
   settings.log_printf = tcp2_log_printf;
 
+  ctx->mem = tcp2_allocator(&ctx->allocator);
+
   LOG("create server version=%d", hd.version);
+  ngtcp2_conn** server = &ctx->conn;
   rc = ngtcp2_conn_server_new(server, &hd.scid, &scid, path, hd.version,
-                              &callbacks, &settings, &tparams, mem, ctx);
+                              &callbacks, &settings, &tparams, &ctx->mem, ctx);
   if (rc != 0)
     return rc;
 
@@ -1889,11 +1991,11 @@ static int tcp2_accept(ngtcp2_conn** server, const ngtcp2_path* path,
   }
 
   LOG("send response");
-  resp->len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
-  resp->buf = malloc(resp->len);
+  if (allocator_u8(ctx->allocator, resp, NGTCP2_MAX_UDP_PAYLOAD_SIZE))
+    return -1;
   rc = tcp2_outgoing_process(ctx, resp, now, 0);
   if (rc != 0) {
-    free(resp->buf);
+    allocator_free(ctx->allocator, *resp);
     ngtcp2_conn_del(*server);
     return rc;
   }
@@ -1932,62 +2034,64 @@ static int demo_tcp2(int argc, const char** argv) {
   ngtcp2_sockaddr_union server_addru;
   ngtcp2_addr server_addr = tcp2_ipv4(TCP2_LOCALHOST, 3333, &server_addru);
 
-  const ngtcp2_mem* mem = ngtcp2_mem_default();
+  Allocator alloc = allocatormi_allocator();
 
   u64 now = tcp2_current_time();
 
   // Client connect
   Tcp2Ctx client_ctx = {0};
-  ngtcp2_conn* client;
+  client_ctx.allocator = alloc;
+  CHECK0(Hashmap_i64_create(&client_ctx.sent, Tcp2MsgQ, alloc));
   Bytes pkt_connect;
   ngtcp2_path client_path = {.local = client_addr, .remote = server_addr};
-  CHECK_TCP2(tcp2_connect(&client, &client_path, mem, &client_ctx, &pkt_connect,
-                          BytesZero, now));
+  CHECK_TCP2(
+      tcp2_connect(&client_ctx, &client_path, &pkt_connect, BytesZero, now));
 
   // Server reply
   now = tcp2_current_time();
   Tcp2Ctx server_ctx = {0};
-  ngtcp2_conn* server;
+  server_ctx.allocator = alloc;
+  CHECK0(Hashmap_i64_create(&server_ctx.sent, Tcp2MsgQ, alloc));
   Bytes pkt_connect_reply;
   ngtcp2_path server_path = {.local = server_addr, .remote = client_addr};
   LOG("receiving packet");
-  CHECK_TCP2(tcp2_accept(&server, &server_path, mem, &server_ctx, pkt_connect,
+  CHECK_TCP2(tcp2_accept(&server_ctx, &server_path, pkt_connect,
                          &pkt_connect_reply, now));
-  free(pkt_connect.buf);
+  allocator_free(client_ctx.allocator, pkt_connect);
 
   // Client finish and send data
   now = tcp2_current_time();
   Bytes msg;
-  msg.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
-  msg.buf = malloc(msg.len);
+  CHECK0(allocator_u8(client_ctx.allocator, &msg, NGTCP2_MAX_UDP_PAYLOAD_SIZE));
   LOG("client receiving packet");
-  CHECK_TCP2(ngtcp2_conn_read_pkt(client, &client_path, 0,
+  CHECK_TCP2(ngtcp2_conn_read_pkt(client_ctx.conn, &client_path, 0,
                                   pkt_connect_reply.buf, pkt_connect_reply.len,
                                   now));
   LOG("client send some data");
   i64 stream;
   {
-    CHECK_TCP2(ngtcp2_conn_open_bidi_stream(client, &stream, &client_ctx));
+    CHECK_TCP2(
+        ngtcp2_conn_open_bidi_stream(client_ctx.conn, &stream, &client_ctx));
     tcp2_outgoing_enqueue(&client_ctx, Str("hi from client"), stream);
     CHECK_TCP2(tcp2_outgoing_process(&client_ctx, &msg, now, 0));
   }
-  free(pkt_connect_reply.buf);
+  allocator_free(server_ctx.allocator, pkt_connect_reply);
 
   // Server data receive
   now = tcp2_current_time();
   Bytes msg2;
-  msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
-  msg2.buf = malloc(msg.len);
+  CHECK0(
+      allocator_u8(client_ctx.allocator, &msg2, NGTCP2_MAX_UDP_PAYLOAD_SIZE));
   LOG("server receiving msg");
-  CHECK_TCP2(
-      ngtcp2_conn_read_pkt(server, &server_path, 0, msg.buf, msg.len, now));
+  CHECK_TCP2(ngtcp2_conn_read_pkt(server_ctx.conn, &server_path, 0, msg.buf,
+                                  msg.len, now));
   CHECK_TCP2(tcp2_outgoing_process(&server_ctx, &msg2, now, 0));
-  free(msg.buf);
+  allocator_free(client_ctx.allocator, msg);
 
   LOG("client receiving packet");
   now = tcp2_current_time();
-  CHECK_TCP2(
-      ngtcp2_conn_read_pkt(client, &client_path, 0, msg2.buf, msg2.len, now));
+  CHECK_TCP2(ngtcp2_conn_read_pkt(client_ctx.conn, &client_path, 0, msg2.buf,
+                                  msg2.len, now));
 
   // Let's try a connection migration
   now = tcp2_current_time();
@@ -1998,7 +2102,8 @@ static int demo_tcp2(int argc, const char** argv) {
                                  .remote = server_addr};
   ngtcp2_path server_path_new = {.local = server_addr,
                                  .remote = client_addr_new};
-  CHECK_TCP2(ngtcp2_conn_initiate_migration(client, &client_path_new, now));
+  CHECK_TCP2(
+      ngtcp2_conn_initiate_migration(client_ctx.conn, &client_path_new, now));
   msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
   CHECK_TCP2(tcp2_outgoing_process(&client_ctx, &msg2, now, 0));
 
@@ -2006,8 +2111,8 @@ static int demo_tcp2(int argc, const char** argv) {
     if (msg2.len) {
       // Server recv
       now = tcp2_current_time();
-      CHECK_TCP2(ngtcp2_conn_read_pkt(server, &server_path_new, 0, msg2.buf,
-                                      msg2.len, now));
+      CHECK_TCP2(ngtcp2_conn_read_pkt(server_ctx.conn, &server_path_new, 0,
+                                      msg2.buf, msg2.len, now));
       msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
       CHECK_TCP2(tcp2_outgoing_process(&server_ctx, &msg2, now, 0));
     } else
@@ -2016,8 +2121,8 @@ static int demo_tcp2(int argc, const char** argv) {
     if (msg2.len) {
       // Client recv
       now = tcp2_current_time();
-      CHECK_TCP2(ngtcp2_conn_read_pkt(client, &client_path_new, 0, msg2.buf,
-                                      msg2.len, now));
+      CHECK_TCP2(ngtcp2_conn_read_pkt(client_ctx.conn, &client_path_new, 0,
+                                      msg2.buf, msg2.len, now));
       msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
       CHECK_TCP2(tcp2_outgoing_process(&client_ctx, &msg2, now, 0));
     } else

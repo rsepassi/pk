@@ -52,6 +52,11 @@ uvco
 * consider storing handles in the coroutine frame? instead of malloc
 
 ngtcp2
-* Allocator
 * Memory management/ownership
 * Real crypto
+
+Valgrind example
+VALGRIND=1 make && \
+  MIMALLOC_SHOW_STATS=1 valgrind -s \
+  --leak-check=full --show-leak-kinds=all --track-origins=yes \
+  ./build/cli/bin/cli demo-tcp2
