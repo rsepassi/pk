@@ -43,6 +43,7 @@ static inline AllocStatus allocator_create(Allocator a, void** p, usize sz,
                                            usize align) {
   Bytes b;
   AllocStatus rc = allocator_alloc(a, &b, sz, align);
+  memset(b.buf, 0, b.len);
   *p = b.buf;
   return rc;
 }
