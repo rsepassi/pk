@@ -15,7 +15,9 @@ $(DEPS_OK): $(DEPS_BUILDS)
 deps: $(DEPS)
 $(DEPS):
 	$(MAKE) -C $(ROOTDIR)/$@ deps
-	$(MAKE) -C $(ROOTDIR)/$@
+	mkdir -p $(ROOTDIR)/build/$@
+	touch $(ROOTDIR)/build/$@/.lock
+	flock $(ROOTDIR)/build/$@/.lock -c "$(MAKE) -C $(ROOTDIR)/$@"
 
 .PHONY: clean-deps $(DEPS_CLEAN)
 clean-deps: $(DEPS_CLEAN) $(CLEAN_ALL_EXTRAS)
