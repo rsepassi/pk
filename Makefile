@@ -13,7 +13,6 @@ export CFLAGS += \
 	-target $(TARGET) \
 	-std=c11 \
 	-g3 \
-	-nostdinc -nostdinc++ \
 	-Wall -Werror -Wextra \
 	-Wdouble-promotion -Wconversion -Wno-sign-conversion
 export LDFLAGS += $(OPT) -target $(TARGET)
@@ -21,7 +20,7 @@ export LDFLAGS += $(OPT) -target $(TARGET)
 DEPS_PATHS := $(dir $(shell find cli lib vendor -type f -name Makefile))
 DEPS := $(DEPS_PATHS:$(ROOTDIR)/%=%)
 
-.PHONY: default dir clean fmt cli
+.PHONY: default dir clean fmt cli clangd
 default: cli
 
 dir:
@@ -39,6 +38,11 @@ cli:
 	$(MAKE) -C cli deps
 	$(MAKE) -C cli
 	ls -l build/cli/bin
+
+clangd:
+	rm -rf build/clangd
+	mkdir -p build/clangd
+	mkclangd dirs $(DEPS) > build/clangd/compile_commands.json
 
 include scripts/deps.mk
 include scripts/test.mk

@@ -1,0 +1,41 @@
+#!/usr/bin/env sh
+
+set -e
+
+cmd=$1
+shift
+
+if [ "$cmd" = "file" ]
+then
+
+jq -cMjn \
+  --arg dir $1 \
+  --arg file $2 \
+  --arg cmd "$(echo $3)" \
+  '{directory: $dir, file: $file, command: $cmd}'
+printf ",\n"
+
+elif [ "$cmd" = "dirs" ]
+then
+
+echo [
+
+while [ -n "$1" ]
+do
+
+dir=$1
+make --silent dir DIR=$dir T=clangds 2>/dev/null || :
+
+shift
+done
+
+# dummy final one without a comma
+jq -cMjn \
+  --arg dir $PWD \
+  --arg file foo.c \
+  --arg cmd "clang foo.c -o build/foo.c" \
+  '{directory: $dir, file: $file, command: $cmd}'
+
+echo ]
+
+fi
