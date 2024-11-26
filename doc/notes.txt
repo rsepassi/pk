@@ -53,6 +53,9 @@ uvco
 
 ngtcp2
 * Memory management/ownership
+  * Crypto allocations
+      * client: transport params (256 bytes)
+      * server: transport params + 0rtt params (512 bytes)
 * Real crypto
 
 Valgrind example
