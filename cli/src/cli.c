@@ -1307,30 +1307,31 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
 
         // Send the handshake message with transport params + 0rtt params
         {
-          Bytes resp;
-          resp.len = 512;
-          resp.buf = calloc(1, resp.len);
+          u8 respbuf[512] = {0};
+          usize respi = 0;
 
           // Transport params
           {
             ngtcp2_ssize nwrite = ngtcp2_conn_encode_local_transport_params(
-                conn, &resp.buf[1], 255);
+                conn, &respbuf[1], 255);
             if (nwrite < 0)
               return -1;
-            resp.buf[0] = (u8)nwrite;
+            respbuf[respi++] = (u8)nwrite;
+            respi += (u8)nwrite;
           }
 
           // 0RTT Transport params
           {
             ngtcp2_ssize nwrite = ngtcp2_conn_encode_0rtt_transport_params(
-                conn, &resp.buf[257], 255);
+                conn, &respbuf[respi + 1], 255);
             if (nwrite < 0)
               return -1;
-            resp.buf[256] = (u8)nwrite;
+            respbuf[respi++] = (u8)nwrite;
+            respi += (u8)nwrite;
           }
 
           rc = ngtcp2_conn_submit_crypto_data(
-              conn, NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE, resp.buf, resp.len);
+              conn, NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE, respbuf, respi);
           if (rc != 0)
             return rc;
         }
@@ -1373,19 +1374,17 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
       case NGTCP2_ENCRYPTION_LEVEL_INITIAL: {
         if (data == NULL) {
           // First message out
-
-          Bytes data;
-          data.len = 256;
-          data.buf = calloc(1, data.len);
+          u8 databuf[256] = {0};
 
           ngtcp2_ssize nwrite = ngtcp2_conn_encode_local_transport_params(
-              conn, &data.buf[1], 255);
+              conn, &databuf[1], 255);
           if (nwrite < 0)
             return -1;
-          data.buf[0] = (u8)nwrite;
+          databuf[0] = (u8)nwrite;
+          usize datalen = (u8)nwrite + 1;
 
           rc = ngtcp2_conn_submit_crypto_data(
-              conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, data.buf, data.len);
+              conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, databuf, datalen);
           if (rc != 0)
             return rc;
 
@@ -1428,9 +1427,10 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
 
         // Save 0RTT params
         {
-          ctx->zerortt_params.len = data[256];
+          usize i = data[0] + 1;
+          ctx->zerortt_params.len = data[i];
           ctx->zerortt_params.buf = ctx->zerortt_buf;
-          memcpy(ctx->zerortt_params.buf, &data[257], ctx->zerortt_params.len);
+          memcpy(ctx->zerortt_params.buf, &data[i + 1], ctx->zerortt_params.len);
         }
 
         // Ack
@@ -2074,6 +2074,7 @@ static int demo_tcp2(int argc, const char** argv) {
   CHECK_TCP2(ngtcp2_conn_read_pkt(client_ctx.conn, &client_path, 0,
                                   pkt_connect_reply.buf, pkt_connect_reply.len,
                                   now));
+
   LOG("client send some data");
   i64 stream;
   {
@@ -2417,7 +2418,7 @@ static void main_coro(mco_coro* co) {
   return coro_exit(cmd->fn(argc, argv));
 }
 
-#define MAIN_STACK_SIZE 1 << 21  // 2MiB
+#define MAIN_STACK_SIZE 1 << 22  // 4MiB
 
 static void* mco_alloc(size_t size, void* udata) { return calloc(1, size); }
 
