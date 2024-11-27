@@ -27,8 +27,10 @@ dir:
 	$(MAKE) -C $(DIR) deps
 	$(MAKE) -C $(DIR) $(T)
 
-clean: clean-deps clean-test
+clean:
 	rm -rf build
+	$(MAKE) clean-deps
+	$(MAKE) clean-test
 	$(MAKE) -C cli clean
 
 fmt:

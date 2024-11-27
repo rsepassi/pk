@@ -1,7 +1,7 @@
-CFLAGS += -Wno-unused-parameter \
-					-Wno-conversion \
-					-Wno-missing-field-initializers \
-					-Wno-sign-compare
+LOCAL_CFLAGS += -Wno-unused-parameter \
+								-Wno-conversion \
+								-Wno-missing-field-initializers \
+								-Wno-sign-compare
 
 include $(ROOTDIR)/scripts/cc.mk
 include $(ROOTDIR)/scripts/nodeps.mk

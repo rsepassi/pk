@@ -18,10 +18,10 @@ $(BDIR)/lib$(LIBNAME).a: $(OBJS) $(SRCS) $(HDRS) $(DEPS_OK) Makefile
 
 $(BDIR)/%.$(O): %.c $(HDRS) $(DEPS_OK) Makefile
 	mkdir -p $(dir $@)
-	$(CC) -c -o $@ -Iinclude $(CFLAGS) $(DEPS_CFLAGS) $<
+	$(CC) -c -o $@ -Iinclude $(CFLAGS) $(DEPS_CFLAGS) $(LOCAL_CFLAGS) $<
 
 .PHONY: clangds
 clangds: $(CLANGDS)
 %.clangd: %.c
 	mkclangd file $(CURDIR) $< \
-		"clang -c -o $(BDIR)/$(<:.c=.$(O)) -Iinclude $(CFLAGS) $(DEPS_CFLAGS) $<"
+		"clang -c -o $(BDIR)/$(<:.c=.$(O)) -Iinclude $(CFLAGS) $(DEPS_CFLAGS) $(LOCAL_CFLAGS) $<"

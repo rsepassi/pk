@@ -1,5 +1,5 @@
 ifdef VALGRIND
-CFLAGS += -DMCO_USE_VALGRIND
+LOCAL_CFLAGS += -DMCO_USE_VALGRIND
 endif
 
 include $(ROOTDIR)/scripts/cc.mk

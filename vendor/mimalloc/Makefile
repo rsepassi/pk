@@ -18,11 +18,11 @@ SRCS := \
 	src/segment.c \
 	src/stats.c \
 	src/prim/prim.c
-CFLAGS += -Wall -Werror -fvisibility=hidden -ftls-model=local-dynamic \
-					-Wno-unknown-pragmas -Wno-conversion
+LOCAL_CFLAGS += -Wall -Werror -fvisibility=hidden -ftls-model=local-dynamic \
+								-Wno-unknown-pragmas -Wno-conversion -DMI_DEBUG=0
 
 ifdef VALGRIND
-CFLAGS += -DMI_STAT=2 -DMI_SECURE=4 -DMI_DEBUG=3 -DMI_TRACK_VALGRIND=1
+LOCAL_CFLAGS += -DMI_STAT=2 -DMI_SECURE=4 -DMI_TRACK_VALGRIND=1
 endif
 
 CLEAN_EXTRAS := src/prim/*.o src/prim/*.obj

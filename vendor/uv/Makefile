@@ -1,5 +1,4 @@
-SRCS := $(shell find src -type f -name '*.c' -o -name '*.h') \
-				$(shell find include -type f -name '*.h')
+SRCS := $(shell find . -type f -name '*.c' -o -name '*.h')
 
 include $(ROOTDIR)/scripts/zig.mk
 include $(ROOTDIR)/scripts/nodeps.mk
