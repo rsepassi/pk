@@ -90,7 +90,7 @@ make --silent -j VALGRIND=1 && \
   --track-origins=yes --num-callers=16 \
   ./build/cli/bin/cli demo-tcp2
 
-Illegal instruction
+Illegal instruction with zig cc (but not clang)
 * demo-mimalloc
 * demo-nik
 * demo-nikcxn
