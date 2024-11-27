@@ -25,7 +25,7 @@ typedef struct {
 
 static inline AllocStatus allocator_u8(Allocator a, Bytes* b, usize sz) {
   b->len = 0;
-  return a.alloc(a.ctx, b, sz, 1);
+  return a.alloc(a.ctx, b, sz, 8);
 }
 
 static inline AllocStatus allocator_alloc(Allocator a, Bytes* b, usize sz,

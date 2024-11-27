@@ -32,3 +32,8 @@ static inline bool str_eq(Str a, Str b) {
   }
   return true;
 }
+
+static inline void bytes_copy(Bytes* dst, Bytes src) {
+  dst->len = src.len;
+  memcpy(dst->buf, src.buf, src.len);
+}

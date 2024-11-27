@@ -67,21 +67,26 @@ static int bump_alloc(void* ctx, Bytes* buf, usize sz, usize align) {
   u8* p = start;
   if (align > 1)
     p = ALIGN(p, align);
-  DCHECK((uptr)p % align == 0);
+  CHECK((uptr)p % align == 0);
+  usize align_offset = p - start;
 
-  usize fullsz = p - start + sz;
-  usize remaining = b->mem.len - b->i;
-  if (fullsz > remaining)
+  usize fullsz = sz + align_offset;
+  if ((start + fullsz) > (b->mem.buf + b->mem.len))
     return 1;
 
-  b->i += fullsz + 1;
+  b->i += fullsz;
   buf->buf = p;
   buf->len = sz;
   return 0;
 }
 
-Allocator allocator_bump(BumpAllocator* b, Bytes mem) {
-  b->mem = mem;
+static void bump_deinit(void* ctx) {
+  BumpAllocator* b = ctx;
   b->i = 0;
-  return (Allocator){b, bump_alloc, 0};
+}
+
+Allocator allocator_bump(BumpAllocator* b, Bytes mem) {
+  *b = (BumpAllocator){0};
+  b->mem = mem;
+  return (Allocator){b, bump_alloc, bump_deinit};
 }
