@@ -1243,7 +1243,12 @@ typedef struct {
 
 static Tcp2Key tcp2_crypto_key(void) {
   Tcp2Key key = {0};
+  key.aead.native_handle = (void*)1;
+  key.cipher.native_handle = (void*)1;
+  key.ctx.aead.native_handle = (void*)1;
   key.ctx.aead.max_overhead = TCP2_AEAD_OVERHEAD;
+  key.ctx.md.native_handle = (void*)1;
+  key.ctx.hp.native_handle = (void*)1;
   key.ctx.max_encryption = UINT64_MAX;
   key.ctx.max_decryption_failure = 128;
   return key;
@@ -1264,12 +1269,15 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
       case NGTCP2_ENCRYPTION_LEVEL_INITIAL: {
         // Respond to client initial message
 
-        u8 tparams_len = data[0];
-        rc = ngtcp2_conn_decode_and_set_remote_transport_params(conn, &data[1],
-                                                                tparams_len);
-        if (rc != 0)
-          return -1;
-        CHECK(ngtcp2_conn_get_negotiated_version(conn));
+        // Set remote transport params
+        {
+          u8 tparams_len = data[0];
+          rc = ngtcp2_conn_decode_and_set_remote_transport_params(
+              conn, &data[1], tparams_len);
+          if (rc != 0)
+            return -1;
+          CHECK(ngtcp2_conn_get_negotiated_version(conn));
+        }
 
         // Ack the initial message
         {
@@ -1303,6 +1311,8 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
                                                     sizeof(rx.iv), &rx.cipher);
           if (rc != 0)
             return -1;
+
+          ngtcp2_conn_set_crypto_ctx(conn, &tx.ctx);
         }
 
         // Send the handshake message with transport params + 0rtt params
@@ -1374,19 +1384,35 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
       case NGTCP2_ENCRYPTION_LEVEL_INITIAL: {
         if (data == NULL) {
           // First message out
-          u8 databuf[256] = {0};
 
-          ngtcp2_ssize nwrite = ngtcp2_conn_encode_local_transport_params(
-              conn, &databuf[1], 255);
-          if (nwrite < 0)
-            return -1;
-          databuf[0] = (u8)nwrite;
-          usize datalen = (u8)nwrite + 1;
+          // Install initial keys
+          {
+            Tcp2Key rx = tcp2_crypto_key();
+            Tcp2Key tx = tcp2_crypto_key();
 
-          rc = ngtcp2_conn_submit_crypto_data(
-              conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, databuf, datalen);
-          if (rc != 0)
-            return rc;
+            ngtcp2_conn_set_initial_crypto_ctx(conn, &rx.ctx);
+            rc = ngtcp2_conn_install_initial_key(conn, &rx.aead, rx.iv,
+                                                 &rx.cipher, &tx.aead, tx.iv,
+                                                 &tx.cipher, sizeof(rx.iv));
+            if (rc != 0)
+              return rc;
+          }
+
+          // Encode local transport params
+          {
+            u8 databuf[256] = {0};
+            ngtcp2_ssize nwrite = ngtcp2_conn_encode_local_transport_params(
+                conn, &databuf[1], 255);
+            if (nwrite < 0)
+              return -1;
+            databuf[0] = (u8)nwrite;
+            usize datalen = (u8)nwrite + 1;
+
+            rc = ngtcp2_conn_submit_crypto_data(
+                conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, databuf, datalen);
+            if (rc != 0)
+              return rc;
+          }
 
           // Install 0RTT key
           {
@@ -1412,6 +1438,8 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
                                                     sizeof(tx.iv), &tx.cipher);
           if (rc != 0)
             return -1;
+
+          ngtcp2_conn_set_crypto_ctx(conn, &tx.ctx);
         }
         break;
       }
@@ -1430,7 +1458,8 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
           usize i = data[0] + 1;
           ctx->zerortt_params.len = data[i];
           ctx->zerortt_params.buf = ctx->zerortt_buf;
-          memcpy(ctx->zerortt_params.buf, &data[i + 1], ctx->zerortt_params.len);
+          memcpy(ctx->zerortt_params.buf, &data[i + 1],
+                 ctx->zerortt_params.len);
         }
 
         // Ack
@@ -1481,24 +1510,7 @@ static int tcp2_client_initial(ngtcp2_conn* conn, void* user_data) {
   Tcp2Ctx* ctx = user_data;
   (void)ctx;
 
-  Tcp2Key rx = tcp2_crypto_key();
-  Tcp2Key tx = tcp2_crypto_key();
-
-  int rc = 0;
-
-  ngtcp2_conn_set_initial_crypto_ctx(conn, &rx.ctx);
-  rc = ngtcp2_conn_install_initial_key(conn, &rx.aead, rx.iv, &rx.cipher,
-                                       &tx.aead, tx.iv, &tx.cipher,
-                                       sizeof(rx.iv));
-  if (rc != 0)
-    return rc;
-
-  rc = tcp2_crypto_rw(conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, 0, 0, user_data);
-  if (rc != 0)
-    return rc;
-
-  LOG("ok");
-  return 0;
+  return tcp2_crypto_rw(conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, 0, 0, user_data);
 }
 
 static int tcp2_recv_retry(ngtcp2_conn* conn, const ngtcp2_pkt_hd* hd,
@@ -1535,10 +1547,12 @@ static int tcp2_encrypt(uint8_t* dest, const ngtcp2_crypto_aead* aead,
                         const uint8_t* plaintext, size_t plaintextlen,
                         const uint8_t* nonce, size_t noncelen,
                         const uint8_t* aad, size_t aadlen) {
-  // Note: dest == plaintext, in-place encryption
+  // Note: dest may be plaintext, in-place encryption
   LOG("");
+
   memmove(dest + TCP2_AEAD_OVERHEAD, plaintext, plaintextlen);
-  memset(dest, 8, TCP2_AEAD_OVERHEAD);
+  memset(dest, 2, TCP2_AEAD_OVERHEAD);
+
   return 0;
 }
 
@@ -1547,8 +1561,9 @@ static int tcp2_decrypt(uint8_t* dest, const ngtcp2_crypto_aead* aead,
                         const uint8_t* ciphertext, size_t ciphertextlen,
                         const uint8_t* nonce, size_t noncelen,
                         const uint8_t* aad, size_t aadlen) {
-  memcpy(dest, ciphertext + TCP2_AEAD_OVERHEAD,
-         ciphertextlen - TCP2_AEAD_OVERHEAD);
+  // Note: dest may be ciphertext, in-place decryption
+  memmove(dest, ciphertext + TCP2_AEAD_OVERHEAD,
+          ciphertextlen - TCP2_AEAD_OVERHEAD);
   return 0;
 }
 
@@ -1556,7 +1571,7 @@ static int tcp2_hp_mask(uint8_t* dest, const ngtcp2_crypto_cipher* hp,
                         const ngtcp2_crypto_cipher_ctx* hp_ctx,
                         const uint8_t* sample) {
   LOG("");
-  memset(dest, 0, NGTCP2_HP_MASKLEN);
+  memset(dest, 3, NGTCP2_HP_MASKLEN);
   return 0;
 }
 
@@ -2380,6 +2395,7 @@ static struct cmd_struct commands[] = {
 typedef struct {
   int argc;
   const char** argv;
+  Allocator allocator;
 } MainCoroCtx;
 
 static void coro_exit(int code) { mco_push(mco_running(), &code, 1); }
@@ -2419,24 +2435,35 @@ static void main_coro(mco_coro* co) {
 }
 
 #define MAIN_STACK_SIZE 1 << 22  // 4MiB
+#define STACK_ALIGN 4096
 
-static void* mco_alloc(size_t size, void* udata) { return calloc(1, size); }
+static void* mco_alloc(size_t size, void* udata) {
+  MainCoroCtx* ctx = udata;
+  Bytes stack;
+  CHECK0(allocator_alloc(ctx->allocator, &stack, MAIN_STACK_SIZE, STACK_ALIGN));
+  return stack.buf;
+}
 
-static void mco_dealloc(void* ptr, size_t size, void* udata) { free(ptr); }
+static void mco_dealloc(void* ptr, size_t size, void* udata) {
+  MainCoroCtx* ctx = udata;
+  allocator_free(ctx->allocator, Bytes(ptr, size));
+}
 
 int main(int argc, const char** argv) {
   LOG("hello");
+
+  // Allocator
+  Allocator al = allocatormi_allocator();
 
   // libsodium init
   CHECK(crypto_init() == 0);
 
   // libuv init
-  loop = malloc(sizeof(uv_loop_t));
-  CHECK(loop);
+  CHECK0(Alloc_create(al, &loop));
   uv_loop_init(loop);
 
   // coro init
-  MainCoroCtx ctx = {argc, argv};
+  MainCoroCtx ctx = {argc, argv, al};
   mco_desc desc = mco_desc_init(main_coro, MAIN_STACK_SIZE);
   desc.allocator_data = &ctx;
   desc.alloc_cb = mco_alloc;
@@ -2462,7 +2489,7 @@ int main(int argc, const char** argv) {
 
   // libuv deinit
   uv_loop_close(loop);
-  free(loop);
+  Alloc_destroy(al, loop);
 
   if (rc == 0)
     LOG("goodbye");
