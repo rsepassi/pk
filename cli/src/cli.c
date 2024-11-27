@@ -1149,6 +1149,7 @@ static int demo_pwhash(int argc, const char** argv) {
 }
 
 #define TCP2_LOCALHOST "127.0.0.1"
+#define TCP2_LOCALHOST6 "::1"
 #define TCP2_CIDLEN NGTCP2_MAX_CIDLEN  // 20
 #define TCP2_STREAM_DATAGRAM -2
 #define CHECK_TCP2(s)                                                          \
@@ -1170,14 +1171,24 @@ typedef struct {
 } Tcp2MsgQ;
 
 typedef struct {
+  u8 buf[256];
+  usize len;
+  Bytes data;
+} Tcp2ZeroRTT;
+
+typedef struct {
   ngtcp2_conn* conn;
   Allocator allocator;
   ngtcp2_mem mem;
   Tcp2MsgQ outgoing;
   Hashmap sent;  // i64 -> Tcp2MsgQ
-  u8 zerortt_buf[256];
-  Bytes zerortt_params;
+  Tcp2ZeroRTT zerortt;
 } Tcp2Ctx;
+
+static void tcp2_zerortt_save(Tcp2Ctx* ctx, Bytes params) {
+  memcpy(ctx->zerortt.buf, params.buf, params.len);
+  ctx->zerortt.len = params.len;
+}
 
 static void tcp2_msgq_enqueue(Tcp2MsgQ* q, Tcp2Msg* node) {
   node->_next = 0;
@@ -1305,13 +1316,11 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
                                                     sizeof(tx.iv), &tx.cipher);
           if (rc != 0)
             return -1;
-
           Tcp2Key rx = tcp2_crypto_key();
           rc = ngtcp2_conn_install_rx_handshake_key(conn, &rx.aead, rx.iv,
                                                     sizeof(rx.iv), &rx.cipher);
           if (rc != 0)
             return -1;
-
           ngtcp2_conn_set_crypto_ctx(conn, &tx.ctx);
         }
 
@@ -1339,7 +1348,6 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
             respbuf[respi++] = (u8)nwrite;
             respi += (u8)nwrite;
           }
-
           rc = ngtcp2_conn_submit_crypto_data(
               conn, NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE, respbuf, respi);
           if (rc != 0)
@@ -1360,17 +1368,18 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
                                           &rx.cipher);
           if (rc != 0)
             return -1;
-
           ngtcp2_conn_set_crypto_ctx(conn, &tx.ctx);
         }
 
         break;
       }
+
       case NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE: {
         ngtcp2_conn_tls_handshake_completed(conn);
         LOG("server handshake completed");
         break;
       }
+
       case NGTCP2_ENCRYPTION_LEVEL_1RTT:
         // unexpected, tcp2 never sends at this level
         break;
@@ -1389,7 +1398,6 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
           {
             Tcp2Key rx = tcp2_crypto_key();
             Tcp2Key tx = tcp2_crypto_key();
-
             ngtcp2_conn_set_initial_crypto_ctx(conn, &rx.ctx);
             rc = ngtcp2_conn_install_initial_key(conn, &rx.aead, rx.iv,
                                                  &rx.cipher, &tx.aead, tx.iv,
@@ -1407,7 +1415,6 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
               return -1;
             databuf[0] = (u8)nwrite;
             usize datalen = (u8)nwrite + 1;
-
             rc = ngtcp2_conn_submit_crypto_data(
                 conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, databuf, datalen);
             if (rc != 0)
@@ -1425,22 +1432,21 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
           }
         } else {
           // Server response
-          LOG("server crypto repsonse arrived");
 
+          LOG("server crypto repsonse arrived");
           Tcp2Key rx = tcp2_crypto_key();
           rc = ngtcp2_conn_install_rx_handshake_key(conn, &rx.aead, rx.iv,
                                                     sizeof(rx.iv), &rx.cipher);
           if (rc != 0)
             return -1;
-
           Tcp2Key tx = tcp2_crypto_key();
           rc = ngtcp2_conn_install_tx_handshake_key(conn, &tx.aead, tx.iv,
                                                     sizeof(tx.iv), &tx.cipher);
           if (rc != 0)
             return -1;
-
           ngtcp2_conn_set_crypto_ctx(conn, &tx.ctx);
         }
+
         break;
       }
       case NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE:
@@ -1455,11 +1461,8 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
 
         // Save 0RTT params
         {
-          usize i = data[0] + 1;
-          ctx->zerortt_params.len = data[i];
-          ctx->zerortt_params.buf = ctx->zerortt_buf;
-          memcpy(ctx->zerortt_params.buf, &data[i + 1],
-                 ctx->zerortt_params.len);
+          usize i = data[0] + 1;  // skip over transport params
+          tcp2_zerortt_save(ctx, Bytes(&data[i + 1], data[i]));
         }
 
         // Ack
@@ -1479,19 +1482,17 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
                                           &rx.cipher);
           if (rc != 0)
             return -1;
-
           Tcp2Key tx = tcp2_crypto_key();
           rc = ngtcp2_conn_install_tx_key(conn, tx.secret, sizeof(tx.secret),
                                           &tx.aead, tx.iv, sizeof(tx.iv),
                                           &tx.cipher);
           if (rc != 0)
             return -1;
-
           ngtcp2_conn_set_crypto_ctx(conn, &tx.ctx);
           ngtcp2_conn_tls_handshake_completed(conn);
-
           LOG("client handshake completed");
         }
+
         break;
       case NGTCP2_ENCRYPTION_LEVEL_1RTT:
         // unexpected, tcp2 never sends at this level
@@ -1507,18 +1508,13 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
 
 static int tcp2_client_initial(ngtcp2_conn* conn, void* user_data) {
   LOG("");
-  Tcp2Ctx* ctx = user_data;
-  (void)ctx;
-
   return tcp2_crypto_rw(conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, 0, 0, user_data);
 }
 
 static int tcp2_recv_retry(ngtcp2_conn* conn, const ngtcp2_pkt_hd* hd,
                            void* user_data) {
   LOG("");
-  // hd->scid
-  // ngtcp2_conn_install_initial_key
-  return -1;
+  return tcp2_client_initial(conn, user_data);
 }
 
 static int tcp2_recv_client_initial(ngtcp2_conn* conn, const ngtcp2_cid* dcid,
@@ -1746,7 +1742,7 @@ void* tcp2_allocator_calloc(size_t nmemb, size_t size, void* user_data) {
 void* tcp2_allocator_realloc(void* ptr, size_t size, void* user_data) {
   Allocator* alloc = user_data;
   Bytes mem = Bytes(ptr, 0);
-  if (allocator_realloc(*alloc, &mem, size, 1))
+  if (allocator_realloc(*alloc, &mem, size, 8))
     return 0;
   return mem.buf;
 }
@@ -1910,8 +1906,14 @@ static void tcp2_transport_params_default(ngtcp2_transport_params* params) {
 }
 
 static int tcp2_connect(Tcp2Ctx* ctx, const ngtcp2_path* path, Bytes* pkt,
-                        Bytes zerortt_data, u64 now) {
+                        const Tcp2ZeroRTT* zerortt, Allocator allocator,
+                        u64 now) {
   LOG("");
+  *ctx = (Tcp2Ctx){0};
+  ctx->allocator = allocator;
+  if (Hashmap_i64_create(&ctx->sent, Tcp2MsgQ, allocator))
+    return -1;
+
   ngtcp2_cid scid = {0};
   scid.datalen = TCP2_CIDLEN;
   randombytes_buf(scid.data, scid.datalen);
@@ -1925,13 +1927,13 @@ static int tcp2_connect(Tcp2Ctx* ctx, const ngtcp2_path* path, Bytes* pkt,
   ngtcp2_settings settings = {0};
   ngtcp2_settings_default(&settings);
   settings.initial_ts = now;
-  settings.log_printf = tcp2_log_printf;
+  // settings.log_printf = tcp2_log_printf;
+  (void)tcp2_log_printf;
 
   ngtcp2_conn** client = &ctx->conn;
   ctx->mem = tcp2_allocator(&ctx->allocator);
 
   int rc = 0;
-  LOGB(Bytes(scid.data, scid.datalen));
   rc = ngtcp2_conn_client_new(client, &dcid, &scid, path, NGTCP2_PROTO_VER_V1,
                               &callbacks, &settings, &tparams, &ctx->mem, ctx);
   if (rc != 0)
@@ -1939,20 +1941,22 @@ static int tcp2_connect(Tcp2Ctx* ctx, const ngtcp2_path* path, Bytes* pkt,
 
   ctx->conn = *client;
 
-  if (zerortt_data.len) {
-    if (!ctx->zerortt_params.len)
-      return -1;
-
+  if (zerortt && zerortt->len) {
     LOG("setting 0rtt params");
-    rc = ngtcp2_conn_decode_and_set_0rtt_transport_params(
-        *client, ctx->zerortt_params.buf, ctx->zerortt_params.len);
+
+    rc = ngtcp2_conn_decode_and_set_0rtt_transport_params(*client, zerortt->buf,
+                                                          zerortt->len);
     if (rc != 0)
       return rc;
-    i64 stream;
-    rc = ngtcp2_conn_open_bidi_stream(*client, &stream, ctx);
-    if (rc != 0)
-      return rc;
-    tcp2_outgoing_enqueue(ctx, zerortt_data, stream);
+
+    if (zerortt->data.len) {
+      LOG("enqueuing 0rtt data");
+      i64 stream;
+      rc = ngtcp2_conn_open_bidi_stream(*client, &stream, ctx);
+      if (rc != 0)
+        return rc;
+      tcp2_outgoing_enqueue(ctx, zerortt->data, stream);
+    }
   }
 
   // Send
@@ -1968,8 +1972,13 @@ static int tcp2_connect(Tcp2Ctx* ctx, const ngtcp2_path* path, Bytes* pkt,
 }
 
 static int tcp2_accept(Tcp2Ctx* ctx, const ngtcp2_path* path, Bytes pkt,
-                       Bytes* resp, u64 now) {
+                       Bytes* resp, Allocator allocator, u64 now) {
   LOG("");
+  *ctx = (Tcp2Ctx){0};
+
+  ctx->allocator = allocator;
+  if (Hashmap_i64_create(&ctx->sent, Tcp2MsgQ, ctx->allocator))
+    return -1;
 
   int rc = 0;
 
@@ -1991,7 +2000,8 @@ static int tcp2_accept(Tcp2Ctx* ctx, const ngtcp2_path* path, Bytes pkt,
   ngtcp2_settings settings = {0};
   ngtcp2_settings_default(&settings);
   settings.initial_ts = now;
-  settings.log_printf = tcp2_log_printf;
+  // settings.log_printf = tcp2_log_printf;
+  (void)tcp2_log_printf;
 
   ctx->mem = tcp2_allocator(&ctx->allocator);
 
@@ -2021,6 +2031,7 @@ static int tcp2_accept(Tcp2Ctx* ctx, const ngtcp2_path* path, Bytes pkt,
     ngtcp2_conn_del(*server);
     return rc;
   }
+
   return 0;
 }
 
@@ -2029,8 +2040,25 @@ static ngtcp2_addr tcp2_ipv4(const char* host, u16 port,
   ngtcp2_addr addr = {&addru->sa, sizeof(addru->in)};
   addru->in.sin_family = AF_INET;
   addru->in.sin_port = port;
-  inet_aton(host, &addru->in.sin_addr);
+  inet_pton(AF_INET, host, &addru->in.sin_addr);
   return addr;
+}
+
+static ngtcp2_addr tcp2_ipv6(const char* host, u16 port,
+                             ngtcp2_sockaddr_union* addru) {
+  ngtcp2_addr addr = {&addru->sa, sizeof(addru->in6)};
+  addru->in.sin_family = AF_INET6;
+  addru->in.sin_port = port;
+  inet_pton(AF_INET6, host, &addru->in6.sin6_addr);
+  return addr;
+}
+
+static void tcp2_conn_deinit(Tcp2Ctx* ctx) {
+  ngtcp2_conn_del(ctx->conn);
+  tcp2_outgoing_free(ctx);
+  tcp2_sent_free(ctx);
+  hashmap_deinit(&ctx->sent);
+  *ctx = (Tcp2Ctx){0};
 }
 
 static int demo_tcp2(int argc, const char** argv) {
@@ -2054,31 +2082,27 @@ static int demo_tcp2(int argc, const char** argv) {
   ngtcp2_addr client_addr = tcp2_ipv4(TCP2_LOCALHOST, 2222, &client_addru);
 
   ngtcp2_sockaddr_union server_addru;
-  ngtcp2_addr server_addr = tcp2_ipv4(TCP2_LOCALHOST, 3333, &server_addru);
+  ngtcp2_addr server_addr = tcp2_ipv6(TCP2_LOCALHOST6, 3333, &server_addru);
 
   Allocator alloc = allocatormi_allocator();
 
   u64 now = tcp2_current_time();
 
   // Client connect
-  Tcp2Ctx client_ctx = {0};
-  client_ctx.allocator = alloc;
-  CHECK0(Hashmap_i64_create(&client_ctx.sent, Tcp2MsgQ, alloc));
   Bytes pkt_connect;
   ngtcp2_path client_path = {.local = client_addr, .remote = server_addr};
+  Tcp2Ctx client_ctx;
   CHECK_TCP2(
-      tcp2_connect(&client_ctx, &client_path, &pkt_connect, BytesZero, now));
+      tcp2_connect(&client_ctx, &client_path, &pkt_connect, 0, alloc, now));
 
   // Server reply
   now = tcp2_current_time();
   Tcp2Ctx server_ctx = {0};
-  server_ctx.allocator = alloc;
-  CHECK0(Hashmap_i64_create(&server_ctx.sent, Tcp2MsgQ, alloc));
   Bytes pkt_connect_reply;
   ngtcp2_path server_path = {.local = server_addr, .remote = client_addr};
   LOG("receiving packet");
   CHECK_TCP2(tcp2_accept(&server_ctx, &server_path, pkt_connect,
-                         &pkt_connect_reply, now));
+                         &pkt_connect_reply, alloc, now));
   allocator_free(client_ctx.allocator, pkt_connect);
 
   // Client finish and send data
@@ -2168,6 +2192,9 @@ static int demo_tcp2(int argc, const char** argv) {
   CHECK_TCP2(ngtcp2_conn_read_pkt(client_ctx.conn, &client_path_new, 0,
                                   msg2.buf, msg2.len, now));
 
+  // Copy out 0-RTT params
+  Tcp2ZeroRTT zerortt = client_ctx.zerortt;
+
   // Close the connection
   now = tcp2_current_time();
   msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
@@ -2186,24 +2213,19 @@ static int demo_tcp2(int argc, const char** argv) {
 
   allocator_free(client_ctx.allocator, msg2);
 
-  ngtcp2_conn_del(client_ctx.conn);
-  ngtcp2_conn_del(server_ctx.conn);
-
-  tcp2_sent_free(&client_ctx);
-  tcp2_sent_free(&server_ctx);
-
-  tcp2_outgoing_free(&client_ctx);
-  tcp2_outgoing_free(&server_ctx);
+  tcp2_conn_deinit(&client_ctx);
+  tcp2_conn_deinit(&server_ctx);
 
   // Attempt a 0-RTT data send
   LOG("0rtt send");
   now = tcp2_current_time();
-  CHECK_TCP2(
-      tcp2_connect(&client_ctx, &client_path, &pkt_connect, Str("zero!"), now));
+  zerortt.data = Str("zero!");
+  CHECK_TCP2(tcp2_connect(&client_ctx, &client_path, &pkt_connect, &zerortt,
+                          alloc, now));
   LOG("0rtt recv");
   now = tcp2_current_time();
   CHECK_TCP2(tcp2_accept(&server_ctx, &server_path, pkt_connect,
-                         &pkt_connect_reply, now));
+                         &pkt_connect_reply, alloc, now));
   LOG("0rtt reply");
   now = tcp2_current_time();
   CHECK_TCP2(ngtcp2_conn_read_pkt(client_ctx.conn, &client_path, 0,
@@ -2213,16 +2235,8 @@ static int demo_tcp2(int argc, const char** argv) {
   allocator_free(client_ctx.allocator, pkt_connect);
   allocator_free(server_ctx.allocator, pkt_connect_reply);
 
-  ngtcp2_conn_del(client_ctx.conn);
-  ngtcp2_conn_del(server_ctx.conn);
-
-  tcp2_sent_free(&client_ctx);
-  tcp2_sent_free(&server_ctx);
-  tcp2_outgoing_free(&client_ctx);
-  tcp2_outgoing_free(&server_ctx);
-
-  hashmap_deinit(&client_ctx.sent);
-  hashmap_deinit(&server_ctx.sent);
+  tcp2_conn_deinit(&client_ctx);
+  tcp2_conn_deinit(&server_ctx);
 
   return 0;
 }
