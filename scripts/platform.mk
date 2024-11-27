@@ -1,6 +1,7 @@
 # Cross-platform support
 
 ifndef TARGET
+	# uname target detection
 	OS := $(shell uname)
 	ARCH := $(shell uname -m)
 	ifeq ($(OS), Darwin)
@@ -39,3 +40,6 @@ ifdef VALGRIND
 export VALGRIND := 1
 export CFLAGS += -isystem $(CURDIR)/platform/valgrind/include
 endif
+
+export TARGET_ARCH := $(word 1, $(subst -, ,$(TARGET)))
+export TARGET_OS   := $(word 2, $(subst -, ,$(TARGET)))

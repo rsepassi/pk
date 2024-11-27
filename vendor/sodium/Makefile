@@ -1,5 +1,107 @@
-SRCS := $(shell find src/libsodium -type f -name '*.c' -o -name '*.h')
+SRCS := $(shell find src -type f -name '*.c' -o -name '*.S')
+HDRS := $(shell find src include -type f -name '*.h')
 
-include $(ROOTDIR)/scripts/zig.mk
+LOCAL_CFLAGS := \
+	-fvisibility=hidden \
+	-fno-strict-aliasing \
+	-fwrapv \
+	-flax-vector-conversions \
+	-Werror=vla \
+	-Iinclude/sodium \
+	-D_GNU_SOURCE=1 \
+	-DCONFIGURED=1 \
+	-DDEV_MODE=1 \
+	-DHAVE_ATOMIC_OPS=1 \
+	-DHAVE_C11_MEMORY_FENCES=1 \
+	-DHAVE_CET_H=1 \
+	-DHAVE_GCC_MEMORY_FENCES=1 \
+	-DHAVE_INLINE_ASM=1 \
+	-DHAVE_INTTYPES_H=1 \
+	-DHAVE_STDINT_H=1 \
+	-DHAVE_TI_MODE=1 \
+	-DNATIVE_LITTLE_ENDIAN=1 \
+	-Wno-unused-parameter \
+	-Wno-unused-variable \
+	-Wno-unused-function \
+	-Wno-conversion \
+	-Wno-unknown-pragmas
+
+ifeq ($(TARGET_OS), linux)
+	LOCAL_CFLAGS += \
+		-DASM_HIDE_SYMBOL=.hidden \
+		-DTLS=_Thread_local \
+		-DHAVE_CATCHABLE_ABRT=1 \
+		-DHAVE_CATCHABLE_SEGV=1 \
+		-DHAVE_CLOCK_GETTIME=1 \
+		-DHAVE_GETPID=1 \
+		-DHAVE_MADVISE=1 \
+		-DHAVE_MLOCK=1 \
+		-DHAVE_MMAP=1 \
+		-DHAVE_MPROTECT=1 \
+		-DHAVE_NANOSLEEP=1 \
+		-DHAVE_POSIX_MEMALIGN=1 \
+		-DHAVE_PTHREAD_PRIO_INHERIT=1 \
+		-DHAVE_PTHREAD=1 \
+		-DHAVE_RAISE=1 \
+		-DHAVE_SYSCONF=1 \
+		-DHAVE_SYS_AUXV_H=1 \
+		-DHAVE_SYS_MMAN_H=1 \
+		-DHAVE_SYS_PARAM_H=1 \
+		-DHAVE_SYS_RANDOM_H=1 \
+		-DHAVE_WEAK_SYMBOLS=1
+else ifeq ($(TARGET_OS), windows)
+	LOCAL_CFLAGS += \
+		-DHAVE_RAISE=1 \
+		-DHAVE_SYS_PARAM_H=1 \
+		-DSODIUM_STATIC=1 \
+else ifeq ($(TARGET_OS), macos)
+	LOCAL_CFLAGS += \
+		-DASM_HIDE_SYMBOL=.private_extern \
+		-DTLS=_Thread_local \
+		-DHAVE_ARC4RANDOM=1 \
+		-DHAVE_ARC4RANDOM_BUF=1 \
+		-DHAVE_CATCHABLE_ABRT=1 \
+		-DHAVE_CATCHABLE_SEGV=1 \
+		-DHAVE_CLOCK_GETTIME=1 \
+		-DHAVE_GETENTROPY=1 \
+		-DHAVE_GETPID=1 \
+		-DHAVE_MADVISE=1 \
+		-DHAVE_MEMSET_S=1 \
+		-DHAVE_MLOCK=1 \
+		-DHAVE_MMAP=1 \
+		-DHAVE_MPROTECT=1 \
+		-DHAVE_NANOSLEEP=1 \
+		-DHAVE_POSIX_MEMALIGN=1 \
+		-DHAVE_PTHREAD=1 \
+		-DHAVE_PTHREAD_PRIO_INHERIT=1 \
+		-DHAVE_RAISE=1 \
+		-DHAVE_SYSCONF=1 \
+		-DHAVE_SYS_MMAN_H=1 \
+		-DHAVE_SYS_PARAM_H=1 \
+		-DHAVE_SYS_RANDOM_H=1 \
+		-DHAVE_WEAK_SYMBOLS=1
+endif
+
+ifeq ($(TARGET_ARCH), x86_64)
+	ifneq ($(TARGET_OS), windows)
+		LOCAL_CFLAGS += -DHAVE_AMD64_ASM=1 -DHAVE_AVX_ASM=1
+	endif
+	LOCAL_CFLAGS +=
+		-DHAVE_CPUID=1 \
+		-DHAVE_MMINTRIN_H=1 \
+		-DHAVE_EMMINTRIN_H=1 \
+		-DHAVE_PMMINTRIN_H=1 \
+		-DHAVE_TMMINTRIN_H=1 \
+		-DHAVE_SMMINTRIN_H=1 \
+		-DHAVE_AVXINTRIN_H=1 \
+		-DHAVE_AVX2INTRIN_H=1 \
+		-DHAVE_AVX512FINTRIN_H=1 \
+		-DHAVE_WMMINTRIN_H=1 \
+		-DHAVE_RDRAND=1
+else ifeq ($(TARGET_ARCH), aarch64)
+	LOCAL_CFLAGS += -DHAVE_ARMCRYPTO=1 -mfpu=neon
+endif
+
+include $(ROOTDIR)/scripts/cc.mk
 include $(ROOTDIR)/scripts/nodeps.mk
 include $(ROOTDIR)/scripts/clean.mk

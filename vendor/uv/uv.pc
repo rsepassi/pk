@@ -1,5 +1,5 @@
 Name: libuv
 Version: 1.49.2
 Description: async io
-Libs: -L${build_prefix}/lib -luv
-Cflags: -I${build_prefix}/include
+Libs: -L${build_prefix} -luv
+Cflags: -I${src_prefix}/include

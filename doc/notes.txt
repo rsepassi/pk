@@ -60,6 +60,7 @@ ngtcp2
 * Stateless reset tokens
 
 compile
+* generated pc files (os/arch specific cflags/ldflags)
 * rm build.zig
 * -fsanitize=memory,address,undefined -fsanitize-memory-track-origins -fno-common
 	-fsanitize=undefined,bounds,safe-stack -fsanitize-undefined-trap-on-error
@@ -77,6 +78,7 @@ export ASAN_OPTIONS=strict_string_checks=1:detect_stack_use_after_return=1:check
    -mbranch-protection=standard
    -z nodlopen
 	-fsanitize=undefined,bounds -fsanitize-undefined-trap-on-error \
+	-fstrict-flex-arrays=3 \
 * compile with gcc
 
 Valgrind example
