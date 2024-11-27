@@ -22,9 +22,7 @@ SRCS := \
 LOCAL_CFLAGS += \
 	-fvisibility=hidden \
 	-ftls-model=local-dynamic \
-	-Wno-unknown-pragmas \
-	-Wno-conversion \
-	-DMI_DEBUG=0
+	-Wno-conversion
 
 ifdef VALGRIND
 LOCAL_CFLAGS += -DMI_STAT=2 -DMI_SECURE=4 -DMI_TRACK_VALGRIND=1

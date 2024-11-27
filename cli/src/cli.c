@@ -1009,12 +1009,12 @@ static int demo_mimalloc(int argc, const char** argv) {
   Allocator a2 = allocatormi_heap();
   do_some_allocs(a2);
 
-  {
-    Bytes x = allocatormi_block_alloc(1);
-    Allocator a3 = allocatormi_arena(x, true);
-    do_some_allocs(a3);
-    allocatormi_block_free(x);
-  }
+  // {
+  //   Bytes x = allocatormi_block_alloc(1);
+  //   Allocator a3 = allocatormi_arena(x, true);
+  //   do_some_allocs(a3);
+  //   allocatormi_block_free(x);
+  // }
 
   {
     Bytes x = {1024, malloc(1024)};

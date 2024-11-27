@@ -80,9 +80,18 @@ export ASAN_OPTIONS=strict_string_checks=1:detect_stack_use_after_return=1:check
 	-fsanitize=undefined,bounds -fsanitize-undefined-trap-on-error \
 	-fstrict-flex-arrays=3 \
 * compile with gcc
+* Non-zig link
+	-B/usr/lib/gcc/x86_64-alpine-linux-musl/13.2.1 \
+	-L/usr/lib/gcc/x86_64-alpine-linux-musl/13.2.1
 
 Valgrind example
 make --silent -j VALGRIND=1 && \
   MIMALLOC_SHOW_STATS=1 valgrind -s --leak-check=full --show-leak-kinds=all \
   --track-origins=yes --num-callers=16 \
   ./build/cli/bin/cli demo-tcp2
+
+Illegal instruction
+* demo-mimalloc
+* demo-nik
+* demo-nikcxn
+* demo-sshkeyread

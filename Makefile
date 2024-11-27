@@ -13,8 +13,9 @@ export CFLAGS += \
 	-g3 \
 	-fno-omit-frame-pointer \
 	-Wall -Werror -Wextra \
+	-Wconversion -Wno-sign-conversion \
+	-nostdinc -nostdinc++ \
 	-fPIE \
-	-Wdouble-promotion -Wconversion -Wno-sign-conversion \
 	-fstack-protector-strong -fstack-clash-protection \
 	-D_FORTIFY_SOURCE=3
 export LDFLAGS += \
@@ -42,7 +43,8 @@ fmt:
 cli:
 	$(MAKE) -C cli deps
 	$(MAKE) -C cli
-	ls -l build/cli/bin
+	echo ./build/cli/bin/cli
+	ls -lh build/cli/bin
 
 clangd:
 	rm -rf build/clangd

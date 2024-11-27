@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE
+
 #include "allocator.h"
 #include "log.h"
 #include "stdmacros.h"

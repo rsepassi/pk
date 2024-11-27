@@ -53,7 +53,7 @@ else ifeq ($(TARGET_OS), windows)
 	LOCAL_CFLAGS += \
 		-DHAVE_RAISE=1 \
 		-DHAVE_SYS_PARAM_H=1 \
-		-DSODIUM_STATIC=1 \
+		-DSODIUM_STATIC=1
 else ifeq ($(TARGET_OS), macos)
 	LOCAL_CFLAGS += \
 		-DASM_HIDE_SYMBOL=.private_extern \
@@ -86,7 +86,7 @@ ifeq ($(TARGET_ARCH), x86_64)
 	ifneq ($(TARGET_OS), windows)
 		LOCAL_CFLAGS += -DHAVE_AMD64_ASM=1 -DHAVE_AVX_ASM=1
 	endif
-	LOCAL_CFLAGS +=
+	LOCAL_CFLAGS += \
 		-DHAVE_CPUID=1 \
 		-DHAVE_MMINTRIN_H=1 \
 		-DHAVE_EMMINTRIN_H=1 \
