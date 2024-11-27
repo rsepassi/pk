@@ -40,9 +40,9 @@
 #define __ac_set_isdel_false(flag, i)                                          \
   (__ac_flag(flag, i) &= ~(1ul << ((i & 0xfU) << 1)))
 #define __ac_set_isempty_false(flag, i)                                        \
-  (__ac_flag(flag, i) &= ~(2ul << ((i & 0xfU) << 1)))
+  (__ac_flag(flag, i) &= ~(i32)(2ul << ((i & 0xfU) << 1)))
 #define __ac_set_isboth_false(flag, i)                                         \
-  (__ac_flag(flag, i) &= ~(3ul << ((i & 0xfU) << 1)))
+  (__ac_flag(flag, i) &= ~(i32)(3ul << ((i & 0xfU) << 1)))
 #define __ac_set_isdel_true(flag, i)                                           \
   (__ac_flag(flag, i) |= 1ul << ((i & 0xfU) << 1))
 #define __ac_fsize(m) ((m) < 16 ? 1 : (m) >> 4)

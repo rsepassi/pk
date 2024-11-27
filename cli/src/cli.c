@@ -1236,6 +1236,8 @@ static void tcp2_sent_free(Tcp2Ctx* ctx) {
   i64* stream;
   Tcp2MsgQ* q;
 
+  (void)stream;
+
   hashmap_foreach(&ctx->sent, stream, q, {
     while ((msg = tcp2_msgq_dequeue(q)))
       Alloc_destroy(ctx->allocator, msg);

@@ -2,24 +2,25 @@ export ROOTDIR := $(CURDIR)
 export PATH := $(CURDIR)/scripts:$(PATH)
 include scripts/platform.mk
 
-export CC := zig cc
-export AR := zig ar
+export CC := clang
+export CCLD := zig cc
+export AR := ar
 export OPT := -O0
 
 export CFLAGS += \
-	$(OPT) \
-	-target $(TARGET) \
+	$(OPT) -target $(TARGET) \
 	-std=c11 \
 	-g3 \
 	-fno-omit-frame-pointer \
 	-Wall -Werror -Wextra \
 	-Wconversion -Wno-sign-conversion \
-	-nostdinc -nostdinc++ \
+	-Wno-unused-command-line-argument \
 	-fPIE \
 	-fstack-protector-strong -fstack-clash-protection \
 	-D_FORTIFY_SOURCE=3
 export LDFLAGS += \
-	$(OPT) -target $(TARGET) -pie -z relro -z now -z noexecstack
+	$(OPT) -target $(TARGET) \
+	-pie -z relro -z now -z noexecstack
 
 DEPS_PATHS := $(dir $(shell find cli lib vendor -type f -name Makefile))
 DEPS := $(DEPS_PATHS:$(ROOTDIR)/%=%)

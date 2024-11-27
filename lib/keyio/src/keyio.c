@@ -303,8 +303,7 @@ int keyio_keydecode_openssh(Str str, Allocator al, CryptoSignSK* out) {
   // And: https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.key
   //
   // To look at the data in a key file:
-  // cat id_ed25519 | head -n -1 | tail +2 | tr -d '\n' | base64 -d | \
-  //   hexdump -C
+  // cat id_ed25519 | head -n -1 | tail +2 | tr -d '\n' | base64 -d | hexdump -C
   //
   // "openssh-key-v1"0x00    # NULL-terminated "Auth Magic" string
   // 32-bit length, "none"   # ciphername length and string
