@@ -53,9 +53,24 @@ uvco
 
 ngtcp2
 * Real crypto
+* Package up wrapper
+* Connection lifecycle, hashmap
+* Handle ngtcp2_conn_read_pkt err codes
+* Retry packets
+* Stateless reset tokens
+
+compile
+* rm build.zig
+* -fsanitize=memory,address,undefined -fsanitize-memory-track-origins -fno-common
+	-fsanitize=undefined,bounds,safe-stack -fsanitize-undefined-trap-on-error
+* Hardening flags
+  https://best.openssf.org/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C++.html
+  https://airbus-seclab.github.io/c-compiler-security/
+	-Walloca -Wcast-qual -Wconversion -Wformat=2 -Wformat-security -Wnull-dereference -Wstack-protector -Wvla -Warray-bounds -Warray-bounds-pointer-arithmetic -Wassign-enum -Wbad-function-cast -Wconditional-uninitialized -Wconversion -Wfloat-equal -Wformat-type-confusion -Widiomatic-parentheses -Wimplicit-fallthrough -Wloop-analysis -Wpointer-arith -Wshift-sign-overflow -Wshorten-64-to-32 -Wswitch-enum -Wtautological-constant-in-range-compare -Wunreachable-code-aggressive -Wthread-safety -Wthread-safety-beta -Wcomma
+   -Wl,-z,separate-loadable-segments
 
 Valgrind example
-VALGRIND=1 make && \
-  MIMALLOC_SHOW_STATS=1 valgrind -s \
-  --leak-check=full --show-leak-kinds=all --track-origins=yes \
+make --silent -j VALGRIND=1 && \
+  MIMALLOC_SHOW_STATS=1 valgrind -s --leak-check=full --show-leak-kinds=all \
+  --track-origins=yes --num-callers=16 \
   ./build/cli/bin/cli demo-tcp2
