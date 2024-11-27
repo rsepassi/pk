@@ -4,6 +4,10 @@ LIBNAME ?= $(notdir $(CURDIR))
 
 ifeq ($(OPT), -O2)
 ZIG_OPT := ReleaseFast
+else ifeq ($(OPT), -Os)
+ZIG_OPT := ReleaseSmall
+else ifeq ($(OPT), -Oz)
+ZIG_OPT := ReleaseSmall
 else
 ZIG_OPT := Debug
 endif

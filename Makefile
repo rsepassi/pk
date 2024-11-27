@@ -16,12 +16,11 @@ export CFLAGS += \
 	-Wdouble-promotion -Wconversion -Wno-sign-conversion \
 	-D_FORTIFY_SOURCE=3 \
 	-fPIE -fno-omit-frame-pointer \
-	-fstack-protector-strong -fstack-clash-protection \
-	-fsanitize=undefined,bounds -fsanitize-undefined-trap-on-error
+	-fstrict-flex-arrays=3 \
+	-fstack-protector-strong -fstack-clash-protection
 export LDFLAGS += \
 	$(OPT) -target $(TARGET) \
 	-pie \
-	-fsanitize=undefined,bounds -fsanitize-undefined-trap-on-error \
 	-z relro -z now -z noexecstack
 
 DEPS_PATHS := $(dir $(shell find cli lib vendor -type f -name Makefile))
