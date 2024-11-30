@@ -41,11 +41,6 @@ char* A_seed_hex =
 char* B_seed_hex =
     "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
 
-static void bytes_from_hex(Str s, u8* out, u8 n) {
-  CHECK(s.len == (n * 2));
-  sodium_hex2bin(out, n, (char*)s.buf, s.len, 0, 0, 0);
-}
-
 // Printing
 static void phex(char* tag, u8* b, u64 len) {
   printf("%s(%" PRIu64 ")=", tag, len);
@@ -615,63 +610,6 @@ static int demosshkeyread(int argc, const char** argv) {
   return 0;
 }
 
-static int demo_bip39(int argc, const char** argv) {
-  // Generate 32 bytes of entropy
-  u8 key_buf[32];
-  randombytes_buf(key_buf, sizeof(key_buf));
-  Bytes key = {sizeof(key_buf), key_buf};
-  LOGB(key);
-
-  // Convert it to a word list
-  u16 word_idxs[bip39_MNEMONIC_LEN(sizeof(key_buf))];
-  CHECK0(bip39_mnemonic_idxs(key, word_idxs));
-  for (usize i = 0; i < ARRAY_LEN(word_idxs); ++i) {
-    LOG("%02d. %04d %s", (int)(i + 1), word_idxs[i], bip39_words[word_idxs[i]]);
-  }
-
-  // Verify that it decodes properly
-  u8 dec_buf[sizeof(key_buf)];
-  Bytes dec = {sizeof(key_buf), dec_buf};
-  CHECK0(bip39_mnemonic_bytes(word_idxs, ARRAY_LEN(word_idxs), &dec));
-  CHECK0(memcmp(key_buf, dec_buf, sizeof(key_buf)));
-
-  // From mnemonic to seed:
-  // Password Hash: Argon2id (Bitcoin uses PBKDF2)
-  // Password = joined mnemonic words
-  // Salt = "mnemonic" + passphrase
-
-  return 0;
-}
-
-static int demo_base64(int argc, const char** argv) {
-  Str a = Str("hello world!");
-
-  Str enc;
-  {
-    usize sz = base64_encoded_maxlen(a.len);
-    enc = (Str){sz, malloc(sz)};
-  }
-
-  CHECK0(base64_encode(a, &enc));
-  LOGS(enc);
-
-  Str dec;
-  {
-    usize sz = base64_decoded_maxlen(enc.len);
-    dec = (Str){sz, malloc(sz)};
-  }
-
-  CHECK0(base64_decode(enc, &dec));
-  LOGS(dec);
-
-  CHECK(a.len == dec.len);
-  CHECK(memcmp(a.buf, dec.buf, a.len) == 0);
-
-  free(enc.buf);
-  free(dec.buf);
-  return 0;
-}
-
 static void vt_cb(const char* s, size_t len, void* user) {
   LOG("vt(%d)=%.*s", (int)len, (int)len, s);
 }
@@ -824,42 +762,6 @@ static int demo_x3dh(int argc, const char** argv) {
   // Keys + AD are equal
   CHECK0(memcmp((u8*)&A_x, (u8*)&B_x, sizeof(X3DH)));
   LOG("keys match!");
-
-  return 0;
-}
-
-static bool libb58_sha256_impl(void* out, const void* msg, size_t msg_len) {
-  crypto_hash_sha256(out, msg, msg_len);
-  return true;
-}
-
-static int demo_b58(int argc, const char** argv) {
-  b58_sha256_impl = libb58_sha256_impl;
-
-  // Hex string encodes 1-byte version + payload
-  Str hex = Str("165a1fc5dd9e6f03819fca94a2d89669469667f9a0");
-  u8 bin[21];
-  CHECK(sizeof(bin) * 2 == hex.len);
-  bytes_from_hex(hex, bin, sizeof(bin));
-  phex("orig", bin, sizeof(bin));
-
-  // encode
-  char b58[sizeof(bin) * 2];
-  size_t b58_len = sizeof(b58);
-  CHECK(b58check_enc(b58, &b58_len, bin[0], &bin[1], sizeof(bin) - 1));
-  printf("b58c(%zu)=%s\n", b58_len - 1, b58);
-
-  // decode
-  u8 bin2[sizeof(bin) + 4];
-  size_t bin2_len = sizeof(bin2);
-  CHECK(b58tobin(bin2, &bin2_len, b58, b58_len - 1));
-
-  // Last 4 bytes are the checksum
-  phex("deco", bin2, bin2_len - 4);
-  CHECK0(memcmp(bin2, bin, bin2_len - 4));
-
-  // b58check returns the version byte
-  CHECK(b58check(bin2, bin2_len, b58, b58_len) == 0x16);
 
   return 0;
 }
@@ -2264,9 +2166,6 @@ static int demo_time(int argc, const char** argv) {
 
 static const char* const usages[] = {
     "pk [options] [cmd] [args]\n\n    Commands:"
-    "\n      - demo-b58"
-    "\n      - demo-base64"
-    "\n      - demo-bip39"
     "\n      - demo-drat"
     "\n      - demo-holepunch"
     "\n      - demo-keygen"
@@ -2293,9 +2192,6 @@ struct cmd_struct {
 };
 
 static struct cmd_struct commands[] = {
-    {"demo-b58", demo_b58},               //
-    {"demo-base64", demo_base64},         //
-    {"demo-bip39", demo_bip39},           //
     {"demo-drat", demo_drat},             //
     {"demo-holepunch", demo_holepunch},   //
     {"demo-keygen", demo_keygen},         //

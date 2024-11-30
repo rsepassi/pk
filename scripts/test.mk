@@ -18,9 +18,11 @@ $(BDIR)/test/%$(EXE): test/%.c $(TEST_DEPS)
 	$(CC) -o $@.tmp $< \
 		$(CFLAGS) \
 		`need --cflags $(TEST_LIB)` \
+		$(TEST_CFLAGS) \
 		`need --cflags vendor/unity` \
 		$(LDFLAGS) \
 		`need --libs $(TEST_LIB)` \
+		$(TEST_LDFLAGS) \
 		`need --libs vendor/unity` \
 		$(PLATFORM_LDFLAGS) \
 		-lc

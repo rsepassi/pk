@@ -32,6 +32,7 @@ dir: platform
 test: platform
 	$(MAKE) -C vendor/unity
 	$(MAKE) -C $(DIR) deps
+	$(MAKE) -C $(DIR) test-deps || :
 	$(MAKE) -C $(DIR)
 	$(MAKE) -C $(DIR) test
 
