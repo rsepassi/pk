@@ -1,10 +1,9 @@
-#define _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
 
 #include "allocator.h"
 #include "log.h"
 #include "stdmacros.h"
 
-#include <mm_malloc.h>
 #include <stdlib.h>
 
 static int alloc_libc(void* ctx, Bytes* buf, usize sz, usize align) {

@@ -1,0 +1,7 @@
+Name: libuv
+Version: 1.49.2
+Description: async io
+Libs: \
+  -L${build_prefix} -luv \
+  -lws2_32 -luserenv -lole32 -liphlpapi -ldbghelp -lntoskrnl
+Cflags: -I${src_prefix}/include

@@ -26,7 +26,8 @@ LOCAL_CFLAGS := \
 	-Wno-shorten-64-to-32 \
 	-Wno-conversion \
 	-Wno-unused-parameter \
-	-Wno-sign-compare
+	-Wno-sign-compare \
+	-Wno-missing-braces
 
 SRCS := $(wildcard src/*.c)
 UNIX_SRCS := \
@@ -96,6 +97,11 @@ else ifeq ($(TARGET_OS), freebsd)
     -DHAVE_DLFCN_H=1 \
     -DHAVE_PTHREAD_PRIO_INHERIT=1
 endif
+
+include $(ROOTDIR)/scripts/bdir.mk
+$(BDIR)/.build: $(BDIR)/libuv.a $(wildcard *.pc)
+	[ $(TARGET_OS) != "windows" ] || cp uv.windows.pc $(BDIR)/uv.pc
+	touch $@
 
 include $(ROOTDIR)/scripts/cc.mk
 include $(ROOTDIR)/scripts/nodeps.mk

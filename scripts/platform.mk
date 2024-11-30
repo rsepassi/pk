@@ -1,7 +1,7 @@
 # Cross-platform support
 
+# uname target detection
 ifndef TARGET
-	# uname target detection
 	OS := $(shell uname)
 	ARCH := $(shell uname -m)
 	ifeq ($(OS), Darwin)
@@ -21,25 +21,62 @@ else
 export TARGET
 endif
 
-ifeq ($(TARGET), x86_64-windows-gnu)
+export TARGET_ARCH := $(word 1, $(subst -, ,$(TARGET)))
+export TARGET_OS   := $(word 2, $(subst -, ,$(TARGET)))
+
+# object/executable suffixes
+ifeq ($(TARGET_OS), windows)
 export O := obj
 export EXE := .exe
-LDFLAGS += -lws2_32 -luserenv -lole32 -liphlpapi -ldbghelp -lbcrypt
 else
 export O := o
 export EXE :=
 endif
 
-ifeq ($(TARGET), x86_64-macos)
-export CFLAGS += -isystem $(CURDIR)/platform/macos/include
-else ifeq ($(TARGET), aarch64-macos)
-export CFLAGS += -isystem $(CURDIR)/platform/macos/include
-endif
-
+# valgrind
 ifdef VALGRIND
 export VALGRIND := 1
 export CFLAGS += -isystem $(CURDIR)/platform/valgrind/include
 endif
 
-export TARGET_ARCH := $(word 1, $(subst -, ,$(TARGET)))
-export TARGET_OS   := $(word 2, $(subst -, ,$(TARGET)))
+.PHONY: platform
+
+ifeq ($(TARGET_OS), macos)
+
+export CFLAGS += \
+	-target $(TARGET_ARCH)-apple-macosx13 \
+	$(shell need --cflags platform/macos)
+export PLATFORM_LDFLAGS += \
+	-target $(TARGET) \
+	$(shell need --libs platform/macos)
+
+platform:
+	$(MAKE) -C platform/macos
+
+else ifeq ($(TARGET_OS), linux)
+
+export CFLAGS += -target $(TARGET) $(shell need --cflags platform/musl)
+export PLATFORM_LDFLAGS += -target $(TARGET) $(shell need --libs platform/musl)
+
+platform:
+	$(MAKE) -C platform/musl
+
+else ifeq ($(TARGET_OS), windows)
+
+export CFLAGS += -target $(TARGET) $(shell need --cflags platform/windows)
+export PLATFORM_LDFLAGS += -target $(TARGET) $(shell need --libs platform/windows)
+
+platform:
+	$(MAKE) -C platform/windows
+
+else ifeq ($(TARGET_OS), freebsd)
+
+export CFLAGS += -target $(TARGET) $(shell need --cflags platform/freebsd)
+export PLATFORM_LDFLAGS += -target $(TARGET) $(shell need --libs platform/freebsd)
+
+platform:
+	:
+
+else
+$(error Unsupported platform $(TARGET_OS))
+endif

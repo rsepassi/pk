@@ -17,4 +17,5 @@ include $(ROOTDIR)/scripts/clean.mk
 
 $(CLI): $(OBJS) $(HDRS) Makefile $(DEPS_OK)
 	mkdir -p $(dir $@)
-	$(CCLD) -o $@ $(OBJS) $(LDFLAGS) $(DEPS_LDFLAGS) -lc
+	$(CCLD) -o $@.tmp $(OBJS) $(LDFLAGS) $(DEPS_LDFLAGS) $(PLATFORM_LDFLAGS) -lc
+	mv $@.tmp $@

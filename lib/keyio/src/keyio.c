@@ -5,8 +5,13 @@
 #include "log.h"
 #include "stdmacros.h"
 
-#include <arpa/inet.h>
 #include <stdio.h>
+
+#ifdef BYTE_ORDER_LE
+#define ntohl SWAP_U32
+#else
+#define ntohl(x) (x)
+#endif
 
 #define PK_PK_HEADER "Ed25519 "
 #define PK_PK_FOOTER "\n"

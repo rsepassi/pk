@@ -19,7 +19,7 @@ then
   builddir=$ROOTDIR/$builddir
 fi
 
-PKG_CONFIG_PATH="$srcdir" \
+PKG_CONFIG_PATH="$builddir:$srcdir" \
   pkg-config \
   --define-variable=src_prefix=$srcdir \
   --define-variable=build_prefix=$builddir \

@@ -1,8 +1,4 @@
-#define _POSIX_C_SOURCE 199309L  // for CLOCK_MONOTONIC in time.h
-#include <time.h>
-#undef _POSIX_C_SOURCE
-
-#include <arpa/inet.h>
+#define _POSIX_C_SOURCE 200809L
 
 // vendor deps
 #include "argparse.h"
@@ -11,7 +7,6 @@
 #include "mimalloc.h"
 #include "minicoro.h"
 #include "ngtcp2/ngtcp2.h"
-#include "plum/plum.h"
 #include "uv.h"
 #include "vterm.h"
 
@@ -594,7 +589,7 @@ static int demosshkeyread(int argc, const char** argv) {
   CHECK(argc == 2, "must provide a key path");
   const char* path = argv[1];
 
-  Allocator al = allocatormi_heap();
+  Allocator al = allocatormi_allocator();
   CryptoAllocator cryptal = {al};
   Allocator sal = allocator_crypto(&cryptal);
 
@@ -890,14 +885,6 @@ static void recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
   free(buf->base);
 }
 
-static void mapping_callback(int id, plum_state_t state,
-                             const plum_mapping_t* mapping) {
-  LOG("map!");
-  CHECK(state == PLUM_STATE_SUCCESS);
-  LOG("External address: %s:%hu\n", mapping->external_host,
-      mapping->external_port);
-}
-
 static int demo_multicast(int argc, const char** argv) {
   bool send = argc > 1 && memcmp(argv[1], "send", 4) == 0;
 
@@ -943,6 +930,16 @@ static int demo_multicast(int argc, const char** argv) {
   return 0;
 }
 
+#ifndef PK_PLUM_DISABLED
+#include "plum/plum.h"
+static void mapping_callback(int id, plum_state_t state,
+                             const plum_mapping_t* mapping) {
+  LOG("map!");
+  CHECK(state == PLUM_STATE_SUCCESS);
+  LOG("External address: %s:%hu\n", mapping->external_host,
+      mapping->external_port);
+}
+
 static int demo_holepunch(int argc, const char** argv) {
   // TODO:
   // Hit discovery server to get peer_addr
@@ -983,6 +980,12 @@ static int demo_holepunch(int argc, const char** argv) {
 
   return 0;
 }
+#else
+static int demo_holepunch(int argc, const char** argv) {
+  CHECK(false, "disabled");
+  return 0;
+}
+#endif  // PK_PLUM_DISABLED
 
 static void do_some_allocs(Allocator a) {
   Bytes b1 = {0};
@@ -1006,7 +1009,7 @@ static int demo_mimalloc(int argc, const char** argv) {
   Allocator a1 = allocatormi_allocator();
   do_some_allocs(a1);
 
-  Allocator a2 = allocatormi_heap();
+  Allocator a2 = allocatormi_allocator();
   do_some_allocs(a2);
 
   // {
@@ -1720,8 +1723,8 @@ static void tcp2_log_printf(void* user_data, const char* format, ...) {
 }
 
 static u64 tcp2_current_time() {
-  struct timespec sp;
-  clock_gettime(CLOCK_MONOTONIC, &sp);
+  uv_timespec64_t sp;
+  uv_clock_gettime(UV_CLOCK_MONOTONIC, &sp);
   return sp.tv_sec * NGTCP2_SECONDS + sp.tv_nsec;
 }
 
@@ -2252,9 +2255,9 @@ static int demo_time(int argc, const char** argv) {
     LOGB(bytes_from_arr(buf));
   }
   {
-    struct timespec sp;
-    clock_gettime(CLOCK_MONOTONIC, &sp);
-    LOG("secs=%" PRIu64 " nsec=%" PRIu64, sp.tv_sec, sp.tv_nsec);
+    uv_timespec64_t sp;
+    uv_clock_gettime(UV_CLOCK_MONOTONIC, &sp);
+    LOG("secs=%" PRIi64 " nsec=%d", sp.tv_sec, sp.tv_nsec);
   }
   return 0;
 }

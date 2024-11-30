@@ -1,14 +1,13 @@
 export ROOTDIR := $(CURDIR)
 export PATH := $(CURDIR)/scripts:$(PATH)
-include scripts/platform.mk
 
-export CC := clang
+export CC := clang-17
 export CCLD := zig cc
-export AR := ar
+export AR := llvm-ar
 export OPT := -O0
 
 export CFLAGS += \
-	$(OPT) -target $(TARGET) \
+	$(OPT) \
 	-std=c11 \
 	-g3 \
 	-fno-omit-frame-pointer \
@@ -19,38 +18,27 @@ export CFLAGS += \
 	-fstack-protector-strong -fstack-clash-protection \
 	-D_FORTIFY_SOURCE=3
 export LDFLAGS += \
-	$(OPT) -target $(TARGET) \
+	$(OPT) \
 	-pie -z relro -z now -z noexecstack
 
-DEPS_PATHS := $(dir $(shell find cli lib vendor -type f -name Makefile))
-DEPS := $(DEPS_PATHS:$(ROOTDIR)/%=%)
+.PHONY: default dir clean fmt clangd
+default: platform
+	$(MAKE) -C cli deps
+	$(MAKE) -C cli
 
-.PHONY: default dir clean fmt cli clangd
-default: cli
-
-dir:
+dir: platform
 	$(MAKE) -C $(DIR) deps
 	$(MAKE) -C $(DIR) $(T)
 
 clean:
 	rm -rf build
-	$(MAKE) clean-deps
-	$(MAKE) clean-test
-	$(MAKE) -C cli clean
 
 fmt:
 	clang-format -i `find lib cli -type f -name '*.c' -o -name '*.h'`
-
-cli:
-	$(MAKE) -C cli deps
-	$(MAKE) -C cli
-	echo ./build/cli/bin/cli
-	ls -lh build/cli/bin
 
 clangd:
 	rm -rf build/clangd
 	mkdir -p build/clangd
 	mkclangd dirs $(DEPS) > build/clangd/compile_commands.json
 
-include scripts/deps.mk
-include scripts/test.mk
+include scripts/platform.mk

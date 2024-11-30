@@ -1,0 +1,4 @@
+Name: macos
+Version: 0.0.1
+Description: MacOS platform
+Cflags: --sysroot=${src_prefix}/sysroot

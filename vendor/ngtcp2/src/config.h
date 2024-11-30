@@ -22,9 +22,6 @@
 /* Define to 1 in order to build examples/{wsslclient,wsslserver} */
 /* #undef ENABLE_EXAMPLE_WOLFSSL */
 
-/* Define to 1 if you have the <arpa/inet.h> header file. */
-#define HAVE_ARPA_INET_H 1
-
 /* Define to 1 if you have the <asm/types.h> header file. */
 /* #undef HAVE_ASM_TYPES_H */
 
@@ -69,11 +66,17 @@
 /* Define to 1 if you have the `memset' function. */
 #define HAVE_MEMSET 1
 
+#ifdef __APPLE__
 /* Define to 1 if you have the `memset_s' function. */
-/* #undef HAVE_MEMSET_S */
+#define HAVE_MEMSET_S 1
+#endif
 
 /* Define to 1 if you have the <minix/config.h> header file. */
 /* #undef HAVE_MINIX_CONFIG_H */
+
+#ifndef _WIN32
+/* Define to 1 if you have the <arpa/inet.h> header file. */
+#define HAVE_ARPA_INET_H 1
 
 /* Define to 1 if you have the <netinet/in.h> header file. */
 #define HAVE_NETINET_IN_H 1
@@ -83,6 +86,7 @@
 
 /* Define to 1 if you have the <netinet/udp.h> header file. */
 #define HAVE_NETINET_UDP_H 1
+#endif
 
 /* Define to 1 if the system has the type `ptrdiff_t'. */
 #define HAVE_PTRDIFF_T 1
