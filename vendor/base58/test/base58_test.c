@@ -24,7 +24,7 @@ void test_b58(void) {
   u8 bin[21];
   CHECK(sizeof(bin) * 2 == hex.len);
   bytes_from_hex(hex, bin, sizeof(bin));
-  LOGB(bytes_from_arr(bin));
+  LOGB(BytesArray(bin));
 
   // encode
   char b58[sizeof(bin) * 2];

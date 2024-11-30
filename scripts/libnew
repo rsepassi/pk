@@ -6,7 +6,7 @@ rm -rf lib/$name
 
 mkdir lib/$name
 cd lib/$name
-mkdir src include
+mkdir src include test
 cat <<EOF > include/$name.h
 #pragma once
 
@@ -18,6 +18,24 @@ cat <<EOF > src/$name.c
 
 // Source
 void hello(void) {}
+EOF
+cat <<EOF > test/$name_test.c
+#include "$name.h"
+#include "log.h"
+#include "unity.h"
+
+void test_$name(void) {
+  CHECK(true);
+}
+
+void setUp(void) {}
+void tearDown(void) {}
+
+int main(void) {
+  UNITY_BEGIN();
+  RUN_TEST(test_$name);
+  return UNITY_END();
+}
 EOF
 
 # The Makefile must use tabs

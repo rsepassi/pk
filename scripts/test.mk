@@ -4,8 +4,10 @@ TEST_LIB := $(CURDIR:$(ROOTDIR)/%=%)
 TEST_SRCS := $(wildcard test/*.c)
 TEST_OKS := $(addprefix $(BDIR)/, $(TEST_SRCS:.c=.ok))
 
-.PHONY: test
+.PHONY: test test-clean
 test: $(TEST_OKS)
+test-clean:
+	rm -rf $(BDIR)/test
 
 # execute a test
 $(BDIR)/test/%.ok: $(BDIR)/test/%$(EXE)

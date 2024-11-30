@@ -21,7 +21,7 @@ static inline Str str_from_c(const char* buf) {
   return (Str){.len = strlen(buf), .buf = (uint8_t*)buf};
 }
 
-#define bytes_from_arr(arr) ((Bytes){sizeof(arr), (u8*)(arr)})
+#define BytesArray(arr) ((Bytes){sizeof(arr), (u8*)(arr)})
 
 static inline bool str_eq(Str a, Str b) {
   if (a.len != b.len)

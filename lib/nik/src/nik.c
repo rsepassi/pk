@@ -179,7 +179,7 @@ NIK_Status nik_handshake_respond(NIK_Handshake* state, u32 local_idx,
   CryptoKxPK* E_pub_r = &state->ephemeral_pk;
   if (crypto_kx_keypair((u8*)E_pub_r, (u8*)E_priv_r))
     return 1;
-  memcpy(&msg2->ephemeral, E_pub_r, sizeof(*E_pub_r));
+  memcpy(&msg2->hs.ephemeral, E_pub_r, sizeof(*E_pub_r));
 
   // C_r := KDF_1(C_r, E_pub_r)
   {
@@ -196,12 +196,12 @@ NIK_Status nik_handshake_respond(NIK_Handshake* state, u32 local_idx,
   }
 
   // H_r := Hash(H_r || msg.ephemeral)
-  if (crypto_generichash_blake2b_update(H_state, (u8*)&msg2->ephemeral,
-                                        sizeof(msg2->ephemeral)))
+  if (crypto_generichash_blake2b_update(H_state, (u8*)&msg2->hs.ephemeral,
+                                        sizeof(msg2->hs.ephemeral)))
     return 1;
 
   // C_r := KDF1(C_r, DH(E_priv_r, E_pub_i))
-  if (nik_dh_kdf2(C_r, E_pub_r, E_priv_r, &msg1->ephemeral, C_r, 0, false))
+  if (nik_dh_kdf2(C_r, E_pub_r, E_priv_r, &msg1->hs.ephemeral, C_r, 0, false))
     return 1;
   // C_r := KDF1(C_r, DH(E_priv_r, S_pub_i))
   if (nik_dh_kdf2(C_r, E_pub_r, E_priv_r, state->keys.bob, C_r, 0, false))
@@ -309,7 +309,7 @@ NIK_Status nik_handshake_init(NIK_Handshake* state, const NIK_Keys keys,
   CryptoKxPK* E_pub_i = &state->ephemeral_pk;
   if (crypto_kx_keypair((u8*)E_pub_i, (u8*)E_priv_i))
     return 1;
-  memcpy(&msg->ephemeral, E_pub_i, sizeof(*E_pub_i));
+  memcpy(&msg->hs.ephemeral, E_pub_i, sizeof(*E_pub_i));
 
   // C_i := KDF_1(C_i, E_pub_i)
   {
@@ -328,8 +328,8 @@ NIK_Status nik_handshake_init(NIK_Handshake* state, const NIK_Keys keys,
   }
 
   // H_i := Hash(H_i || msg.ephemeral)
-  if (crypto_generichash_blake2b_update(H_state, (u8*)&msg->ephemeral,
-                                        sizeof(msg->ephemeral)))
+  if (crypto_generichash_blake2b_update(H_state, (u8*)&msg->hs.ephemeral,
+                                        sizeof(msg->hs.ephemeral)))
     return 1;
 
   // C_i, k := KDF_2(C_i, DH(E_priv_i, S_pub_r))
@@ -348,16 +348,17 @@ NIK_Status nik_handshake_init(NIK_Handshake* state, const NIK_Keys keys,
 
     // AEAD(K, 0, S_pub_i, H_i)
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
-    STATIC_CHECK(sizeof(msg->statik) == crypto_box_MACBYTES + sizeof(*S_pub_i));
+    STATIC_CHECK(sizeof(msg->hs.statik) + sizeof(msg->hs.tag) ==
+                 sizeof(*S_pub_i) + crypto_box_MACBYTES);
     if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
-            (u8*)&msg->statik.key, (u8*)&msg->statik.tag, 0, (u8*)S_pub_i,
+            (u8*)&msg->hs.statik, (u8*)&msg->hs.tag, 0, (u8*)S_pub_i,
             sizeof(*S_pub_i), H, sizeof(H), 0, zero_nonce, K))
       return 1;
   }
 
   // H_i := Hash(H_i || msg.static)
-  if (crypto_generichash_blake2b_update(H_state, (u8*)&msg->statik,
-                                        sizeof(msg->statik)))
+  if (crypto_generichash_blake2b_update(H_state, (u8*)&msg->hs.statik,
+                                        sizeof(msg->hs.statik)))
     return 1;
 
   // C_i, K := KDF_2(C_i, DH(S_priv_i, S_pub_r))
@@ -441,8 +442,8 @@ NIK_Status nik_handshake_respond_check(NIK_Handshake* state,
   {
     // T0 = HMAC(C_i, E_pub_r)
     u8 T0[crypto_kdf_KEYBYTES];
-    if (hmac_blake2b(T0, sizeof(T0), C_i, NIK_CHAIN_SZ, (u8*)&msg->ephemeral,
-                     sizeof(msg->ephemeral)))
+    if (hmac_blake2b(T0, sizeof(T0), C_i, NIK_CHAIN_SZ, (u8*)&msg->hs.ephemeral,
+                     sizeof(msg->hs.ephemeral)))
       return 1;
     // T1 = HMAC(T0, 1)
     if (crypto_kdf_blake2b_derive_from_key(C_i, NIK_CHAIN_SZ, 1, NIK_KDF_CTX,
@@ -451,17 +452,17 @@ NIK_Status nik_handshake_respond_check(NIK_Handshake* state,
   }
 
   // H_r := Hash(H_r || msg.ephemeral)
-  if (crypto_generichash_blake2b_update(H_state, (u8*)&msg->ephemeral,
-                                        sizeof(msg->ephemeral)))
+  if (crypto_generichash_blake2b_update(H_state, (u8*)&msg->hs.ephemeral,
+                                        sizeof(msg->hs.ephemeral)))
     return 1;
 
   // C_i := KDF1(C_i, DH(E_priv_i, E_pub_r))
   if (nik_dh_kdf2(C_i, &state->ephemeral_pk, &state->ephemeral_sk,
-                  &msg->ephemeral, C_i, 0, true))
+                  &msg->hs.ephemeral, C_i, 0, true))
     return 1;
   // C_i := KDF1(C_i, DH(S_priv_i, E_pub_r))
-  if (nik_dh_kdf2(C_i, state->keys.pk, state->keys.sk, &msg->ephemeral, C_i, 0,
-                  true))
+  if (nik_dh_kdf2(C_i, state->keys.pk, state->keys.sk, &msg->hs.ephemeral, C_i,
+                  0, true))
     return 1;
 
   // (C_i, T, K) := KDF3(C_i, Q);
@@ -589,8 +590,8 @@ NIK_Status nik_handshake_init_check(NIK_Handshake* state, const NIK_Keys keys,
     // T0 = HMAC(C_i, E_pub_i)
     STATIC_CHECK(crypto_kdf_KEYBYTES == 32);
     u8 T0[crypto_kdf_KEYBYTES];
-    if (hmac_blake2b(T0, sizeof(T0), C_i, NIK_CHAIN_SZ, (u8*)&msg->ephemeral,
-                     sizeof(msg->ephemeral)))
+    if (hmac_blake2b(T0, sizeof(T0), C_i, NIK_CHAIN_SZ, (u8*)&msg->hs.ephemeral,
+                     sizeof(msg->hs.ephemeral)))
       return 1;
     // T1 = HMAC(T0, 1)
     if (crypto_kdf_blake2b_derive_from_key(C_i, NIK_CHAIN_SZ, 1, NIK_KDF_CTX,
@@ -599,13 +600,13 @@ NIK_Status nik_handshake_init_check(NIK_Handshake* state, const NIK_Keys keys,
   }
 
   // H_i := Hash(H_i || msg.ephemeral)
-  if (crypto_generichash_blake2b_update(H_state, (u8*)&msg->ephemeral,
-                                        sizeof(msg->ephemeral)))
+  if (crypto_generichash_blake2b_update(H_state, (u8*)&msg->hs.ephemeral,
+                                        sizeof(msg->hs.ephemeral)))
     return 1;
 
   // C_i, k := KDF_2(C_i, DH(S_priv_r, E_pub_i))
   u8 K[32];
-  if (nik_dh_kdf2(C_i, S_pub_r, S_priv_r, &msg->ephemeral, C_i, K, false))
+  if (nik_dh_kdf2(C_i, S_pub_r, S_priv_r, &msg->hs.ephemeral, C_i, K, false))
     return 1;
 
   // msg.static := AEAD(K, 0, S_pub_i, H_i)
@@ -621,8 +622,8 @@ NIK_Status nik_handshake_init_check(NIK_Handshake* state, const NIK_Keys keys,
     // AEAD(K, 0, S_pub_i, H_i)
     u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
     if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
-            key_decrypt, 0, (u8*)&msg->statik.key, sizeof(msg->statik.key),
-            (u8*)&msg->statik.tag, H, sizeof(H), zero_nonce, K))
+            key_decrypt, 0, (u8*)&msg->hs.statik, sizeof(msg->hs.statik),
+            (u8*)&msg->hs.tag, H, sizeof(H), zero_nonce, K))
       return 1;
 
     if (sodium_memcmp(key_decrypt, S_pub_i, sizeof(*S_pub_i)))
@@ -630,12 +631,12 @@ NIK_Status nik_handshake_init_check(NIK_Handshake* state, const NIK_Keys keys,
   }
 
   // H_i := Hash(H_i || msg.static)
-  if (crypto_generichash_blake2b_update(H_state, (u8*)&msg->statik,
-                                        sizeof(msg->statik)))
+  if (crypto_generichash_blake2b_update(H_state, (u8*)&msg->hs.statik,
+                                        sizeof(msg->hs.statik)))
     return 1;
 
   // Copy the decrypted key back into the message
-  memcpy((u8*)&msg->statik.key, key_decrypt, sizeof(key_decrypt));
+  memcpy((u8*)&msg->hs.statik, key_decrypt, sizeof(key_decrypt));
 
   // C_i, K := KDF_2(C_i, DH(S_priv_r, S_pub_i))
   if (nik_dh_kdf2(C_i, S_pub_r, S_priv_r, S_pub_i, C_i, K, false))

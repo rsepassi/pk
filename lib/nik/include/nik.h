@@ -25,16 +25,9 @@
 #pragma once
 
 #include "crypto.h"
+#include "nik_hs.h"
 
-#define NIK_CONSTRUCTION "Noise_IKpsk2_25519_ChaChaPoly_BLAKE2b"
-#define NIK_CHAIN_SZ 32
 #define NIK_TIMESTAMP_SZ 12
-
-// Status/error codes
-typedef enum {
-  NIK_OK = 0,
-  NIK_Error,
-} NIK_Status;
 
 // NIK Message types
 typedef enum {
@@ -52,11 +45,7 @@ typedef struct __attribute__((packed)) {
   u8 type;
   u8 reserved[3];
   u32 sender;
-  CryptoKxPK ephemeral;
-  struct {
-    CryptoKxPK key;
-    CryptoAuthTag tag;
-  } statik;
+  NIK_Handshake1 hs;
   struct {
     u8 timestamp[NIK_TIMESTAMP_SZ];
     CryptoAuthTag tag;
@@ -70,7 +59,7 @@ typedef struct __attribute__((packed)) {
   u8 reserved[3];
   u32 sender;
   u32 receiver;
-  CryptoKxPK ephemeral;
+  NIK_Handshake2 hs;
   CryptoAuthTag empty;
   CryptoAuthTag mac1;
 } NIK_HandshakeMsg2;
@@ -100,14 +89,6 @@ typedef struct {
   CounterHistory counter_history;
   bool isinitiator;
 } NIK_Session;
-
-// Keys for establishing a session with bob
-typedef struct {
-  CryptoKxPK* pk;
-  CryptoKxSK* sk;
-  CryptoKxPK* bob;
-  CryptoBoxKey* psk;
-} NIK_Keys;
 
 // State of an ongoing handshake
 typedef struct {

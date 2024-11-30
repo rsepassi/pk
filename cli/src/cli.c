@@ -956,7 +956,7 @@ static int demo_keyread(int argc, const char** argv) {
   Allocator sal = allocator_crypto(&cryptal_base);
 
   u8 contents_buf[256];
-  Bytes contents = bytes_from_arr(contents_buf);
+  Bytes contents = BytesArray(contents_buf);
 
   uv_file fd;
   CHECK0(uvco_fs_open(loop, path, UV_FS_O_RDONLY, 0, &fd));
@@ -990,14 +990,14 @@ static int demo_keygen(int argc, const char** argv) {
 
   // Get a passphrase
   u8 pw_buf[2048];
-  Bytes pw = bytes_from_arr(pw_buf);
+  Bytes pw = BytesArray(pw_buf);
   CHECK0(keyio_getpass(&pw));
   LOGS(pw);
 
   // Copy it for use in decode (keyencode will zero it out)
   u8 pw_buf2[2048];
   memcpy(pw_buf2, pw_buf, sizeof(pw_buf));
-  Bytes pw2 = bytes_from_arr(pw_buf2);
+  Bytes pw2 = BytesArray(pw_buf2);
   pw2.len = pw.len;
 
   // Encode the keys
@@ -2154,7 +2154,7 @@ static int demo_time(int argc, const char** argv) {
     taia_now(&t);
     char buf[TAIN_PACK];
     tain_pack(buf, &t);
-    LOGB(bytes_from_arr(buf));
+    LOGB(BytesArray(buf));
   }
   {
     uv_timespec64_t sp;

@@ -30,7 +30,7 @@ clean:
 fmt:
 	clang-format -i `find lib cli -type f -name '*.c' -o -name '*.h'`
 
-clangd:
+clangd: cli
 	rm -rf $(BROOT)/clangd
 	mkdir -p $(BROOT)/clangd
 	mkclangd dirs \
@@ -52,8 +52,7 @@ test: $(ALL_TESTS)
 	echo TESTS OK
 test-clean:
 	find $(BROOT) -type d -name 'test' | xargs rm -rf
-$(ALL_TESTS): platform scripts/test.mk
-	$(MAKE) -C vendor/unity
+$(ALL_TESTS): platform vendor/unity scripts/test.mk
 	$(MAKE) -C $(@:%/test=%) deps
 	$(MAKE) -C $(@:%/test=%) test-deps 2>/dev/null || :
 	$(MAKE) -C $(@:%/test=%)

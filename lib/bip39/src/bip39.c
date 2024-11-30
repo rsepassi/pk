@@ -84,7 +84,7 @@ int bip39_mnemonic_idxs(Bytes b, u16* out) {
   usize nwords = bip39_MNEMONIC_LEN(b.len);
   usize nbits = nwords * 11;
 
-  BytesIter src = {b, bytes_from_arr(h), 0};
+  BytesIter src = {b, BytesArray(h), 0};
   WordsIter dst = {out, 0, 0};
 
   for (usize i = 0; i < nbits; ++i)
@@ -100,7 +100,7 @@ int bip39_mnemonic_bytes(u16* words, usize words_len, Bytes* out) {
   u8 wordh[crypto_hash_sha256_BYTES];
 
   WordsIter src = {words, 0, 0};
-  BytesIter dst = {*out, bytes_from_arr(wordh), 0};
+  BytesIter dst = {*out, BytesArray(wordh), 0};
 
   usize nbits = words_len * 11;
   for (usize i = 0; i < nbits; ++i)

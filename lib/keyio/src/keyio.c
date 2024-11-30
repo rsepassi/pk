@@ -86,9 +86,9 @@ static int sk_pw_encode(const CryptoSignSK* sk, Str password, Allocator al,
       return 1;
 
     // To aid in debugging roundtrips:
-    // LOGB(bytes_from_arr(nonce));
-    // LOGB(bytes_from_arr(salt));
-    // LOGB(bytes_from_arr(key));
+    // LOGB(BytesArray(nonce));
+    // LOGB(BytesArray(salt));
+    // LOGB(BytesArray(key));
 
     sodium_memzero(key, sizeof(key));
   }
@@ -112,7 +112,7 @@ static int sk_pw_encode(const CryptoSignSK* sk, Str password, Allocator al,
   }
 
   // Prepare our final textual output
-  if (encode(bytes_from_arr(src), al, Str(PK_SKP_HEADER), Str(PK_SKP_FOOTER),
+  if (encode(BytesArray(src), al, Str(PK_SKP_HEADER), Str(PK_SKP_FOOTER),
              sk_out))
     return 1;
   sodium_memzero(src, sizeof(src));

@@ -121,7 +121,7 @@ void test_str(void) {
     CHECK((uptr)a.buf == (uptr)cstr);
 
     char buf[32];
-    Bytes b = bytes_from_arr(buf);
+    Bytes b = BytesArray(buf);
     bytes_copy(&b, a);
 
     CHECK(str_eq(a, b));

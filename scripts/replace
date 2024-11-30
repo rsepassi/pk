@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+
+# Recursive in-place find and replace
+
+rg -l "$1" | xargs -I{} sed -i'' -e "s/$1/$2/g" {}
