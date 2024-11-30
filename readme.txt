@@ -1,16 +1,17 @@
 pk
 ---
 
-Build cli:
+Build and run cli:
   make cli && ./build/cli/bin/cli
 
 Build a library:
-  make lib/vendor/sodium
+  make vendor/sodium
 
 Test a library:
-  make test/lib/cbase
+  make lib/cbase/test
 
 Test all:
+  make test-clean
   make test
 
 build/: build artifacts

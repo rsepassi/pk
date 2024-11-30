@@ -17,7 +17,7 @@ CC_DEPS = \
 	$(HDRS) $(DEPS_OK) \
 	Makefile \
 	$(ROOTDIR)/scripts/cc.mk
-CC_CFLAGS = -Iinclude $(CFLAGS) $(DEPS_CFLAGS) $(LOCAL_CFLAGS)
+CC_CFLAGS = -Iinclude $(CFLAGS) `need --cflags $(DEPS)` $(LOCAL_CFLAGS)
 
 $(BDIR)/lib$(LIBNAME).a: $(OBJS) $(SRCS) $(CC_DEPS)
 	$(AR) rcs $@ $(OBJS)

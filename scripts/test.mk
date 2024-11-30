@@ -3,7 +3,6 @@ include $(ROOTDIR)/scripts/bdir.mk
 TEST_LIB := $(CURDIR:$(ROOTDIR)/%=%)
 TEST_SRCS := $(wildcard test/*.c)
 TEST_OKS := $(addprefix $(BDIR)/, $(TEST_SRCS:.c=.ok))
-TEST_DEPS := $(ROOTDIR)/scripts/test.mk $(BDIR)/.build
 
 .PHONY: test
 test: $(TEST_OKS)
@@ -13,16 +12,16 @@ $(BDIR)/test/%.ok: $(BDIR)/test/%$(EXE)
 	$< && touch $@
 
 # compile a test executable
-$(BDIR)/test/%$(EXE): test/%.c $(TEST_DEPS)
+$(BDIR)/test/%$(EXE): test/%.c $(ROOTDIR)/scripts/test.mk $(DEPS_OK) $(BDIR)/.build
 	mkdir -p $(dir $@)
-	$(CC) -o $@.tmp $< \
+	$(CCLD) -o $@.tmp $< \
 		$(CFLAGS) \
 		`need --cflags $(TEST_LIB)` \
-		$(TEST_CFLAGS) \
+		`need --cflags $(DEPS)` \
 		`need --cflags vendor/unity` \
 		$(LDFLAGS) \
 		`need --libs $(TEST_LIB)` \
-		$(TEST_LDFLAGS) \
+		`need --libs $(DEPS)` \
 		`need --libs vendor/unity` \
 		$(PLATFORM_LDFLAGS) \
 		-lc

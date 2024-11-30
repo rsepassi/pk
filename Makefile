@@ -1,4 +1,5 @@
 export ROOTDIR := $(CURDIR)
+export BROOT := $(ROOTDIR)/build
 export PATH := $(CURDIR)/scripts:$(PATH)
 
 export CC := clang-17
@@ -20,32 +21,42 @@ export CFLAGS += \
 export LDFLAGS += \
 	$(OPT) -pie -z relro -z now -z noexecstack
 
-.PHONY: default dir clean fmt clangd
-default: platform
-	$(MAKE) -C cli deps
-	$(MAKE) -C cli
-
-dir: platform
-	$(MAKE) -C $(DIR) deps
-	$(MAKE) -C $(DIR) $(T)
+.PHONY: default clean fmt clangd
+default: cli
 
 clean:
-	rm -rf build
+	rm -rf $(BROOT)
 
 fmt:
 	clang-format -i `find lib cli -type f -name '*.c' -o -name '*.h'`
 
 clangd:
-	rm -rf build/clangd
-	mkdir -p build/clangd
+	rm -rf $(BROOT)/clangd
+	mkdir -p $(BROOT)/clangd
 	mkclangd dirs \
 		cli $(wildcard lib/*) $(wildcard vendor/*) \
-		> build/clangd/compile_commands.json
+		> $(BROOT)/clangd/compile_commands.json
 
-LIB_DIRS := $(wildcard lib/*) $(wildcard vendor/*)
-include scripts/libs.mk
+# Subdirectory targets
+ALL_LIBS := cli $(wildcard lib/*) $(wildcard vendor/*)
+.PHONY: $(ALL_LIBS)
+$(ALL_LIBS): platform
+	$(MAKE) -C $@ deps
+	$(MAKE) -C $@ $(T)
 
+# Test targets
 TEST_DIRS := $(wildcard lib/*) vendor/base58
-include scripts/tests.mk
+ALL_TESTS := $(addsuffix /test, $(TEST_DIRS))
+.PHONY: test $(ALL_TESTS)
+test: $(ALL_TESTS)
+	echo TESTS OK
+test-clean:
+	find $(BROOT) -type d -name 'test' | xargs rm -rf
+$(ALL_TESTS): platform scripts/test.mk
+	$(MAKE) -C vendor/unity
+	$(MAKE) -C $(@:%/test=%) deps
+	$(MAKE) -C $(@:%/test=%) test-deps 2>/dev/null || :
+	$(MAKE) -C $(@:%/test=%)
+	$(MAKE) -C $(@:%/test=%) test
 
 include scripts/platform.mk
