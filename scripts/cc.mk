@@ -16,7 +16,6 @@ endif
 CC_DEPS = \
 	$(HDRS) $(DEPS_OK) \
 	Makefile \
-	$(ROOTDIR)/Makefile \
 	$(ROOTDIR)/scripts/cc.mk
 CC_CFLAGS = -Iinclude $(CFLAGS) $(DEPS_CFLAGS) $(LOCAL_CFLAGS)
 

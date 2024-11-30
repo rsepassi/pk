@@ -29,23 +29,23 @@ dir: platform
 	$(MAKE) -C $(DIR) deps
 	$(MAKE) -C $(DIR) $(T)
 
-test: platform
-	$(MAKE) -C vendor/unity
-	$(MAKE) -C $(DIR) deps
-	$(MAKE) -C $(DIR) test-deps || :
-	$(MAKE) -C $(DIR)
-	$(MAKE) -C $(DIR) test
-
 clean:
 	rm -rf build
 
 fmt:
 	clang-format -i `find lib cli -type f -name '*.c' -o -name '*.h'`
 
-ALL_DIRS := cli $(wildcard lib/*) $(wildcard vendor/*)
 clangd:
 	rm -rf build/clangd
 	mkdir -p build/clangd
-	mkclangd dirs $(ALL_DIRS) > build/clangd/compile_commands.json
+	mkclangd dirs \
+		cli $(wildcard lib/*) $(wildcard vendor/*) \
+		> build/clangd/compile_commands.json
+
+LIB_DIRS := $(wildcard lib/*) $(wildcard vendor/*)
+include scripts/libs.mk
+
+TEST_DIRS := $(wildcard lib/*) vendor/base58
+include scripts/tests.mk
 
 include scripts/platform.mk
