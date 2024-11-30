@@ -36,9 +36,11 @@ clean:
 fmt:
 	clang-format -i `find lib cli -type f -name '*.c' -o -name '*.h'`
 
+ALL_DIRS := cli $(wildcard lib/*) $(wildcard vendor/*)
 clangd:
+	echo $(DEPS_PATHS)
 	rm -rf build/clangd
 	mkdir -p build/clangd
-	mkclangd dirs $(DEPS) > build/clangd/compile_commands.json
+	mkclangd dirs $(ALL_DIRS) > build/clangd/compile_commands.json
 
 include scripts/platform.mk

@@ -24,7 +24,7 @@ while [ -n "$1" ]
 do
 
 dir=$1
-make --silent dir DIR=$dir T=clangds 2>/dev/null || :
+make --silent dir DIR=$dir T=clangds 2>/dev/null || echo "skip $dir" >&2
 
 shift
 done
