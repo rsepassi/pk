@@ -1,30 +1,27 @@
-# test/
+include $(ROOTDIR)/scripts/bdir.mk
+
+TEST_LIB := $(CURDIR:$(ROOTDIR)/%=%)
 TEST_SRCS := $(wildcard test/*.c)
-TESTS := $(TEST_SRCS:.c=.ok)
-
-TEST_CFLAGS := `need --cflags vendor/unity`
-TEST_LDFLAGS := `need --libs vendor/unity`
-
-CLEAN_ALL_EXTRAS += unity-clean clean-test
+TEST_OKS := $(addprefix $(BDIR)/, $(TEST_SRCS:.c=.ok))
+TEST_DEPS := $(ROOTDIR)/scripts/test.mk $(BDIR)/.build
 
 .PHONY: test
-test:
-	$(MAKE) $(TESTS)
-
-# compile a test executable
-test/%: test/%.c vendor/unity
-	$(CC) $(CFLAGS) -o $@ $(DEPS_CFLAGS) $(LDFLAGS) $(DEPS_LDFLAGS) $(TEST_CFLAGS) $(TEST_LDFLAGS) $<
+test: $(TEST_OKS)
 
 # execute a test
-test/%.ok: test/%
-	./$< && touch $@
+$(BDIR)/test/%.ok: $(BDIR)/test/%$(EXE)
+	$< && touch $@
 
-.PHONY: unity-build unity-clean clean-test
-unity-build:
-	$(MAKE) -C $(ROOTDIR)/$@
-
-unity-clean:
-	$(MAKE) -C vendor/unity clean
-
-clean-test:
-	rm -f test/*.ok
+# compile a test executable
+$(BDIR)/test/%$(EXE): test/%.c $(TEST_DEPS)
+	mkdir -p $(dir $@)
+	$(CC) -o $@.tmp $< \
+		$(CFLAGS) \
+		`need --cflags $(TEST_LIB)` \
+		`need --cflags vendor/unity` \
+		$(LDFLAGS) \
+		`need --libs $(TEST_LIB)` \
+		`need --libs vendor/unity` \
+		$(PLATFORM_LDFLAGS) \
+		-lc
+	mv $@.tmp $@

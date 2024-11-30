@@ -63,6 +63,8 @@ static inline void list_set(List* ctx, usize i, void* val) {
 }
 
 static inline int list_addn(List* ctx, usize n, void** out) {
+  if (n == 0)
+    return 0;
   usize newcap = MAX(ctx->cap, 1);
   while ((ctx->len + n) > newcap)
     newcap *= 2;
@@ -71,6 +73,7 @@ static inline int list_addn(List* ctx, usize n, void** out) {
   usize i = ctx->len;
   ctx->len += n;
   *out = list_get(ctx, i);
+  DCHECK(*out);
   memset(*out, 0, n * ctx->elsz);
   return 0;
 }

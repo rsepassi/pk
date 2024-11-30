@@ -18,8 +18,7 @@ export CFLAGS += \
 	-fstack-protector-strong -fstack-clash-protection \
 	-D_FORTIFY_SOURCE=3
 export LDFLAGS += \
-	$(OPT) \
-	-pie -z relro -z now -z noexecstack
+	$(OPT) -pie -z relro -z now -z noexecstack
 
 .PHONY: default dir clean fmt clangd
 default: platform
@@ -30,6 +29,12 @@ dir: platform
 	$(MAKE) -C $(DIR) deps
 	$(MAKE) -C $(DIR) $(T)
 
+test: platform
+	$(MAKE) -C vendor/unity
+	$(MAKE) -C $(DIR) deps
+	$(MAKE) -C $(DIR)
+	$(MAKE) -C $(DIR) test
+
 clean:
 	rm -rf build
 
@@ -38,7 +43,6 @@ fmt:
 
 ALL_DIRS := cli $(wildcard lib/*) $(wildcard vendor/*)
 clangd:
-	echo $(DEPS_PATHS)
 	rm -rf build/clangd
 	mkdir -p build/clangd
 	mkclangd dirs $(ALL_DIRS) > build/clangd/compile_commands.json

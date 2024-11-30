@@ -23,8 +23,9 @@
   ((type*)((char*)(ptr)-offsetof(type, member)))
 #endif
 
-#define CBASE_ALIGN(x, align) ((x) + (-(uintptr_t)(x) & ((align)-1)))
-#define CBASE_ALIGNB(x, align) (((x) + ((align)-1)) & ~((align)-1))
+#define CBASE_ALIGN(x, align)                                                  \
+  ((void*)(((uintptr_t)(x) + ((align)-1)) & -(align)))
+#define CBASE_ALIGNB(x, align) ((void*)((uintptr_t)(x) & -(align)))
 
 #ifndef ALIGN
 #define ALIGN CBASE_ALIGN
