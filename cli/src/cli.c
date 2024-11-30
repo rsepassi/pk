@@ -51,7 +51,8 @@ static void phex(char* tag, u8* b, u64 len) {
 
 #define pcrypt(k) phex(#k, (u8*)&(k), sizeof(k))
 
-static int nik_keys_kx_from_seed(const CryptoSeed* seed, CryptoKxKeypair* out) {
+static int nik_keys_kx_from_seed(const CryptoSignSeed* seed,
+                                 CryptoKxKeypair* out) {
   CryptoSignPK pk;
   CryptoSignSK sk;
   if (crypto_sign_seed_keypair((u8*)&pk, (u8*)&sk, (u8*)seed))
@@ -73,7 +74,7 @@ static int demo_nikcxn(int argc, const char** argv) {
   CryptoKxKeypair kx_keys_i;
   {
     Str A_seed_str = str_from_c(A_seed_hex);
-    CryptoSeed A_seed;
+    CryptoSignSeed A_seed;
     sodium_hex2bin((u8*)&A_seed, sizeof(A_seed), (char*)A_seed_str.buf,
                    A_seed_str.len, 0, 0, 0);
     CHECK0(nik_keys_kx_from_seed(&A_seed, &kx_keys_i));
@@ -82,7 +83,7 @@ static int demo_nikcxn(int argc, const char** argv) {
   CryptoKxKeypair kx_keys_r;
   {
     Str B_seed_str = str_from_c(B_seed_hex);
-    CryptoSeed B_seed;
+    CryptoSignSeed B_seed;
     sodium_hex2bin((u8*)&B_seed, sizeof(B_seed), (char*)B_seed_str.buf,
                    B_seed_str.len, 0, 0, 0);
     CHECK0(nik_keys_kx_from_seed(&B_seed, &kx_keys_r));
@@ -252,7 +253,7 @@ static int demo_nik(int argc, const char** argv) {
   CryptoKxKeypair kx_keys_i;
   {
     Str A_seed_str = str_from_c(A_seed_hex);
-    CryptoSeed A_seed;
+    CryptoSignSeed A_seed;
     sodium_hex2bin((u8*)&A_seed, sizeof(A_seed), (char*)A_seed_str.buf,
                    A_seed_str.len, 0, 0, 0);
     CHECK0(nik_keys_kx_from_seed(&A_seed, &kx_keys_i));
@@ -261,7 +262,7 @@ static int demo_nik(int argc, const char** argv) {
   CryptoKxKeypair kx_keys_r;
   {
     Str B_seed_str = str_from_c(B_seed_hex);
-    CryptoSeed B_seed;
+    CryptoSignSeed B_seed;
     sodium_hex2bin((u8*)&B_seed, sizeof(B_seed), (char*)B_seed_str.buf,
                    B_seed_str.len, 0, 0, 0);
     CHECK0(nik_keys_kx_from_seed(&B_seed, &kx_keys_r));
@@ -639,9 +640,9 @@ static int demo_vterm(int argc, const char** argv) {
 
 static void get_identity_key(Str hex, CryptoSignSK* out) {
   CHECK(hex.len == 64, "got length %d", (int)hex.len);
-  CryptoSeed seed;
-  sodium_hex2bin((u8*)&seed, sizeof(CryptoSeed), (char*)hex.buf, hex.len, 0, 0,
-                 0);
+  CryptoSignSeed seed;
+  sodium_hex2bin((u8*)&seed, sizeof(CryptoSignSeed), (char*)hex.buf, hex.len, 0,
+                 0, 0);
 
   CryptoSignPK pk;
   CHECK0(crypto_sign_seed_keypair((u8*)&pk, (u8*)out, (u8*)&seed));
@@ -2273,7 +2274,7 @@ int main(int argc, const char** argv) {
   Allocator al = allocatormi_allocator();
 
   // libsodium init
-  CHECK(crypto_init() == 0);
+  CHECK0(sodium_init());
 
   // libuv init
   CHECK0(Alloc_create(al, &loop));

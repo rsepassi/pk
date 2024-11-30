@@ -20,8 +20,8 @@ typedef struct {
 
 // Alice sends Bob Handshake1
 typedef struct __attribute__((packed)) {
-  CryptoKxPK ephemeral;
-  CryptoKxPK statik;
+  CryptoKxPK ephemeral;  // plaintext
+  CryptoKxPK statik;     // encrypted
   CryptoAuthTag tag;
 } NIK_Handshake1;
 
@@ -38,7 +38,6 @@ typedef struct {
   crypto_generichash_blake2b_state hash;
   CryptoKxSK ephemeral_sk;
   CryptoKxPK ephemeral_pk;
-  bool initiator;
 } NIK_HandshakeState;
 
 // Final shared secret
@@ -47,17 +46,20 @@ typedef struct {
 } NIK_SharedSecret;
 
 // Alice initiates a handshake to Bob
-NIK_Status nikhs_handshake_start(NIK_HandshakeState* state, const NIK_Keys keys,
-                                 NIK_Handshake1* hs);
+// hs goes to Bob
+NIK_Status nik_handshake_start(NIK_HandshakeState* state, const NIK_Keys keys,
+                               NIK_Handshake1* hs);
 
 // Bob finalizes the handshake and responds with NIK_Handshake2
-NIK_Status nikhs_handshake_responder_finish(NIK_HandshakeState* state,
-                                            const NIK_Keys keys,
-                                            NIK_Handshake1* hs1,
-                                            NIK_Handshake2* hs2,
-                                            NIK_SharedSecret* secret);
+// hs1 will have statik decrypted in-place
+// hs2 goes to Alice
+NIK_Status nik_handshake_responder_finish(NIK_HandshakeState* state,
+                                          const NIK_Keys keys,
+                                          NIK_Handshake1* hs1,
+                                          NIK_Handshake2* hs2,
+                                          NIK_SharedSecret* secret);
 
 // Alice finalizes the handshake based on Bob's response
-NIK_Status nikhs_handshake_finish(NIK_HandshakeState* state,
-                                  const NIK_Handshake2* hs,
-                                  NIK_SharedSecret* secret);
+NIK_Status nik_handshake_finish(NIK_HandshakeState* state,
+                                const NIK_Handshake2* hs,
+                                NIK_SharedSecret* secret);

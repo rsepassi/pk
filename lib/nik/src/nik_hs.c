@@ -48,12 +48,11 @@ static NIK_Status nik_dh_kdf2(u8* T1, u8* T2, const u8* C, const CryptoKxPK* pk,
   return 0;
 }
 
-static NIK_Status nikhs_handshake1_check(NIK_HandshakeState* state,
-                                         const NIK_Keys keys,
-                                         NIK_Handshake1* hs) {
+static NIK_Status nik_handshake1_check(NIK_HandshakeState* state,
+                                       const NIK_Keys keys,
+                                       NIK_Handshake1* hs) {
   *state = (NIK_HandshakeState){0};
   state->keys = keys;
-  state->initiator = false;
 
   // Responder static key
   CryptoKxPK* S_pub_r = keys.pk;
@@ -146,9 +145,9 @@ static NIK_Status nikhs_handshake1_check(NIK_HandshakeState* state,
   return 0;
 }
 
-static NIK_Status nikhs_handshake2(NIK_HandshakeState* state,
-                                   const NIK_Handshake1* hs1,
-                                   NIK_Handshake2* hs2) {
+static NIK_Status nik_handshake2(NIK_HandshakeState* state,
+                                 const NIK_Handshake1* hs1,
+                                 NIK_Handshake2* hs2) {
   *hs2 = (NIK_Handshake2){0};
 
   u8* C_r = state->chaining_key;
@@ -242,8 +241,8 @@ static NIK_Status nikhs_handshake2(NIK_HandshakeState* state,
   return 0;
 }
 
-static NIK_Status nikhs_handshake2_check(NIK_HandshakeState* state,
-                                         const NIK_Handshake2* hs) {
+static NIK_Status nik_handshake2_check(NIK_HandshakeState* state,
+                                       const NIK_Handshake2* hs) {
   // No changes are made to the state unless the message checks out
   u8 C_copy[NIK_CHAIN_SZ];
   memcpy(C_copy, state->chaining_key, NIK_CHAIN_SZ);
@@ -335,8 +334,8 @@ static NIK_Status nikhs_handshake2_check(NIK_HandshakeState* state,
   return 0;
 }
 
-static NIK_Status nikhs_handshake_done(NIK_HandshakeState* state,
-                                       NIK_SharedSecret* secret) {
+static NIK_Status nik_handshake_done(NIK_HandshakeState* state,
+                                     NIK_SharedSecret* secret) {
   if (crypto_generichash_blake2b((u8*)&secret->secret, sizeof(secret->secret),
                                  state->chaining_key,
                                  sizeof(state->chaining_key), 0, 0))
@@ -347,13 +346,12 @@ static NIK_Status nikhs_handshake_done(NIK_HandshakeState* state,
   return 0;
 }
 
-NIK_Status nikhs_handshake_start(NIK_HandshakeState* state, const NIK_Keys keys,
-                                 NIK_Handshake1* hs) {
+NIK_Status nik_handshake_start(NIK_HandshakeState* state, const NIK_Keys keys,
+                               NIK_Handshake1* hs) {
   *state = (NIK_HandshakeState){0};
   *hs = (NIK_Handshake1){0};
 
   state->keys = keys;
-  state->initiator = true;
 
   // Initiator static key
   CryptoKxPK* S_pub_i = keys.pk;
@@ -446,28 +444,28 @@ NIK_Status nikhs_handshake_start(NIK_HandshakeState* state, const NIK_Keys keys,
   return 0;
 }
 
-NIK_Status nikhs_handshake_responder_finish(NIK_HandshakeState* state,
-                                            const NIK_Keys keys,
-                                            NIK_Handshake1* hs1,
-                                            NIK_Handshake2* hs2,
-                                            NIK_SharedSecret* secret) {
+NIK_Status nik_handshake_responder_finish(NIK_HandshakeState* state,
+                                          const NIK_Keys keys,
+                                          NIK_Handshake1* hs1,
+                                          NIK_Handshake2* hs2,
+                                          NIK_SharedSecret* secret) {
   int rc = 0;
-  if ((rc = nikhs_handshake1_check(state, keys, hs1)))
+  if ((rc = nik_handshake1_check(state, keys, hs1)))
     return rc;
-  if ((rc = nikhs_handshake2(state, hs1, hs2)))
+  if ((rc = nik_handshake2(state, hs1, hs2)))
     return rc;
-  if ((rc = nikhs_handshake_done(state, secret)))
+  if ((rc = nik_handshake_done(state, secret)))
     return rc;
   return 0;
 }
 
-NIK_Status nikhs_handshake_finish(NIK_HandshakeState* state,
-                                  const NIK_Handshake2* hs,
-                                  NIK_SharedSecret* secret) {
+NIK_Status nik_handshake_finish(NIK_HandshakeState* state,
+                                const NIK_Handshake2* hs,
+                                NIK_SharedSecret* secret) {
   int rc = 0;
-  if ((rc = nikhs_handshake2_check(state, hs)))
+  if ((rc = nik_handshake2_check(state, hs)))
     return rc;
-  if ((rc = nikhs_handshake_done(state, secret)))
+  if ((rc = nik_handshake_done(state, secret)))
     return rc;
   return 0;
 }

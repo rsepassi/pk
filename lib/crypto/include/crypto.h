@@ -5,10 +5,6 @@
 #include "stdtypes.h"
 
 typedef struct {
-  u8 bytes[32];
-} CryptoSeed;
-
-typedef struct {
   u8 bytes[crypto_sign_ed25519_SEEDBYTES];
 } CryptoSignSeed;
 typedef struct {
@@ -44,16 +40,13 @@ typedef struct {
 } CryptoKxTx;
 
 typedef struct {
-  u8 bytes[crypto_secretbox_KEYBYTES];
+  u8 bytes[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
 } CryptoBoxKey;
 typedef struct {
-  u8 bytes[crypto_secretbox_MACBYTES];
+  u8 bytes[crypto_aead_chacha20poly1305_IETF_ABYTES];
 } CryptoAuthTag;
 
 #define CryptoBytes(x) ((Bytes){sizeof(x), (u8*)&(x)})
-
-// Initializes libsodium and does some checks
-int crypto_init(void);
 
 typedef struct {
   Allocator base;
