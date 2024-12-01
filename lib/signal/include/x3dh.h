@@ -35,7 +35,6 @@ typedef struct __attribute__((packed)) {
   CryptoSignPK identity;  // encrypted
   CryptoKxPK shortterm;   // encrypted
   CryptoAuthTag header_tag;
-  CryptoAuthTag data_tag;
 } X3DHHeader;
 
 typedef struct {
@@ -47,8 +46,8 @@ typedef struct {
 X3DH_Status x3dh_keys_init(const CryptoSignSK* identity, X3DHKeys* keys);
 
 // A -> B
-X3DH_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B, Bytes payload,
+X3DH_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B,
                       X3DHHeader* header, X3DH* out);
 // B <- A
 X3DH_Status x3dh_init_recv(const X3DHKeys* B, const X3DHHeader* header,
-                           Bytes payload, X3DH* out);
+                           X3DH* out);

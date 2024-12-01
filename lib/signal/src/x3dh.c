@@ -3,7 +3,6 @@
 #include "log.h"
 
 #define X3DH_KDF_CTX "pksignal"
-#define X3DH_DATAKEY_CTX "pkdata00"
 
 X3DH_Status x3dh_keys_init(const CryptoSignSK* identity, X3DHKeys* keys) {
   *keys = (X3DHKeys){0};
@@ -25,7 +24,7 @@ X3DH_Status x3dh_keys_init(const CryptoSignSK* identity, X3DHKeys* keys) {
 }
 
 // Alice -> Bob
-X3DH_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B, Bytes payload,
+X3DH_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B,
                       X3DHHeader* header, X3DH* out) {
   // Alice verifies Bob's short-term key
   if (crypto_sign_ed25519_verify_detached((u8*)&B->shortterm_sig,
@@ -112,26 +111,11 @@ X3DH_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B, Bytes payload,
   memcpy(out->ad + sizeof(*A->pub.identity), (u8*)B->identity,
          sizeof(*B->identity));
 
-  // Encrypt payload
-  {
-    CryptoBoxKey data_key;
-    if (crypto_kdf_derive_from_key((u8*)&data_key, sizeof(data_key), 1,
-                                   X3DH_DATAKEY_CTX, (u8*)&out->key))
-      return 1;
-    u8 zero_nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
-    if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
-            payload.buf, (u8*)&header->data_tag, 0, payload.buf, payload.len,
-            out->ad, sizeof(out->ad), 0, zero_nonce, (u8*)&data_key))
-      return 1;
-  }
-
   return 0;
 }
 
 // Bob <- Alice
-X3DH_Status x3dh_init_recv(const X3DHKeys* B, const X3DHHeader* A,
-                           Bytes payload, X3DH* out) {
-  (void)payload;
+X3DH_Status x3dh_init_recv(const X3DHKeys* B, const X3DHHeader* A, X3DH* out) {
   // ed25519 -> x25519
   CryptoKxKeypair B_kx;
   if (crypto_sign_ed25519_pk_to_curve25519((u8*)&B_kx.pk, (u8*)B->pub.identity))
@@ -208,19 +192,6 @@ X3DH_Status x3dh_init_recv(const X3DHKeys* B, const X3DHHeader* A,
   memcpy(out->ad, (u8*)&A->identity, sizeof(*B->pub.identity));
   memcpy(out->ad + sizeof(*B->pub.identity), (u8*)B->pub.identity,
          sizeof(*B->pub.identity));
-
-  // Decrypt payload
-  {
-    CryptoBoxKey data_key;
-    if (crypto_kdf_derive_from_key((u8*)&data_key, sizeof(data_key), 1,
-                                   X3DH_DATAKEY_CTX, (u8*)&out->key))
-      return 1;
-    u8 zero_nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
-    if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
-            payload.buf, 0, payload.buf, payload.len, (u8*)&A->data_tag,
-            out->ad, sizeof(out->ad), zero_nonce, (u8*)&data_key))
-      return 1;
-  }
 
   return 0;
 }

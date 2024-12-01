@@ -3,19 +3,17 @@
 #include "unity.h"
 #include "x3dh.h"
 
-static int drat_a_to_b(DratState* A_state, X3DH* A_x, DratState* B_state,
-                       X3DH* B_x, Str msg) {
+static int drat_a_to_b(DratState* A_state, DratState* B_state, Str msg,
+                       Str ad) {
   // A sends
-  Bytes A_ad = A_x ? BytesArray(A_x->ad) : BytesZero;
   DratHeader header;
   usize cipher_sz = drat_encrypt_len(msg.len);
   Bytes cipher = {cipher_sz, malloc(cipher_sz)};
-  if (drat_encrypt(A_state, msg, A_ad, &header, &cipher))
+  if (drat_encrypt(A_state, msg, ad, &header, &cipher))
     return 1;
 
   // B receives
-  Bytes B_ad = B_x ? BytesArray(B_x->ad) : BytesZero;
-  if (drat_decrypt(B_state, &header, cipher, B_ad))
+  if (drat_decrypt(B_state, &header, cipher, ad))
     return 1;
 
   // decrypt(encrypt(msg)) == msg
@@ -31,53 +29,60 @@ static void test_drat() {
   CryptoSignKeypair B_keys;
   CHECK0(crypto_sign_ed25519_keypair((u8*)&B_keys.pk, (u8*)&B_keys.sk));
 
-  // X3DH
   X3DHKeys A_sec;
   X3DHKeys B_sec;
+  CHECK0(x3dh_keys_init(&A_keys.sk, &A_sec));
+  CHECK0(x3dh_keys_init(&B_keys.sk, &B_sec));
+
+  // Alice initiates x3dh and double ratchet
+  X3DHHeader A_header;
   X3DH A_x;
-  X3DH B_x;
+  DratState A_state;
   {
-    CHECK0(x3dh_keys_init(&A_keys.sk, &A_sec));
-    CHECK0(x3dh_keys_init(&B_keys.sk, &B_sec));
-    X3DHHeader A_header;
-    char str[2] = "hi";
-    Bytes payload = BytesArray(str);
-    CHECK0(x3dh_init(&A_sec, &B_sec.pub, payload, &A_header, &A_x));
-    CHECK0(x3dh_init_recv(&B_sec, &A_header, payload, &B_x));
-    CHECK0(sodium_memcmp((u8*)&A_x, (u8*)&B_x, sizeof(X3DH)));
+    DratInit A_init = {
+        .session_key = &A_x.key,
+        .pk = &A_sec.pub.shortterm,
+        .sk = &A_sec.sec.shortterm,
+    };
+    CHECK0(x3dh_init(&A_sec, &B_sec.pub, &A_header, &A_x));
+    CHECK0(drat_init(&A_state, &A_init));
   }
 
-  // Initialize double ratchet
+  // Bob receives and initiates double ratchet
+  X3DH B_x;
   DratState B_state;
-  DratInit B_init = {
-      .session_key = &B_x.key,
-      .pk = &B_sec.pub.shortterm,
-      .sk = &B_sec.sec.shortterm,
-  };
-  CHECK0(drat_init(&B_state, &B_init));
+  {
+    CHECK0(x3dh_init_recv(&B_sec, &A_header, &B_x));
+    DratInitRecv B_init = {
+        .session_key = &B_x.key,
+        .bob = &A_sec.pub.shortterm,
+    };
+    CHECK0(drat_init_recv(&B_state, &B_init));
+  }
 
-  DratState A_state;
-  DratInitRecv A_init = {
-      .session_key = &A_x.key,
-      .bob = &B_sec.pub.shortterm,
-  };
-  CHECK0(drat_init_recv(&A_state, &A_init));
+  CHECK0(sodium_memcmp(&A_x, &B_x, sizeof(A_x)));
+
+  // First message carries the x3dh AD
+  CHECK0(drat_a_to_b(&A_state, &B_state,  //
+                     Str("first message"), BytesArray(A_x.ad)));
+  CHECK0(drat_a_to_b(&A_state, &B_state,  //
+                     Str("second message"), BytesZero));
 
   // Send some messages back and forth
-  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state, &A_x,  //
-                     Str("hello from Bob! secret number is 77")));
-  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state, &A_x,  //
-                     Str("hello from Bob! secret number is 79")));
-  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state, &B_x,  //
-                     Str("hello from Alice!")));
-  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state, &A_x,  //
-                     Str("roger roger")));
-  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state, &A_x,  //
-                     Str("roger roger 2")));
-  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state, &B_x,  //
-                     Str("1")));
-  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state, &B_x,  //
-                     Str("2")));
+  CHECK0(drat_a_to_b(&B_state, &A_state,  //
+                     Str("hello from Bob! secret number is 77"), BytesZero));
+  CHECK0(drat_a_to_b(&B_state, &A_state,  //
+                     Str("hello from Bob! secret number is 79"), BytesZero));
+  CHECK0(drat_a_to_b(&A_state, &B_state,  //
+                     Str("hello from Alice!"), BytesZero));
+  CHECK0(drat_a_to_b(&B_state, &A_state,  //
+                     Str("roger roger"), BytesZero));
+  CHECK0(drat_a_to_b(&B_state, &A_state,  //
+                     Str("roger roger 2"), BytesZero));
+  CHECK0(drat_a_to_b(&A_state, &B_state,  //
+                     Str("1"), BytesZero));
+  CHECK0(drat_a_to_b(&A_state, &B_state,  //
+                     Str("2"), BytesZero));
 }
 
 static void test_x3dh() {
@@ -95,23 +100,17 @@ static void test_x3dh() {
   X3DHKeys B_sec;
   CHECK0(x3dh_keys_init(&B_keys.sk, &B_sec));
 
-  // Alice derives key, and sends X3DHHeader with an initial payload
+  // Alice derives key and sends X3DHHeader
   X3DH A_x;
   X3DHHeader A_header;
-  char str[2] = "hi";
-  Bytes payload = BytesArray(str);
-  CHECK0(x3dh_init(&A_sec, &B_sec.pub, payload, &A_header, &A_x));
-  CHECK(!str_eq(payload, Str("hi")));
+  CHECK0(x3dh_init(&A_sec, &B_sec.pub, &A_header, &A_x));
 
-  // Bob receives X3DHHeader and initial payload, and derives key
+  // Bob receives X3DHHeader and derives key
   X3DH B_x;
-  CHECK0(x3dh_init_recv(&B_sec, &A_header, payload, &B_x));
+  CHECK0(x3dh_init_recv(&B_sec, &A_header, &B_x));
 
   // Keys + AD are equal
   CHECK0(sodium_memcmp((u8*)&A_x, (u8*)&B_x, sizeof(X3DH)));
-
-  // Payload came through
-  CHECK(str_eq(payload, Str("hi")));
 }
 
 void setUp(void) {}
