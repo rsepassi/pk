@@ -27,7 +27,7 @@ typedef struct __attribute__((packed)) {
 
 // Bob responds with Handshake2
 typedef struct __attribute__((packed)) {
-  CryptoKxPK ephemeral;
+  CryptoKxPK ephemeral;  // plaintext
   CryptoAuthTag tag;
 } NIK_Handshake2;
 

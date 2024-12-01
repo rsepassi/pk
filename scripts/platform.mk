@@ -36,6 +36,8 @@ endif
 # valgrind
 ifdef VALGRIND
 export VALGRIND := 1
+export EXEC_PREFIX := valgrind -s --leak-check=full --show-leak-kinds=all \
+	--track-origins=yes --num-callers=16
 export CFLAGS += -isystem $(CURDIR)/platform/valgrind/include
 endif
 

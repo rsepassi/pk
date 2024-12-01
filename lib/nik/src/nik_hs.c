@@ -226,7 +226,7 @@ static NIK_Status nik_handshake2(NIK_HandshakeState* state,
       return 1;
 
     // AEAD(K, 0, e, H_r)
-    u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
+    u8 zero_nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
     STATIC_CHECK(sizeof(hs2->tag) == crypto_aead_chacha20poly1305_IETF_ABYTES);
     if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
             (void*)1, (u8*)&hs2->tag, 0, 0, 0, H, sizeof(H), 0, zero_nonce, K))
@@ -316,7 +316,7 @@ static NIK_Status nik_handshake2_check(NIK_HandshakeState* state,
       return 1;
 
     // AEAD(K, 0, e, H_i)
-    u8 zero_nonce[crypto_box_NONCEBYTES] = {0};
+    u8 zero_nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
     if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
             0, 0, (void*)1, 0, (u8*)&hs->tag, H, sizeof(H), zero_nonce, K))
       return NIK_ErrFailedVerify;

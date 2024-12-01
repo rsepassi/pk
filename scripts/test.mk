@@ -11,7 +11,7 @@ test-clean:
 
 # execute a test
 $(BDIR)/test/%.ok: $(BDIR)/test/%$(EXE)
-	$< && touch $@
+	$(EXEC_PREFIX) $< && touch $@
 
 # compile a test executable
 $(BDIR)/test/%$(EXE): test/%.c $(ROOTDIR)/scripts/test.mk $(DEPS_OK) $(BDIR)/.build

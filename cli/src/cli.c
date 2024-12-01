@@ -638,135 +638,6 @@ static int demo_vterm(int argc, const char** argv) {
   return 0;
 }
 
-static void get_identity_key(Str hex, CryptoSignSK* out) {
-  CHECK(hex.len == 64, "got length %d", (int)hex.len);
-  CryptoSignSeed seed;
-  sodium_hex2bin((u8*)&seed, sizeof(CryptoSignSeed), (char*)hex.buf, hex.len, 0,
-                 0, 0);
-
-  CryptoSignPK pk;
-  CHECK0(crypto_sign_seed_keypair((u8*)&pk, (u8*)out, (u8*)&seed));
-}
-
-static int drat_a_to_b(DratState* A_state, X3DH* A_x, DratState* B_state,
-                       X3DH* B_x, Str msg) {
-  LOGS(msg);
-
-  // A sends
-  Bytes A_ad = {sizeof(A_x->ad), A_x->ad};
-  DratHeader header;
-  usize cipher_sz = drat_encrypt_len(msg.len);
-  Bytes cipher = {cipher_sz, malloc(cipher_sz)};
-  if (drat_encrypt(A_state, msg, A_ad, &header, &cipher))
-    return 1;
-
-  // B receives
-  Bytes B_ad = {sizeof(B_x->ad), B_x->ad};
-  if (drat_decrypt(B_state, &header, cipher, B_ad))
-    return 1;
-
-  // decrypt(encrypt(msg)) == msg
-  CHECK(msg.len == cipher.len);
-  if (memcmp(cipher.buf, msg.buf, msg.len))
-    return 1;
-  LOGS(cipher);
-  free(cipher.buf);
-  return 0;
-}
-
-static int demo_drat(int argc, const char** argv) {
-  // Alice and Bob identity keys
-  CryptoSignSK A_key;
-  get_identity_key(str_from_c(A_seed_hex), &A_key);
-  CryptoSignSK B_key;
-  get_identity_key(str_from_c(B_seed_hex), &B_key);
-
-  // X3DH
-  X3DHKeys A_sec;
-  X3DHKeys B_sec;
-  X3DH A_x;
-  X3DH B_x;
-  {
-    CHECK0(x3dh_keys_init(&A_key, &A_sec));
-    CHECK0(x3dh_keys_init(&B_key, &B_sec));
-    X3DHHeader A_header;
-    CHECK0(x3dh_init(&A_sec, &B_sec.pub, &A_header, &A_x));
-    CHECK0(x3dh_init_recv(&B_sec, &A_header, &B_x));
-    CHECK0(memcmp((u8*)&A_x, (u8*)&B_x, sizeof(X3DH)));
-  }
-
-  // Initialize double ratchet
-  DratState B_state;
-  DratInit B_init = {
-      .session_key = &B_x.key,
-      .pk = &B_sec.pub.kx_prekey,
-      .sk = &B_sec.sec.kx_prekey,
-  };
-  CHECK0(drat_init(&B_state, &B_init));
-
-  DratState A_state;
-  DratInitRecv A_init = {
-      .session_key = &A_x.key,
-      .bob = &B_sec.pub.kx_prekey,
-  };
-  CHECK0(drat_init_recv(&A_state, &A_init));
-
-  // Send some messages back and forth
-  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state,
-                     &A_x,  //
-                     Str("hello from Bob! secret number is 77")));
-  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state,
-                     &A_x,  //
-                     Str("hello from Bob! secret number is 79")));
-  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state,
-                     &B_x,  //
-                     Str("hello from Alice!")));
-  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state,
-                     &A_x,  //
-                     Str("roger roger")));
-  CHECK0(drat_a_to_b(&B_state, &B_x, &A_state,
-                     &A_x,  //
-                     Str("roger roger 2")));
-  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state,
-                     &B_x,  //
-                     Str("1")));
-  CHECK0(drat_a_to_b(&A_state, &A_x, &B_state,
-                     &B_x,  //
-                     Str("2")));
-
-  return 0;
-}
-
-static int demo_x3dh(int argc, const char** argv) {
-  CryptoSignSK A_key;
-  get_identity_key(str_from_c(A_seed_hex), &A_key);
-  CryptoSignSK B_key;
-  get_identity_key(str_from_c(B_seed_hex), &B_key);
-
-  // Alice init
-  X3DHKeys A_sec;
-  CHECK0(x3dh_keys_init(&A_key, &A_sec));
-
-  // Bob init
-  X3DHKeys B_sec;
-  CHECK0(x3dh_keys_init(&B_key, &B_sec));
-
-  // Alice sends X3DHHeader and derives key
-  X3DH A_x;
-  X3DHHeader A_header;
-  CHECK0(x3dh_init(&A_sec, &B_sec.pub, &A_header, &A_x));
-
-  // Bob receives X3DHHeader and derives key
-  X3DH B_x;
-  CHECK0(x3dh_init_recv(&B_sec, &A_header, &B_x));
-
-  // Keys + AD are equal
-  CHECK0(memcmp((u8*)&A_x, (u8*)&B_x, sizeof(X3DH)));
-  LOG("keys match!");
-
-  return 0;
-}
-
 static void alloc_cb(uv_handle_t* handle, size_t suggested_size,
                      uv_buf_t* buf) {
   *buf = uv_buf_init(malloc(suggested_size), (int)suggested_size);
@@ -2167,7 +2038,6 @@ static int demo_time(int argc, const char** argv) {
 
 static const char* const usages[] = {
     "pk [options] [cmd] [args]\n\n    Commands:"
-    "\n      - demo-drat"
     "\n      - demo-holepunch"
     "\n      - demo-keygen"
     "\n      - demo-keyread"
@@ -2179,7 +2049,6 @@ static const char* const usages[] = {
     "\n      - demo-pwhash"
     "\n      - demo-sshkeyread"
     "\n      - demo-vterm"
-    "\n      - demo-x3dh"
     "\n      - demo-tcp2"
     "\n      - demo-time"
     //
@@ -2193,7 +2062,6 @@ struct cmd_struct {
 };
 
 static struct cmd_struct commands[] = {
-    {"demo-drat", demo_drat},             //
     {"demo-holepunch", demo_holepunch},   //
     {"demo-keygen", demo_keygen},         //
     {"demo-keyread", demo_keyread},       //
@@ -2205,7 +2073,6 @@ static struct cmd_struct commands[] = {
     {"demo-pwhash", demo_pwhash},         //
     {"demo-sshkeyread", demosshkeyread},  //
     {"demo-vterm", demo_vterm},           //
-    {"demo-x3dh", demo_x3dh},             //
     {"demo-tcp2", demo_tcp2},             //
     {"demo-time", demo_time},             //
 };
