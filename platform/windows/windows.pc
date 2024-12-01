@@ -1,4 +1,0 @@
-Name: mingw
-Version: 11.0.0
-Description: windows libc
-Cflags: --sysroot=${src_prefix}/sysroot

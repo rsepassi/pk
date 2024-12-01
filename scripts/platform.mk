@@ -63,22 +63,6 @@ export PLATFORM_LDFLAGS += -target $(TARGET) $(shell need --libs platform/musl)
 platform:
 	$(MAKE) -C platform/musl
 
-else ifeq ($(TARGET_OS), windows)
-
-export CFLAGS += -target $(TARGET) $(shell need --cflags platform/windows)
-export PLATFORM_LDFLAGS += -target $(TARGET) $(shell need --libs platform/windows)
-
-platform:
-	$(MAKE) -C platform/windows
-
-else ifeq ($(TARGET_OS), freebsd)
-
-export CFLAGS += -target $(TARGET) $(shell need --cflags platform/freebsd)
-export PLATFORM_LDFLAGS += -target $(TARGET) $(shell need --libs platform/freebsd)
-
-platform:
-	:
-
 else
 $(error Unsupported platform $(TARGET_OS))
 endif
