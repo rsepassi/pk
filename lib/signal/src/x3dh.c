@@ -2,7 +2,8 @@
 
 #include "log.h"
 
-#define X3DH_KDF_PREFIX "pksignal"
+#define X3DH_KDF_CTX "pksignal"
+#define X3DH_DATAKEY_CTX "pkdata00"
 
 X3DH_Status x3dh_keys_init(const CryptoSignSK* identity, X3DHKeys* keys) {
   *keys = (X3DHKeys){0};
@@ -24,7 +25,7 @@ X3DH_Status x3dh_keys_init(const CryptoSignSK* identity, X3DHKeys* keys) {
 }
 
 // Alice -> Bob
-X3DH_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B,
+X3DH_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B, Bytes payload,
                       X3DHHeader* header, X3DH* out) {
   // Alice verifies Bob's short-term key
   if (crypto_sign_ed25519_verify_detached((u8*)&B->shortterm_sig,
@@ -66,8 +67,8 @@ X3DH_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B,
   // DH3 provides forward secrecy
   crypto_kdf_hkdf_sha256_state kdf_state;
   crypto_kdf_hkdf_sha256_state kdf0_state;
-  if (crypto_kdf_hkdf_sha256_extract_init(&kdf_state, (u8*)X3DH_KDF_PREFIX,
-                                          STRLEN(X3DH_KDF_PREFIX)))
+  if (crypto_kdf_hkdf_sha256_extract_init(&kdf_state, (u8*)X3DH_KDF_CTX,
+                                          STRLEN(X3DH_KDF_CTX)))
     return 1;
   if (crypto_kdf_hkdf_sha256_extract_update(&kdf_state, (u8*)&dh2,
                                             sizeof(CryptoKxTx)))
@@ -90,12 +91,15 @@ X3DH_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B,
   // Fill and encrypt header
   header->identity = *A->pub.identity;
   header->shortterm = B->shortterm;
-  u8 zero_nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
-  if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
-          (u8*)&header->identity, (u8*)&header->tag, 0, (u8*)&header->identity,
-          sizeof(header->identity) + sizeof(header->shortterm), 0, 0, 0,
-          zero_nonce, (u8*)&header_key))
-    return 1;
+  {
+    u8 zero_nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
+    if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
+            (u8*)&header->identity, (u8*)&header->header_tag, 0,
+            (u8*)&header->identity,
+            sizeof(header->identity) + sizeof(header->shortterm), 0, 0, 0,
+            zero_nonce, (u8*)&header_key))
+      return 1;
+  }
 
   // Erase unneded information
   sodium_memzero((u8*)&dh1, sizeof(CryptoKxTx));
@@ -108,11 +112,26 @@ X3DH_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B,
   memcpy(out->ad + sizeof(*A->pub.identity), (u8*)B->identity,
          sizeof(*B->identity));
 
+  // Encrypt payload
+  {
+    CryptoBoxKey data_key;
+    if (crypto_kdf_derive_from_key((u8*)&data_key, sizeof(data_key), 1,
+                                   X3DH_DATAKEY_CTX, (u8*)&out->key))
+      return 1;
+    u8 zero_nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
+    if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
+            payload.buf, (u8*)&header->data_tag, 0, payload.buf, payload.len,
+            out->ad, sizeof(out->ad), 0, zero_nonce, (u8*)&data_key))
+      return 1;
+  }
+
   return 0;
 }
 
 // Bob <- Alice
-X3DH_Status x3dh_init_recv(const X3DHKeys* B, const X3DHHeader* A, X3DH* out) {
+X3DH_Status x3dh_init_recv(const X3DHKeys* B, const X3DHHeader* A,
+                           Bytes payload, X3DH* out) {
+  (void)payload;
   // ed25519 -> x25519
   CryptoKxKeypair B_kx;
   if (crypto_sign_ed25519_pk_to_curve25519((u8*)&B_kx.pk, (u8*)B->pub.identity))
@@ -134,8 +153,8 @@ X3DH_Status x3dh_init_recv(const X3DHKeys* B, const X3DHHeader* A, X3DH* out) {
   CryptoKxTx header_key;
   crypto_kdf_hkdf_sha256_state kdf_state;
   crypto_kdf_hkdf_sha256_state kdf0_state;
-  if (crypto_kdf_hkdf_sha256_extract_init(&kdf0_state, (u8*)X3DH_KDF_PREFIX,
-                                          STRLEN(X3DH_KDF_PREFIX)))
+  if (crypto_kdf_hkdf_sha256_extract_init(&kdf0_state, (u8*)X3DH_KDF_CTX,
+                                          STRLEN(X3DH_KDF_CTX)))
     return 1;
   if (crypto_kdf_hkdf_sha256_extract_update(&kdf0_state, (u8*)&dh2,
                                             sizeof(CryptoKxTx)))
@@ -148,12 +167,14 @@ X3DH_Status x3dh_init_recv(const X3DHKeys* B, const X3DHHeader* A, X3DH* out) {
     return 1;
 
   // Decrypt header
-  u8 zero_nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
-  if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
-          (u8*)&A->identity, 0, (u8*)&A->identity,
-          sizeof(A->identity) + sizeof(A->shortterm), (u8*)&A->tag, 0, 0,
-          zero_nonce, (u8*)&header_key))
-    return 1;
+  {
+    u8 zero_nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
+    if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
+            (u8*)&A->identity, 0, (u8*)&A->identity,
+            sizeof(A->identity) + sizeof(A->shortterm), (u8*)&A->header_tag, 0,
+            0, zero_nonce, (u8*)&header_key))
+      return 1;
+  }
 
   // Bob checks that the right shortterm key was used
   // memcmp OK: public key
@@ -187,6 +208,19 @@ X3DH_Status x3dh_init_recv(const X3DHKeys* B, const X3DHHeader* A, X3DH* out) {
   memcpy(out->ad, (u8*)&A->identity, sizeof(*B->pub.identity));
   memcpy(out->ad + sizeof(*B->pub.identity), (u8*)B->pub.identity,
          sizeof(*B->pub.identity));
+
+  // Decrypt payload
+  {
+    CryptoBoxKey data_key;
+    if (crypto_kdf_derive_from_key((u8*)&data_key, sizeof(data_key), 1,
+                                   X3DH_DATAKEY_CTX, (u8*)&out->key))
+      return 1;
+    u8 zero_nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
+    if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
+            payload.buf, 0, payload.buf, payload.len, (u8*)&A->data_tag,
+            out->ad, sizeof(out->ad), zero_nonce, (u8*)&data_key))
+      return 1;
+  }
 
   return 0;
 }

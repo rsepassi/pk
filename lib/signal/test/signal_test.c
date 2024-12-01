@@ -40,8 +40,10 @@ static void test_drat() {
     CHECK0(x3dh_keys_init(&A_keys.sk, &A_sec));
     CHECK0(x3dh_keys_init(&B_keys.sk, &B_sec));
     X3DHHeader A_header;
-    CHECK0(x3dh_init(&A_sec, &B_sec.pub, &A_header, &A_x));
-    CHECK0(x3dh_init_recv(&B_sec, &A_header, &B_x));
+    char str[2] = "hi";
+    Bytes payload = BytesArray(str);
+    CHECK0(x3dh_init(&A_sec, &B_sec.pub, payload, &A_header, &A_x));
+    CHECK0(x3dh_init_recv(&B_sec, &A_header, payload, &B_x));
     CHECK0(sodium_memcmp((u8*)&A_x, (u8*)&B_x, sizeof(X3DH)));
   }
 
@@ -93,17 +95,23 @@ static void test_x3dh() {
   X3DHKeys B_sec;
   CHECK0(x3dh_keys_init(&B_keys.sk, &B_sec));
 
-  // Alice sends X3DHHeader and derives key
+  // Alice derives key, and sends X3DHHeader with an initial payload
   X3DH A_x;
   X3DHHeader A_header;
-  CHECK0(x3dh_init(&A_sec, &B_sec.pub, &A_header, &A_x));
+  char str[2] = "hi";
+  Bytes payload = BytesArray(str);
+  CHECK0(x3dh_init(&A_sec, &B_sec.pub, payload, &A_header, &A_x));
+  CHECK(!str_eq(payload, Str("hi")));
 
-  // Bob receives X3DHHeader and derives key
+  // Bob receives X3DHHeader and initial payload, and derives key
   X3DH B_x;
-  CHECK0(x3dh_init_recv(&B_sec, &A_header, &B_x));
+  CHECK0(x3dh_init_recv(&B_sec, &A_header, payload, &B_x));
 
   // Keys + AD are equal
   CHECK0(sodium_memcmp((u8*)&A_x, (u8*)&B_x, sizeof(X3DH)));
+
+  // Payload came through
+  CHECK(str_eq(payload, Str("hi")));
 }
 
 void setUp(void) {}
