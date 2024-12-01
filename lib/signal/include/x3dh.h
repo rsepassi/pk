@@ -9,8 +9,6 @@
 
 #include "crypto.h"
 
-#define X3DH_HSZ 32
-
 typedef int X3DH_Status;
 
 typedef struct {
@@ -30,9 +28,10 @@ typedef struct {
 } X3DHKeys;
 
 typedef struct __attribute__((packed)) {
-  CryptoSignPK identity;
-  CryptoKxPK ephemeral;
-  u8 shortterm[X3DH_HSZ];
+  CryptoKxPK ephemeral;   // plaintext
+  CryptoSignPK identity;  // encrypted
+  CryptoKxPK shortterm;   // encrypted
+  CryptoAuthTag tag;
 } X3DHHeader;
 
 typedef struct {
