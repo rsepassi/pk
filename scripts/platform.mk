@@ -45,23 +45,19 @@ endif
 
 ifeq ($(TARGET_OS), macos)
 
-export CFLAGS += \
-	-target $(TARGET_ARCH)-apple-macosx13 \
-	$(shell need --cflags platform/macos)
-export PLATFORM_LDFLAGS += \
-	-target $(TARGET) \
-	$(shell need --libs platform/macos)
+export CFLAGS += -target $(TARGET)
+export PLATFORM_LDFLAGS += -target $(TARGET) \
 
 platform:
-	$(MAKE) -C platform/macos
+	:
 
 else ifeq ($(TARGET_OS), linux)
 
-export CFLAGS += -target $(TARGET) $(shell need --cflags platform/musl)
-export PLATFORM_LDFLAGS += -target $(TARGET) $(shell need --libs platform/musl)
+export CFLAGS += -target $(TARGET)
+export PLATFORM_LDFLAGS += -target $(TARGET)
 
 platform:
-	$(MAKE) -C platform/musl
+	:
 
 else
 $(error Unsupported platform $(TARGET_OS))

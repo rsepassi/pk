@@ -1,5 +1,0 @@
-Name: musl libc
-Version: 1.2.5
-Description: Linux libc
-Libs: -fuse-ld=lld -nodefaultlibs --rtlib=compiler-rt -L ${build_prefix}/lib
-Cflags: --sysroot=${build_prefix}/sysroot

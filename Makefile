@@ -2,9 +2,9 @@ export ROOTDIR := $(CURDIR)
 export BROOT := $(ROOTDIR)/build
 export PATH := $(CURDIR)/scripts:$(PATH)
 
-export CC := clang-17
+export CC := zig cc
 export CCLD := zig cc
-export AR := llvm-ar
+export AR := zig ar
 export OPT := -O0
 
 export CFLAGS += \
