@@ -2,7 +2,7 @@
 
 #include "log.h"
 
-#define X3DH_KDF_PREFIX "000000000000000000000000pksignal"
+#define X3DH_KDF_PREFIX "pksignal"
 
 X3DH_Status x3dh_keys_init(const CryptoSignSK* identity, X3DHKeys* keys) {
   *keys = (X3DHKeys){0};

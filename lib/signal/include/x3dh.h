@@ -3,13 +3,13 @@
 // Parameters:
 //   curve = x25519
 //   hash = sha-256
-//   info = SignalXos
-//   Encode(PK) = libsodium's encoding
+//   info = pksignal
 #pragma once
 
 #include "crypto.h"
 
 typedef int X3DH_Status;
+#define X3DH_OK 0
 
 typedef struct {
   const CryptoSignPK* identity;
@@ -45,5 +45,6 @@ X3DH_Status x3dh_keys_init(const CryptoSignSK* identity, X3DHKeys* keys);
 // A -> B
 X3DH_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B,
                       X3DHHeader* header, X3DH* out);
+// B <- A
 X3DH_Status x3dh_init_recv(const X3DHKeys* B, const X3DHHeader* header,
                            X3DH* out);

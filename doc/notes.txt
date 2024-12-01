@@ -25,6 +25,13 @@ NIK todo
 * Rm use of HMAC Blake2 and just used keyed Blake2? All the KDFs could do this
   Or Implement HMAC-based KDF functions like in wg-go noise-helpers.go?
 
+x3dh
+* Consider only hashing the shortterm key instead of encrypting it.
+  Would allow for more quickly determining which shortterm key is being used
+  while providing some, but lesser, protection.
+* Separate the first message from the rest of Double Ratchet to verify AD.
+  The tag should cover the header and the first message.
+
 Signal todo
 * Routing - consider using sender/recveiver ids like Wireguard, but maybe
   random each time with a nextid in each message

@@ -6,7 +6,7 @@
 static int drat_a_to_b(DratState* A_state, X3DH* A_x, DratState* B_state,
                        X3DH* B_x, Str msg) {
   // A sends
-  Bytes A_ad = BytesArray(A_x->ad);
+  Bytes A_ad = A_x ? BytesArray(A_x->ad) : BytesZero;
   DratHeader header;
   usize cipher_sz = drat_encrypt_len(msg.len);
   Bytes cipher = {cipher_sz, malloc(cipher_sz)};
@@ -14,7 +14,7 @@ static int drat_a_to_b(DratState* A_state, X3DH* A_x, DratState* B_state,
     return 1;
 
   // B receives
-  Bytes B_ad = BytesArray(B_x->ad);
+  Bytes B_ad = B_x ? BytesArray(B_x->ad) : BytesZero;
   if (drat_decrypt(B_state, &header, cipher, B_ad))
     return 1;
 
