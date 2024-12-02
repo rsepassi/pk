@@ -22,6 +22,7 @@ static inline Str str_from_c(const char* buf) {
 }
 
 #define BytesArray(arr) ((Bytes){sizeof(arr), (u8*)(arr)})
+#define BytesObj(obj) ((Bytes){sizeof(obj), (u8*)&(obj)})
 
 static inline bool str_eq(Str a, Str b) {
   if (a.len != b.len)
@@ -31,6 +32,12 @@ static inline bool str_eq(Str a, Str b) {
       return false;
   }
   return true;
+}
+
+static inline bool str_startswith(Str s, Str prefix) {
+  if (s.len < prefix.len)
+    return false;
+  return memcmp(s.buf, prefix.buf, prefix.len) == 0;
 }
 
 static inline void bytes_copy(Bytes* dst, Bytes src) {

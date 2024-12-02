@@ -1,5 +1,7 @@
 #pragma once
 
+#include "str.h"
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,7 +12,7 @@
 
 #define LOG_PREFIX_(level, fd)                                                 \
   do {                                                                         \
-    fprintf(fd, "%s[%s %s:%04d %-10s] ", #level, log_get_current_time(),       \
+    fprintf(fd, "%s[%s %8s:%4d %-16s] ", #level, log_get_current_time(),       \
             __FILENAME__, __LINE__, __func__);                                 \
   } while (0)
 #define LOG_(level, fd, fmt, ...)                                              \
@@ -25,7 +27,7 @@
 #define LOGB(b)                                                                \
   do {                                                                         \
     LOG_PREFIX_(I, stderr);                                                    \
-    fprinthex(stderr, #b, (b).buf, (b).len);                                   \
+    fprinthex(stderr, #b, (b));                                                \
     fprintf(stderr, "\n");                                                     \
   } while (0)
 
@@ -50,4 +52,4 @@
 #define STATIC_CHECK(x) (void)sizeof(char[(x) ? 1 : -1])
 
 char* log_get_current_time();
-void fprinthex(FILE* stream, char* tag, uint8_t* b, uint64_t len);
+void fprinthex(FILE* stream, char* tag, Bytes b);

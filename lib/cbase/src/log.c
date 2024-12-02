@@ -32,8 +32,8 @@ char* log_get_current_time() {
   return time_str;
 }
 
-void fprinthex(FILE* stream, char* tag, uint8_t* b, uint64_t len) {
-  fprintf(stream, "%s(%" PRIu64 ")=", tag, len);
-  for (uint64_t i = 0; i < len; ++i)
-    fprintf(stream, "%02X", b[i]);
+void fprinthex(FILE* stream, char* tag, Bytes b) {
+  fprintf(stream, "%s(%" PRIu64 ")=", tag, b.len);
+  for (uint64_t i = 0; i < b.len; ++i)
+    fprintf(stream, "%02X", b.buf[i]);
 }
