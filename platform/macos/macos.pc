@@ -1,0 +1,4 @@
+Name: macos
+Version: 0.0.0
+Description: macos platform
+Cflags: -isystem ${src_prefix}/include

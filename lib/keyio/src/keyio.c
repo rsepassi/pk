@@ -7,11 +7,13 @@
 
 #include <stdio.h>
 
+#ifndef ntohl
 #ifdef BYTE_ORDER_LE
 #define ntohl SWAP_U32
-#else
+#else  // BYTE_ORDER_LE
 #define ntohl(x) (x)
-#endif
+#endif  // BYTE_ORDER_LE
+#endif  // ntohl
 
 #define READ_U32(x, ptr)                                                       \
   do {                                                                         \
