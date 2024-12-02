@@ -585,28 +585,19 @@ static int demosshkeyread(int argc, const char** argv) {
   CHECK(argc == 2, "must provide a key path");
   const char* path = argv[1];
 
-  Allocator al = allocatormi_allocator();
-  CryptoAllocator cryptal = {al};
-  Allocator sal = allocator_crypto(&cryptal);
-
-  usize sz = 1024;
-  Bytes str;  // SECRET
-  CHECK0(allocator_u8(sal, &str, sz));
+  u8 str_buf[1024];
+  Bytes str = BytesArray(str_buf);  // SECRET
 
   uv_file fd;
   CHECK0(uvco_fs_open(loop, path, UV_FS_O_RDONLY, 0, &fd));
   CHECK0(uvco_fs_read(loop, fd, &str, 0));
   uvco_fs_close(loop, fd);
   LOG("read %d", (int)str.len);
-  CHECK(str.len < sz);
+  CHECK(str.len < 1024);
 
   CryptoSignSK sk;
-  CHECK0(keyio_keydecode_openssh(str, sal, &sk));
+  CHECK0(keyio_keydecode_openssh(str, &sk));
   LOGB(CryptoBytes(sk));
-
-  // Free
-  allocator_free(sal, str);
-  allocator_deinit(al);
 
   return 0;
 }
@@ -821,12 +812,6 @@ static int demo_keyread(int argc, const char** argv) {
   CHECK(argc == 2, "must pass a path");
   const char* path = argv[1];
 
-  // al is our general-purpose allocator
-  Allocator al = allocatormi_allocator();
-  CryptoAllocator cryptal_base = {al};
-  // sal is our secrets allocator
-  Allocator sal = allocator_crypto(&cryptal_base);
-
   u8 contents_buf[256];
   Bytes contents = BytesArray(contents_buf);
 
@@ -842,8 +827,6 @@ static int demo_keyread(int argc, const char** argv) {
   CHECK0(keyio_keydecode(contents, pw, &sk));
   LOGB(CryptoBytes(sk));
 
-  allocator_deinit(sal);
-  allocator_deinit(al);
   return 0;
 }
 

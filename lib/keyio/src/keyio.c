@@ -13,6 +13,13 @@
 #define ntohl(x) (x)
 #endif
 
+#define READ_U32(x, ptr)                                                       \
+  do {                                                                         \
+    u32 tmp;                                                                   \
+    memcpy(&tmp, (ptr), sizeof(u32));                                          \
+    *(x) = ntohl(tmp);                                                         \
+  } while (0)
+
 #define PK_PK_HEADER "Ed25519 "
 #define PK_PK_FOOTER "\n"
 #define PK_SK_HEADER "-----BEGIN PK PRIVATE KEY-----\n"
@@ -247,20 +254,45 @@ int keyio_keydecode(Str buf, Str password, CryptoSignSK* out) {
   return 0;
 }
 
-int keyio_keydecode_openssh(Str str, Allocator al, CryptoSignSK* out) {
-  int rc = 1;
+int keyio_keydecode_openssh_pub(Str str, CryptoSignPK* out) {
+  if (str.len > 128)
+    return 1;
+  u8 decoded[128];
 
-  // Resource allocation up front
-  Bytes stripped;  // SECRET
-  if (allocator_u8(al, &stripped, str.len))
+  const char* expected_prefix = "ssh-ed25519 ";
+  if (memcmp(expected_prefix, str.buf, strlen(expected_prefix)))
     return 1;
-  Bytes buf;  // SECRET
-  usize sz = base64_decoded_maxlen(stripped.len);
-  if (allocator_u8(al, &buf, sz)) {
-    allocator_free(al, stripped);
-    return 1;
+
+  usize start = strlen(expected_prefix);
+  usize i = start;
+  for (; i < str.len; ++i) {
+    char c = str.buf[i];
+    if (c == 0 || c == ' ' || c == '\n' || c == '\t')
+      break;
   }
-  u8 sk2[crypto_sign_ed25519_SECRETKEYBYTES];
+
+  usize len;
+  if (sodium_base642bin((u8*)decoded, sizeof(decoded), (char*)&str.buf[start],
+                        i - start, 0, &len, 0, sodium_base64_VARIANT_ORIGINAL))
+    return 1;
+  if (len != (sizeof(*out) + strlen(expected_prefix) + 7))
+    return 1;
+
+  memcpy(out, decoded + strlen(expected_prefix) + 7, sizeof(*out));
+  return 0;
+}
+
+int keyio_keydecode_openssh(Str str, CryptoSignSK* out) {
+  if (str.len > 512)
+    return 1;
+  usize sz = base64_decoded_maxlen(str.len);
+  if (sz > 512)
+    return 1;
+
+  u8 stripped_buf[512];
+  u8 decoded_buf[512];
+  Bytes stripped = BytesArray(stripped_buf);
+  Bytes decoded = BytesArray(decoded_buf);
 
   {
     stripped.len = 0;
@@ -270,7 +302,7 @@ int keyio_keydecode_openssh(Str str, Allocator al, CryptoSignSK* out) {
     // with respect to the secret.
     usize i = 0;
     if (memcmp(&str.buf[i], OPENSSH_SK_HEADER, STRLEN(OPENSSH_SK_HEADER)))
-      goto end;
+      return 1;
     i += STRLEN(OPENSSH_SK_HEADER);
     ++i;  // \n
 
@@ -289,16 +321,15 @@ int keyio_keydecode_openssh(Str str, Allocator al, CryptoSignSK* out) {
              lineend - linestart);
       stripped.len += lineend - linestart;
     }
-    sodium_memzero(str.buf, str.len);
   }
 
   // base64 decode
   {
     usize len;
-    if (sodium_base642bin(buf.buf, sz, (char*)stripped.buf, stripped.len, 0,
+    if (sodium_base642bin(decoded.buf, sz, (char*)stripped.buf, stripped.len, 0,
                           &len, 0, sodium_base64_VARIANT_ORIGINAL))
-      goto end;
-    buf.len = len;
+      return 1;
+    decoded.len = len;
   }
 
   // Parse
@@ -333,82 +364,82 @@ int keyio_keydecode_openssh(Str str, Allocator al, CryptoSignSK* out) {
   u32 len = 0;
 
   // "openssh-key-v1"0x00    # NULL-terminated "Auth Magic" string
-  while (i < buf.len && buf.buf[i] != 0)
+  while (i < decoded.len && decoded.buf[i] != 0)
     ++i;
   ++i;
 
   // 32-bit length, "none"   # ciphername length and string
-  if ((i + 8) >= buf.len)
-    goto end;
+  if ((i + 8) >= decoded.len)
+    return 1;
   i += 8;
 
   // 32-bit length, "none"   # kdfname length and string
-  len = ntohl(*(u32*)&buf.buf[i]);
+  READ_U32(&len, &decoded.buf[i]);
   i += 8;
 
   // 32-bit length, nil      # kdf (0 length, no kdf)
-  len = ntohl(*(u32*)&buf.buf[i]);
+  READ_U32(&len, &decoded.buf[i]);
   i += 4;
   if (len != 0)
-    goto end;
+    return 1;
 
   // 32-bit 0x01             # number of keys, hard-coded to 1 (no length)
-  len = ntohl(*(u32*)&buf.buf[i]);
+  READ_U32(&len, &decoded.buf[i]);
   if (len != 1)
-    goto end;
+    return 1;
   i += 4;
 
   // 32-bit length, sshpub   # public key in ssh format
   i += 4;
 
   //     32-bit length, keytype
-  len = ntohl(*(u32*)&buf.buf[i]);
+  READ_U32(&len, &decoded.buf[i]);
   i += 4;
-  if ((i + len) >= buf.len)
-    goto end;
+  if ((i + len) >= decoded.len)
+    return 1;
   i += len;
 
   //     32-bit length, pub0
-  len = ntohl(*(u32*)&buf.buf[i]);
+  READ_U32(&len, &decoded.buf[i]);
   if (len != 32)
-    goto end;
+    return 1;
   i += 4;
-  if ((i + len) >= buf.len)
-    goto end;
-  Bytes pk = {32, &buf.buf[i]};
+  if ((i + len) >= decoded.len)
+    return 1;
+  Bytes pk = {32, &decoded.buf[i]};
   i += len;
 
   // 32-bit length for rnd+prv+comment+pad
-  len = ntohl(*(u32*)&buf.buf[i]);
+  READ_U32(&len, &decoded.buf[i]);
   i += 4;
 
   //     64-bit dummy checksum?  # a random 32-bit int, repeated
-  if ((i + 8) >= buf.len)
-    goto end;
+  if ((i + 8) >= decoded.len)
+    return 1;
   i += 8;
 
   //     32-bit length, keytype  # the private key (including public)
-  len = ntohl(*(u32*)&buf.buf[i]);
+  READ_U32(&len, &decoded.buf[i]);
   i += 4;
-  if ((i + len) >= buf.len)
-    goto end;
+  if ((i + len) >= decoded.len)
+    return 1;
   i += len;
 
   //     32-bit length, pub0     # Public Key parts
-  len = ntohl(*(u32*)&buf.buf[i]);
+  READ_U32(&len, &decoded.buf[i]);
   i += 4;
   if (len != 32)
-    goto end;
-  if ((i + len) >= buf.len)
-    goto end;
+    return 1;
+  if ((i + len) >= decoded.len)
+    return 1;
   i += len;
 
   //     32-bit length, prv0     # Private Key parts
-  len = ntohl(*(u32*)&buf.buf[i]);
+  READ_U32(&len, &decoded.buf[i]);
   i += 4;
-  if ((i + 32) >= buf.len)
-    goto end;
-  Bytes sk = {32, &buf.buf[i]};
+  if ((i + 32) >= decoded.len)
+    return 1;
+  Bytes sk = {32, &decoded.buf[i]};
   i += len;
 
   memcpy((u8*)&out->seed, sk.buf, sizeof(out->seed));
@@ -416,17 +447,16 @@ int keyio_keydecode_openssh(Str str, Allocator al, CryptoSignSK* out) {
 
   // Verify that the public key derivation matches libsodium's
   u8 pk2[crypto_sign_ed25519_PUBLICKEYBYTES];
+  u8 sk2[crypto_sign_ed25519_SECRETKEYBYTES];
   crypto_sign_ed25519_seed_keypair(pk2, sk2, sk.buf);
   if (sizeof(sk2) != sk.len * 2)
-    goto end;
+    return 1;
   if (sodium_memcmp(sk2, sk.buf, sizeof(sk2)))
-    goto end;
+    return 1;
+  if (sodium_memcmp(pk2, pk.buf, sizeof(pk2)))
+    return 1;
 
-  rc = 0;
-
-end:
   sodium_memzero(sk2, sizeof(sk2));
-  allocator_free(al, stripped);
-  allocator_free(al, buf);
-  return rc;
+  sodium_memzero(decoded.buf, decoded.len);
+  return 0;
 }
