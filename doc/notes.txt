@@ -1,7 +1,3 @@
-cli
-* Consider switching from argparse to optparse
-  https://github.com/skeeto/optparse
-
 allocator
 * arena
 

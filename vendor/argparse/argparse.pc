@@ -1,5 +1,0 @@
-Name: argparse
-Version: 682d452
-Description: cli argument parsing
-Libs: -L${build_prefix} -largparse
-Cflags: -I${src_prefix}/include

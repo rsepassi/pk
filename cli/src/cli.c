@@ -1,7 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
 // vendor deps
-#include "argparse.h"
 #include "libbase58.h"
 #include "lmdb.h"
 #include "mimalloc.h"
@@ -525,20 +524,6 @@ static void cryptkv_close(CryptKv* kv) {
 }
 
 static int demo_kv(int argc, const char** argv) {
-  struct argparse argparse;
-  struct argparse_option options[] = {
-      OPT_HELP(),
-      OPT_END(),
-  };
-  const char* const usages[] = {"kv [options] get <db> <key>",
-                                "kv [options] put <db> <key> <value>", NULL};
-  argparse_init(&argparse, options, usages, ARGPARSE_STOP_AT_NON_OPTION);
-  argc = argparse_parse(&argparse, argc, argv);
-  if (argc < 3) {
-    argparse_usage(&argparse);
-    return 1;
-  }
-
   // get or put
   enum {
     KvNone,
@@ -2074,28 +2059,16 @@ static void main_coro(mco_coro* co) {
   int argc = ctx->argc;
   const char** argv = ctx->argv;
 
-  struct argparse argparse;
-  struct argparse_option options[] = {
-      OPT_HELP(),
-      OPT_END(),
-  };
-  argparse_init(&argparse, options, usages, ARGPARSE_STOP_AT_NON_OPTION);
-  argc = argparse_parse(&argparse, argc, argv);
-  if (argc < 1) {
-    argparse_usage(&argparse);
-    return coro_exit(1);
-  }
-
   struct cmd_struct* cmd = NULL;
-  for (usize i = 0; i < ARRAY_LEN(commands); i++) {
-    if (!strcmp(commands[i].cmd, argv[0])) {
+  for (usize i = 0; i < ARRAY_LEN(commands) && argc > 1; i++) {
+    if (!strcmp(commands[i].cmd, argv[1])) {
       cmd = &commands[i];
       break;
     }
   }
 
   if (!cmd) {
-    argparse_usage(&argparse);
+    fprintf(stderr, "%s\n", usages[0]);
     return coro_exit(1);
   }
 
@@ -2118,7 +2091,7 @@ static void mco_dealloc(void* ptr, size_t size, void* udata) {
 }
 
 int main(int argc, const char** argv) {
-  LOG("hello");
+  LOG("");
 
   // Allocator
   Allocator al = allocatormi_allocator();
@@ -2144,8 +2117,8 @@ int main(int argc, const char** argv) {
   CHECK(mco_resume(co) == MCO_SUCCESS);
   if (mco_status(co) == MCO_SUSPENDED) {
     uv_run(loop, UV_RUN_DEFAULT);
+    LOG("uv loop exit");
   }
-  LOG("uv loop done");
 
   int rc = 0;
   if (mco_get_storage_size(co) > 0)
@@ -2160,7 +2133,7 @@ int main(int argc, const char** argv) {
   Alloc_destroy(al, loop);
 
   if (rc == 0)
-    LOG("goodbye");
+    LOG("ok");
   else
     LOG("ERROR code=%d", rc);
   return rc;

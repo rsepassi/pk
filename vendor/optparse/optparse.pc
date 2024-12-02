@@ -1,0 +1,5 @@
+Name: optparse
+Version: a86877e
+Description: getopt-like option parser
+Cflags: -I${src_prefix}/include
+Libs: -L${build_prefix} -loptparse
