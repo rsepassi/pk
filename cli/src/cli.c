@@ -1,5 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include "cli.h"
+
 // vendor deps
 #include "libbase58.h"
 #include "lmdb.h"
@@ -29,6 +31,9 @@
 #include "uvco.h"
 
 #define MAX_PW_LEN 2048
+
+// Defined in pk.c
+int pk_main(int argc, char** argv);
 
 // Global event loop
 uv_loop_t* loop;
@@ -69,7 +74,7 @@ static void CxnCb(NIK_Cxn* cxn, void* userdata, NIK_Cxn_Event e, Bytes data,
   LOGS(data);
 }
 
-static int demo_nikcxn(int argc, const char** argv) {
+static int demo_nikcxn(int argc, char** argv) {
   CryptoKxKeypair kx_keys_i;
   {
     Str A_seed_str = str_from_c(A_seed_hex);
@@ -248,7 +253,7 @@ static int demo_nikcxn(int argc, const char** argv) {
   return 0;
 }
 
-static int demo_nik(int argc, const char** argv) {
+static int demo_nik(int argc, char** argv) {
   CryptoKxKeypair kx_keys_i;
   {
     Str A_seed_str = str_from_c(A_seed_hex);
@@ -523,7 +528,7 @@ static void cryptkv_close(CryptKv* kv) {
   sodium_free(kv);
 }
 
-static int demo_kv(int argc, const char** argv) {
+static int demo_kv(int argc, char** argv) {
   // get or put
   enum {
     KvNone,
@@ -566,7 +571,7 @@ static int demo_kv(int argc, const char** argv) {
   return 0;
 }
 
-static int demosshkeyread(int argc, const char** argv) {
+static int demosshkeyread(int argc, char** argv) {
   CHECK(argc == 2, "must provide a key path");
   const char* path = argv[1];
 
@@ -591,7 +596,7 @@ static void vt_cb(const char* s, size_t len, void* user) {
   LOG("vt(%d)=%.*s", (int)len, (int)len, s);
 }
 
-static int demo_vterm(int argc, const char** argv) {
+static int demo_vterm(int argc, char** argv) {
   int rows = 100;
   int cols = 80;
   VTerm* vt = vterm_new(rows, cols);
@@ -635,7 +640,7 @@ static void recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
   free(buf->base);
 }
 
-static int demo_multicast(int argc, const char** argv) {
+static int demo_multicast(int argc, char** argv) {
   bool send = argc > 1 && memcmp(argv[1], "send", 4) == 0;
 
   LOG("udp init");
@@ -690,7 +695,7 @@ static void mapping_callback(int id, plum_state_t state,
       mapping->external_port);
 }
 
-static int demo_holepunch(int argc, const char** argv) {
+static int demo_holepunch(int argc, char** argv) {
   // TODO:
   // Hit discovery server to get peer_addr
 
@@ -731,7 +736,7 @@ static int demo_holepunch(int argc, const char** argv) {
   return 0;
 }
 #else
-static int demo_holepunch(int argc, const char** argv) {
+static int demo_holepunch(int argc, char** argv) {
   CHECK(false, "disabled");
   return 0;
 }
@@ -752,7 +757,7 @@ static void do_some_allocs(Allocator a) {
   allocator_deinit(a);
 }
 
-static int demo_mimalloc(int argc, const char** argv) {
+static int demo_mimalloc(int argc, char** argv) {
   // MIMALLOC_SHOW_STATS=1
   mi_option_enable(mi_option_show_stats);
 
@@ -793,7 +798,7 @@ static int pw_prompt(Bytes* b) {
   return 0;
 }
 
-static int demo_keyread(int argc, const char** argv) {
+static int demo_keyread(int argc, char** argv) {
   CHECK(argc == 2, "must pass a path");
   const char* path = argv[1];
 
@@ -815,7 +820,7 @@ static int demo_keyread(int argc, const char** argv) {
   return 0;
 }
 
-static int demo_keygen(int argc, const char** argv) {
+static int demo_keygen(int argc, char** argv) {
   // al is our general-purpose allocator
   Allocator al = allocatormi_allocator();
   CryptoAllocator cryptal_base = {al};
@@ -866,7 +871,7 @@ static int demo_keygen(int argc, const char** argv) {
   return 0;
 }
 
-static int demo_pwhash(int argc, const char** argv) {
+static int demo_pwhash(int argc, char** argv) {
   Bytes pw;
   CHECK0(pw_prompt(&pw));
   CHECK(pw.len > 0);
@@ -1808,7 +1813,7 @@ static void tcp2_conn_deinit(Tcp2Ctx* ctx) {
   *ctx = (Tcp2Ctx){0};
 }
 
-static int demo_tcp2(int argc, const char** argv) {
+static int demo_tcp2(int argc, char** argv) {
   // https://nghttp2.org/ngtcp2/programmers-guide.html
   LOG("tcp2");
 
@@ -1988,7 +1993,7 @@ static int demo_tcp2(int argc, const char** argv) {
   return 0;
 }
 
-static int demo_time(int argc, const char** argv) {
+static int demo_time(int argc, char** argv) {
   {
     struct taia t;
     taia_now(&t);
@@ -2004,32 +2009,13 @@ static int demo_time(int argc, const char** argv) {
   return 0;
 }
 
-static const char* const usages[] = {
-    "pk [options] [cmd] [args]\n\n    Commands:"
-    "\n      - demo-holepunch"
-    "\n      - demo-keygen"
-    "\n      - demo-keyread"
-    "\n      - demo-kv"
-    "\n      - demo-mimalloc"
-    "\n      - demo-multicast"
-    "\n      - demo-nik"
-    "\n      - demo-nikcxn"
-    "\n      - demo-pwhash"
-    "\n      - demo-sshkeyread"
-    "\n      - demo-vterm"
-    "\n      - demo-tcp2"
-    "\n      - demo-time"
-    //
-    ,
-    NULL,
-};
+typedef struct {
+  int argc;
+  char** argv;
+  Allocator allocator;
+} MainCoroCtx;
 
-struct cmd_struct {
-  const char* cmd;
-  int (*fn)(int, const char**);
-};
-
-static struct cmd_struct commands[] = {
+static const CliCmd commands[] = {
     {"demo-holepunch", demo_holepunch},   //
     {"demo-keygen", demo_keygen},         //
     {"demo-keyread", demo_keyread},       //
@@ -2043,13 +2029,9 @@ static struct cmd_struct commands[] = {
     {"demo-vterm", demo_vterm},           //
     {"demo-tcp2", demo_tcp2},             //
     {"demo-time", demo_time},             //
+    {"pk", pk_main},                      //
+    {0},
 };
-
-typedef struct {
-  int argc;
-  const char** argv;
-  Allocator allocator;
-} MainCoroCtx;
 
 static void coro_exit(int code) { mco_push(mco_running(), &code, 1); }
 
@@ -2057,22 +2039,16 @@ static void main_coro(mco_coro* co) {
   MainCoroCtx* ctx = (MainCoroCtx*)mco_get_user_data(co);
 
   int argc = ctx->argc;
-  const char** argv = ctx->argv;
+  char** argv = ctx->argv;
 
-  struct cmd_struct* cmd = NULL;
-  for (usize i = 0; i < ARRAY_LEN(commands) && argc > 1; i++) {
-    if (!strcmp(commands[i].cmd, argv[1])) {
-      cmd = &commands[i];
-      break;
-    }
+  for (usize i = 0; i < ARRAY_LEN(commands) && argc > 1; ++i) {
+    if (!strcmp(commands[i].cmd, argv[1]))
+      return coro_exit(commands[i].fn(argc - 1, argv + 1));
   }
 
-  if (!cmd) {
-    fprintf(stderr, "%s\n", usages[0]);
-    return coro_exit(1);
-  }
-
-  return coro_exit(cmd->fn(argc, argv));
+  fprintf(stderr, "unrecognized cmd\n");
+  cli_usage("cli", commands, 0);
+  return coro_exit(1);
 }
 
 #define MAIN_STACK_SIZE 1 << 22  // 4MiB
@@ -2090,7 +2066,7 @@ static void mco_dealloc(void* ptr, size_t size, void* udata) {
   allocator_free(ctx->allocator, Bytes(ptr, size));
 }
 
-int main(int argc, const char** argv) {
+int main(int argc, char** argv) {
   LOG("");
 
   // Allocator
