@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+
+BROOT=${BROOT:-$PWD/build}
+BIN=$1
+SRC=$2
+
+if [ -z "$BROOT" ] || [ -z "$BIN" ] || [ -z "$SRC" ]
+then
+  echo "must set BROOT and pass BIN and SRC"
+  exit 1
+fi
+
+srcs=$(find $SRC -type f -name '*.c' ! -name '*_test.c')
+
+llvm-profdata merge -sparse $BROOT/coverage/default.profraw \
+  -o $BROOT/coverage/default.profdata
+llvm-cov report $BIN -instr-profile=$BROOT/coverage/default.profdata \
+  --sources $srcs | tee $BROOT/coverage/report.txt
+llvm-cov show $BIN -instr-profile=$BROOT/coverage/default.profdata \
+  -format=html -show-branches=count -show-line-counts-or-regions \
+  --sources $srcs > $BROOT/coverage/coverage.html
+
+echo $BROOT/coverage/coverage.html

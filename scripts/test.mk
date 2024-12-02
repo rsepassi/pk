@@ -11,6 +11,7 @@ test-clean:
 
 # execute a test
 $(BDIR)/test/%.ok: $(BDIR)/test/%$(EXE)
+	cp $< $<.testbin  # the binary disappears (??!!) so copy it here
 	$(EXEC_PREFIX) $< && touch $@
 
 # compile a test executable

@@ -1,10 +1,20 @@
+# ==============================================================================
+# VARIABLES
+# ==============================================================================
 export ROOTDIR := $(CURDIR)
 export BROOT := $(ROOTDIR)/build
 export PATH := $(CURDIR)/scripts:$(PATH)
 
+ifeq ($(USE_CLANG), 1)
+export CC := clang-17
+export CCLD := clang-17
+export AR := llvm-ar
+else
 export CC := zig cc
 export CCLD := zig cc
 export AR := zig ar
+endif
+
 export OPT := -O0
 
 export CFLAGS += \
@@ -21,7 +31,17 @@ export CFLAGS += \
 export LDFLAGS += \
 	$(OPT) -pie -z relro -z now -z noexecstack
 
-.PHONY: default clean fmt clangd
+TEST_DIRS := $(wildcard lib/*) vendor/base58
+ALL_LIBS := cli $(wildcard lib/*) $(wildcard vendor/*)
+ALL_TESTS := $(addsuffix /test, $(TEST_DIRS))
+
+# ==============================================================================
+# TARGETS
+# ==============================================================================
+
+.PHONY: default clean fmt clangd coverage test test-clean \
+	$(ALL_LIBS) $(ALL_TESTS)
+
 default: cli
 
 clean:
@@ -30,28 +50,23 @@ clean:
 fmt:
 	clang-format -i `find lib cli -type f -name '*.c' -o -name '*.h'`
 
-clangd: cli
-	rm -rf $(BROOT)/clangd
+clangd: $(ALL_LIBS)
 	mkdir -p $(BROOT)/clangd
-	mkclangd dirs \
-		cli $(wildcard lib/*) $(wildcard vendor/*) \
-		> $(BROOT)/clangd/compile_commands.json
+	mkclangd dirs $(ALL_LIBS) > $(BROOT)/clangd/compile_commands.json
 
-# Subdirectory targets
-ALL_LIBS := cli $(wildcard lib/*) $(wildcard vendor/*)
-.PHONY: $(ALL_LIBS)
-$(ALL_LIBS): platform
-	$(MAKE) -C $@ deps
-	$(MAKE) -C $@ $(T)
+coverage:
+	coverage $(BIN) $(SRC)
 
 # Test targets
-TEST_DIRS := $(wildcard lib/*) vendor/base58
-ALL_TESTS := $(addsuffix /test, $(TEST_DIRS))
-.PHONY: test $(ALL_TESTS)
 test: $(ALL_TESTS)
 	echo TESTS OK
 test-clean:
 	find $(BROOT) -type d -name 'test' | xargs rm -rf
+
+$(ALL_LIBS): platform
+	$(MAKE) -C $@ deps
+	$(MAKE) -C $@ $(T)
+
 $(ALL_TESTS): platform vendor/unity scripts/test.mk
 	$(MAKE) -C $(@:%/test=%) deps
 	$(MAKE) -C $(@:%/test=%) test-deps 2>/dev/null || :

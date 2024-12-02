@@ -41,6 +41,18 @@ export EXEC_PREFIX := valgrind -s --leak-check=full --show-leak-kinds=all \
 export CFLAGS += -isystem $(CURDIR)/platform/valgrind/include
 endif
 
+# coverage
+ifdef COVERAGE
+export CFLAGS += -fprofile-instr-generate -fcoverage-mapping
+export LDFLAGS += -fprofile-instr-generate -fcoverage-mapping
+export EXEC_PREFIX := LLVM_PROFILE_FILE=$(BROOT)/coverage/default.profraw
+endif
+
+# clang
+ifeq ($(USE_CLANG), 1)
+export CFLAGS += --rtlib=compiler-rt
+endif
+
 .PHONY: platform
 
 ifeq ($(TARGET_OS), macos)
