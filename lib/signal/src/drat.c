@@ -119,11 +119,12 @@ Drat_Status drat_encrypt(DratState* state, Bytes msg, Bytes ad,
   // header = HEADER(state.DHs, state.PN, state.Ns)
   header->key = state->key.pk;
   header->psend_n = state->psend_n;
-  header->number = state->send_n;
+  header->send_n = state->send_n;
 
   // H(AD) = BLAKE2b(CONCAT(AD, header))
   u8 h_ad[DRAT_AD_HSZ];
-  drat_hash_ad_header(ad, header, h_ad);
+  if (drat_hash_ad_header(ad, header, h_ad))
+    return 1;
 
   // state.Ns += 1
   state->send_n++;
@@ -131,7 +132,7 @@ Drat_Status drat_encrypt(DratState* state, Bytes msg, Bytes ad,
   // ENCRYPT(mk, plaintext, H(AD))
   STATIC_CHECK(sizeof(mk) == crypto_aead_chacha20poly1305_IETF_KEYBYTES);
   u8 nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
-  *(u64*)nonce = header->number;
+  *(u64*)nonce = header->send_n;
   if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
           cipher->buf, (u8*)&header->tag, 0, msg.buf, msg.len, h_ad,
           sizeof(h_ad), 0, nonce, (u8*)&mk))
@@ -204,7 +205,7 @@ Drat_Status drat_decrypt(DratState* ostate, const DratHeader* header,
       return 1;
   }
 
-  if (state->recv_n > header->number)
+  if (state->recv_n > header->send_n)
     return 1;
 
   // state.CKr, mk = KDF_CK(state.CKr)
@@ -220,11 +221,12 @@ Drat_Status drat_decrypt(DratState* ostate, const DratHeader* header,
 
   // H(AD) = BLAKE2b(CONCAT(AD, header))
   u8 h_ad[DRAT_AD_HSZ];
-  drat_hash_ad_header(ad, header, h_ad);
+  if (drat_hash_ad_header(ad, header, h_ad))
+    return 1;
 
   // DECRYPT(mk, ciphertext, H(AD))
   u8 nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
-  *(u64*)nonce = header->number;
+  *(u64*)nonce = header->send_n;
   if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
           cipher.buf, 0, cipher.buf, cipher.len, (u8*)&header->tag, h_ad,
           sizeof(h_ad), nonce, (u8*)&mk))

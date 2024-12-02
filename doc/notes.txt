@@ -31,6 +31,7 @@ x3dh
   while providing some, but lesser, protection.
 * Separate the first message from the rest of Double Ratchet to verify AD.
   The tag should cover the header and the first message.
+* Sign key + expiry instead of just key
 
 Signal todo
 * Routing - consider using sender/recveiver ids like Wireguard, but maybe
@@ -47,6 +48,11 @@ Signal todo
   https://github.com/itzmeanjan/ml-kem
   https://github.com/GiacomoPope/kyber-py
 * Sesame session management
+  https://signal.org/docs/specifications/sesame/
+  * Also look at: WhatsUpp with Sender Keys?
+    https://eprint.iacr.org/2023/1385.pdf
+* Policy to trigger key ratchet
+* Header encryption
 
 kv
 * libkv interface
@@ -70,8 +76,6 @@ ngtcp2
 * Stateless reset tokens
 
 compile
-* generated pc files (os/arch specific cflags/ldflags)
-* rm build.zig
 * -fsanitize=memory,address,undefined -fsanitize-memory-track-origins -fno-common
 	-fsanitize=undefined,bounds,safe-stack -fsanitize-undefined-trap-on-error
   -fsanitize=integer -fsanitize-minimal-runtime -fno-sanitize-recover

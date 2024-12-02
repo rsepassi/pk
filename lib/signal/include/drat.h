@@ -10,8 +10,6 @@
 
 #include "crypto.h"
 
-#define DRAT_APP_ID "DratPK--"
-
 typedef int Drat_Status;
 #define Drat_OK 0
 
@@ -30,8 +28,8 @@ typedef struct {
 
 typedef struct __attribute__((packed)) {
   CryptoKxPK key;
+  u64 send_n;
   u64 psend_n;
-  u64 number;
   CryptoAuthTag tag;
 } DratHeader;
 
