@@ -6,7 +6,7 @@
 
 #define DRAT_KDF_ROOT "drat-kdf-root"
 #define DRAT_KDF_CHAIN "drat-kdf-chain"
-#define DRAT_AD_HSZ 64
+#define DRAT_AD_HSZ 32
 
 static Drat_Status drat_dh(CryptoKxPK* pk, CryptoKxSK* sk, CryptoKxPK* bob,
                            CryptoKxTx* dh) {
