@@ -1,8 +1,14 @@
+#include "bip39.h"
 #include "cli.h"
 #include "crypto.h"
+#include "libbase58.h"
 #include "lmdb.h"
 #include "log.h"
+#include "qrcodegen.h"
 #include "uv.h"
+
+#define PEER2_URL "https://peer2.xyz"
+#define PEER2_URLKEY_PREFIX (PEER2_URL "?key=")
 
 // =============================================================================
 // DATA
@@ -13,16 +19,6 @@ typedef struct __attribute__((packed)) {
   u8 len;
   u8 name[34];
 } PkUserName;
-
-static int PkUserName_init(PkUserName* username, char* name) {
-  *username = (PkUserName){0};
-  memcpy(username->prefix, PkUserName_PREFIX, sizeof(username->prefix));
-  if (strlen(name) > sizeof(username->name))
-    return 1;
-  username->len = (u8)strlen(name);
-  memcpy(username->name, name, username->len);
-  return 0;
-}
 
 #define PkUserKeys_KEY "keys"
 typedef struct __attribute__((packed)) {
@@ -37,6 +33,34 @@ typedef struct __attribute__((packed)) {
   CryptoSignSK sign;
   PkUserShortterm shortterm;
 } PkUserKeys;
+
+static int PkUserName_init(PkUserName* username, char* name) {
+  *username = (PkUserName){0};
+  memcpy(username->prefix, PkUserName_PREFIX, sizeof(username->prefix));
+  if (strlen(name) > sizeof(username->name))
+    return 1;
+  username->len = (u8)strlen(name);
+  memcpy(username->name, name, username->len);
+  return 0;
+}
+
+static int PkUserKeys_init(PkUserKeys* keys) {
+  *keys = (PkUserKeys){0};
+
+  CryptoSignPK pk;
+  if (crypto_sign_ed25519_keypair((u8*)&pk, (u8*)&keys->sign))
+    return 1;
+
+  if (crypto_kx_keypair((u8*)&keys->shortterm.pk.pk, (u8*)&keys->shortterm.sk))
+    return 1;
+
+  if (crypto_sign_ed25519_detached(
+          (u8*)&keys->shortterm.pk.sig, 0, (u8*)&keys->shortterm.pk.pk,
+          sizeof(keys->shortterm.pk.pk), (u8*)&keys->sign))
+    return 1;
+
+  return 0;
+}
 // =============================================================================
 // DATA end
 // =============================================================================
@@ -100,21 +124,24 @@ static int pk_user_new(int argc, char** argv) {
       goto err0;
     // Insert the user's keys into their db
     {
-    if (mdb_dbi_open(txn, name, MDB_CREATE, &userdb))
-      goto err1;
-    Str key = Str(PkUserKeys_KEY);
-    PkUserKeys user_keys = {0};
-    Bytes val = Bytes(&user_keys, sizeof(user_keys));
-    if (mdb_put(txn, userdb, (void*)&key, (void*)&val, 0))
-      goto err2;
+      if (mdb_dbi_open(txn, name, MDB_CREATE, &userdb))
+        goto err1;
+      Str key = Str(PkUserKeys_KEY);
+      PkUserKeys user_keys;
+      if (PkUserKeys_init(&user_keys))
+        goto err2;
+      Bytes val = BytesObj(user_keys);
+      if (mdb_put(txn, userdb, (void*)&key, (void*)&val, 0))
+        goto err2;
     }
+
     // Add the user to the meta db
     {
-    Bytes key = BytesObj(username);
-    u8 val_data[1] = {1};
-    MDB_val val = {1, val_data};
-    if (mdb_put(txn, pk_ctx->db, (void*)&key, &val, 0))
-      goto err2;
+      Bytes key = BytesObj(username);
+      u8 val_data[1] = {1};
+      MDB_val val = {1, val_data};
+      if (mdb_put(txn, pk_ctx->db, (void*)&key, &val, 0))
+        goto err2;
     }
     if (mdb_txn_commit(txn))
       goto err2;
@@ -129,6 +156,7 @@ err1:
 err0:
   return 1;
 }
+
 static int pk_user_show(int argc, char** argv) {
   LOG("");
   int rc = 1;
@@ -151,14 +179,50 @@ static int pk_user_show(int argc, char** argv) {
   MDB_dbi userdb;
   if (mdb_dbi_open(txn, name, 0, &userdb))
     goto err1;
-  PkUserKeys user_keys;
   Str key = Str(PkUserKeys_KEY);
-  Str val = BytesObj(user_keys);
+  Str val;
   if (mdb_get(txn, userdb, (void*)&key, (void*)&val))
     goto err2;
 
-  fprinthex(stderr, "pk", BytesObj(user_keys.sign.pk));
-  fprintf(stderr, "\n");
+  // hex public key
+  PkUserKeys user_keys;
+  bytes_copy(&BytesObj(user_keys), val);
+  CryptoSignPK* pk = &user_keys.sign.pk;
+  fprinthex(stdout, "pk", BytesObj(*pk));
+  fprintf(stdout, "\n");
+
+  // b58check public key
+  char b58_buf[sizeof(*pk) * 2];
+  usize b58_len = sizeof(b58_buf);
+  if (!b58check_enc(b58_buf, &b58_len, 1, pk, sizeof(*pk)))
+    return 1;
+  fprintf(stdout, "pk-b58(%d)=%.*s\n", (int)(b58_len - 1), (int)(b58_len - 1),
+          b58_buf);
+
+  // bip39 word list
+  fprintf(stdout, "pk-bip39:\n");
+  u16 word_idxs[bip39_MNEMONIC_LEN(sizeof(*pk))];
+  CHECK0(bip39_mnemonic_idxs(BytesObj(*pk), word_idxs));
+  usize linei = 0;
+  for (usize i = 0; i < ARRAY_LEN(word_idxs); ++i) {
+    if (i && i % 6 == 0) {
+      fprintf(stdout, "\n");
+      linei = 0;
+    }
+    fprintf(stdout, "%s%2d. %-8s", linei ? " " : "", (int)(i + 1),
+            bip39_words[word_idxs[i]]);
+    ++linei;
+  }
+  fprintf(stdout, "\n");
+
+  // QR
+  uint8_t url[STRLEN(PEER2_URLKEY_PREFIX) + sizeof(b58_buf)] =
+      PEER2_URLKEY_PREFIX;
+  memcpy(url + STRLEN(PEER2_URLKEY_PREFIX), b58_buf, b58_len - 1);
+  uint8_t qrcode[qrcodegen_BUFFER_LEN_MAX];
+  CHECK(qrcodegen_ez_encode(url, STRLEN(PEER2_URLKEY_PREFIX) + b58_len - 1,
+                            qrcode));
+  qrcodegen_console_print(stdout, qrcode);
 
   return 0;
 
