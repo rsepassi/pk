@@ -11,14 +11,7 @@ static void bytes_from_hex(Str s, u8* out, u8 n) {
   sodium_hex2bin(out, n, (char*)s.buf, s.len, 0, 0, 0);
 }
 
-static bool libb58_sha256_impl(void* out, const void* msg, size_t msg_len) {
-  crypto_hash_sha256(out, msg, msg_len);
-  return true;
-}
-
 void test_b58(void) {
-  b58_sha256_impl = libb58_sha256_impl;
-
   // Hex string encodes 1-byte version + payload
   Str hex = Str("165a1fc5dd9e6f03819fca94a2d89669469667f9a0");
   u8 bin[21];

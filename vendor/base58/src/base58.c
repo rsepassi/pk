@@ -18,7 +18,8 @@
 
 #include "libbase58.h"
 
-bool (*b58_sha256_impl)(void *, const void *, size_t) = NULL;
+bool libb58_sha256_impl(void *, const void *, size_t);
+bool (*b58_sha256_impl)(void *, const void *, size_t) = &libb58_sha256_impl;
 
 static const int8_t b58digits_map[] = {
 	-1,-1,-1,-1,-1,-1,-1,-1, -1,-1,-1,-1,-1,-1,-1,-1,
