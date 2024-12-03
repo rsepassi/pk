@@ -39,7 +39,7 @@ ALL_TESTS := $(addsuffix /test, $(TEST_DIRS))
 # TARGETS
 # ==============================================================================
 
-.PHONY: default clean fmt clangd coverage test test-clean site \
+.PHONY: default clean fmt clangd coverage test test-clean site service \
 	$(ALL_LIBS) $(ALL_TESTS)
 
 default: cli
@@ -75,5 +75,8 @@ $(ALL_TESTS): platform vendor/unity scripts/test.mk
 
 site:
 	$(MAKE) -C site $(T)
+
+service:
+	$(MAKE) -C service $(T)
 
 include scripts/platform.mk

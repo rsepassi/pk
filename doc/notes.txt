@@ -112,8 +112,9 @@ make --silent -j VALGRIND=1 && \
   --track-origins=yes --num-callers=16 \
   ./build/cli/bin/cli demo-tcp2
 
-Illegal instruction with zig cc (but not clang)
-* demo-mimalloc
-* demo-nik
-* demo-nikcxn
-* demo-sshkeyread
+service
+* Use Alpine or simplelinux for image
+* Command to ship a binary
+* Service supervision
+* Security: https://wiki.alpinelinux.org/wiki/Securing_Alpine_Linux
+  * https://github.com/ironpeakservices/iron-alpine/blob/master/Dockerfile
