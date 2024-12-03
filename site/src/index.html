@@ -1,0 +1,41 @@
+<!doctype html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>peer2.xyz</title>
+  <style>
+    #key-ctr {
+      margin: 0;
+      padding: 0;
+    }
+    .hidden {
+      display: none;
+    }
+    #key {
+      font-size: 2em;
+      display: inline-block;
+      word-break: break-all;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      margin: 2em;
+    }
+  </style>
+</head>
+
+<h1>peer2.xyz</h1>
+
+<div id="key-ctr" class="hidden">
+<pre style="font-size: 1.5em">Public Key</pre>
+<code id="key" class="longtext"></code>
+</div>
+
+<script>
+  function onLoad() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (!urlParams.has('key')) return;
+    document.getElementById('key').textContent = urlParams.get('key');
+    document.getElementById('key-ctr').classList.remove('hidden');
+  }
+  document.addEventListener('DOMContentLoaded', onLoad);
+</script>
