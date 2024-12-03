@@ -1,0 +1,5 @@
+Name: qrcodegen
+Version: f40366c
+Description: generate QR codes
+Cflags: -I${src_prefix}/include
+Libs: -L${build_prefix} -lqrcodegen
