@@ -9,7 +9,7 @@ LOCAL_CFLAGS += -Wno-unused-parameter
 BIN := cli
 
 .PHONY: default
-default: $(BDIR)/bin/$(BIN)$(EXE)
+default: cli
 
 include $(ROOTDIR)/scripts/cc.mk
 include $(ROOTDIR)/scripts/ccld.mk

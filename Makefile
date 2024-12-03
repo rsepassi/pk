@@ -31,7 +31,7 @@ export CFLAGS += \
 export LDFLAGS += \
 	$(OPT) -pie -z relro -z now -z noexecstack
 
-TEST_DIRS := $(wildcard lib/*) vendor/base58
+TEST_DIRS := $(wildcard lib/*) vendor/base58 vendor/qrcodegen
 ALL_LIBS := cli $(wildcard lib/*) $(wildcard vendor/*)
 ALL_TESTS := $(addsuffix /test, $(TEST_DIRS))
 
@@ -39,7 +39,7 @@ ALL_TESTS := $(addsuffix /test, $(TEST_DIRS))
 # TARGETS
 # ==============================================================================
 
-.PHONY: default clean fmt clangd coverage test test-clean \
+.PHONY: default clean fmt clangd coverage test test-clean site \
 	$(ALL_LIBS) $(ALL_TESTS)
 
 default: cli
@@ -72,5 +72,8 @@ $(ALL_TESTS): platform vendor/unity scripts/test.mk
 	$(MAKE) -C $(@:%/test=%) test-deps 2>/dev/null || :
 	$(MAKE) -C $(@:%/test=%)
 	$(MAKE) -C $(@:%/test=%) test
+
+site:
+	$(MAKE) -C site $(T)
 
 include scripts/platform.mk
