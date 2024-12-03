@@ -25,7 +25,8 @@ LOCAL_CFLAGS := \
 	-Wno-unused-function \
 	-Wno-conversion \
 	-Wno-unknown-pragmas \
-	-Wno-type-limits
+	-Wno-type-limits \
+	-Wno-unused-but-set-variable
 
 ifeq ($(TARGET_OS), linux)
 	LOCAL_CFLAGS += \
