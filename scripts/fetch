@@ -1,0 +1,47 @@
+#!/usr/bin/env sh
+
+set -e
+
+url=$1
+hash=${2:-$(basename $url)}
+
+root=${ROOTDIR:-$PWD}
+tmpdir=$root/.build-cache/content/tmp
+tmppath=$tmpdir/$hash.tmp
+finalpath=$root/.build-cache/content/$hash
+
+# If we have it, we're done
+if [ -f $finalpath ]
+then
+  echo $finalpath
+  exit 0
+fi
+
+# If we successfully downloaded it into tmp, move it, we're done
+if [ -f $tmpdir/$hash.unexpected ]
+then
+  mv $tmpdir/$hash.url.unexpected $finalpath.url
+  mv $tmpdir/$hash.unexpected $finalpath
+  echo $finalpath
+  exit 0
+fi
+
+# Otherwise, download and hash
+mkdir -p $tmpdir
+wget -q $url -O $tmppath
+hashcomp=$(sha256sum $tmppath | cut -d' ' -f1)
+
+# If the hash is unexpected, then keep it in tmp under the computed hash
+if [ $hashcomp != $hash ]
+then
+  echo expected
+  echo "$hash"
+  echo got
+  echo "$hashcomp"
+  echo $url > $tmpdir/$hashcomp.url.unexpected
+  mv $tmppath $tmpdir/$hashcomp.unexpected
+  exit 1
+fi
+echo $url > $finalpath.url
+mv $tmppath $finalpath
+echo $finalpath
