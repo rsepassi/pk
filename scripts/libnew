@@ -6,20 +6,26 @@ rm -rf lib/$name
 
 mkdir lib/$name
 cd lib/$name
-mkdir src include test
+mkdir src include "test"
+
+# Header
 cat <<EOF > include/$name.h
 #pragma once
 
 // Header
 void hello(void);
 EOF
+
+# Source
 cat <<EOF > src/$name.c
 #include "$name.h"
 
 // Source
 void hello(void) {}
 EOF
-cat <<EOF > test/$name_test.c
+
+# Test
+cat <<EOF > "test/${name}_test.c"
 #include "$name.h"
 #include "log.h"
 #include "unity.h"
@@ -38,15 +44,17 @@ int main(void) {
 }
 EOF
 
-# The Makefile must use tabs
+# Makefile
 cat <<EOF > Makefile
 DEPS := lib/cbase
 
 include \$(ROOTDIR)/scripts/cc.mk
 include \$(ROOTDIR)/scripts/deps.mk
 include \$(ROOTDIR)/scripts/clean.mk
+include \$(ROOTDIR)/scripts/test.mk
 EOF
 
+# pkgconf
 cat <<EOF > $name.pc
 Name: $name
 Version: 0.0.1

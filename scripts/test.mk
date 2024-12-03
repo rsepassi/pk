@@ -3,6 +3,7 @@ include $(ROOTDIR)/scripts/bdir.mk
 TEST_LIB := $(CURDIR:$(ROOTDIR)/%=%)
 TEST_SRCS := $(wildcard test/*.c)
 TEST_OKS := $(addprefix $(BDIR)/, $(TEST_SRCS:.c=.ok))
+TEST_DEPS := $(DEPS) vendor/unity
 
 .PHONY: test test-clean
 test: $(TEST_OKS)
@@ -20,12 +21,10 @@ $(BDIR)/test/%$(EXE): test/%.c $(ROOTDIR)/scripts/test.mk $(DEPS_OK) $(BDIR)/.bu
 	$(CCLD) -o $@.tmp $< \
 		$(CFLAGS) \
 		`need --cflags $(TEST_LIB)` \
-		`need --cflags $(DEPS)` \
-		`need --cflags vendor/unity` \
+		`need --cflags $(TEST_DEPS)` \
 		$(LDFLAGS) \
 		`need --libs $(TEST_LIB)` \
-		`need --libs $(DEPS)` \
-		`need --libs vendor/unity` \
+		`need --libs $(TEST_DEPS)` \
 		$(PLATFORM_LDFLAGS) \
 		-lc
 	mv $@.tmp $@

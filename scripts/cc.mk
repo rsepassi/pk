@@ -12,22 +12,23 @@ CLANGDS := $(SRCS:.c=.clangd)
 
 ifdef DEPS
 	DEPS_OK := $(BDIR)/.deps.ok
+	CC_DEPS := $(DEPS)
 endif
-CC_DEPS = \
+MK_DEPS := \
 	$(HDRS) $(DEPS_OK) \
 	Makefile \
 	$(ROOTDIR)/scripts/cc.mk
-CC_CFLAGS = -Iinclude $(CFLAGS) `need --cflags $(DEPS)` $(LOCAL_CFLAGS)
+CC_CFLAGS = -Iinclude $(CFLAGS) `need --cflags $(CC_DEPS)` $(LOCAL_CFLAGS)
 
-$(BDIR)/lib$(LIBNAME).a: $(OBJS) $(SRCS) $(CC_DEPS)
+$(BDIR)/lib$(LIBNAME).a: $(OBJS) $(SRCS) $(MK_DEPS)
 	$(AR) rcs $@ $(OBJS)
 	touch $(BDIR)/.build
 
-$(BDIR)/%.$(O): %.c $(CC_DEPS)
+$(BDIR)/%.$(O): %.c $(MK_DEPS)
 	mkdir -p $(dir $@)
 	$(CC) -c -o $@ $(CC_CFLAGS) $<
 
-$(BDIR)/%.$(O): %.S $(CC_DEPS)
+$(BDIR)/%.$(O): %.S $(MK_DEPS)
 	mkdir -p $(dir $@)
 	$(CC) -c -o $@ $(CC_CFLAGS) $<
 
