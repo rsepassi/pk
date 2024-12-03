@@ -25,11 +25,11 @@ export CFLAGS += \
 	-Wall -Werror -Wextra \
 	-Wconversion -Wno-sign-conversion \
 	-Wno-unused-command-line-argument \
-	-fPIE \
+	-fPIE -flto \
 	-fstack-protector-strong -fstack-clash-protection \
 	-D_FORTIFY_SOURCE=3
 export LDFLAGS += \
-	$(OPT) -pie -z relro -z now -z noexecstack
+	$(OPT) -flto -static-pie -z relro -z now -z noexecstack
 
 TEST_DIRS := $(wildcard lib/*) vendor/base58 vendor/qrcodegen
 ALL_LIBS := cli $(wildcard lib/*) $(wildcard vendor/*)
