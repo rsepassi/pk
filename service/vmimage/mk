@@ -1,0 +1,98 @@
+#!/usr/bin/env sh
+
+# Flow to create a fresh Alpine image based on an Alpine Virt image.
+#
+# Base image:
+# https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/x86_64/alpine-virt-3.20.3-x86_64.iso
+# 81df854fbd7327d293c726b1eeeb82061d3bc8f5a86a6f77eea720f6be372261
+#
+# ./mk fresh
+#   Within this QEMU instance, copy in the answerfile and run the command
+#   at the top of the answerfile. This will create peer2.qcow2 and install
+#   Alpine onto it.
+# ./mk combined
+#   This will mount the qcow2 image and make the necessary modifications.
+#   At this point, peer2.qcow2 is ready to go.
+# ./mk run
+#   Launch a QEMU VM based on peer2.qcow2
+# ./mk ssh
+#   SSH into a running QEMU VM
+
+set -e
+
+cmd=$1
+
+dir=${BDIR:-$PWD}
+
+if [ "$cmd" = "fresh" ]
+then
+  url="https://dl-cdn.alpinelinux.org/alpine/v4.21/releases/x86_64/alpine-virt-3.20.3-x86_64.iso"
+  hash="81df854fbd7327d293c726b1eeeb82061d3bc8f5a86a6f77eea720f6be372261"
+  iso=$(fetch $url $hash)
+
+  rm -f $dir/peer2.qcow2
+  qemu-img create -f qcow2 $dir/peer2.qcow2 10G
+  qemu-system-x86_64 \
+    -serial stdio -display none \
+    -enable-kvm -m 1024 -net nic -net user \
+    -boot d -cdrom $iso \
+    -hda $dir/peer2.qcow2
+
+elif [ "$cmd" = "combined" ]
+then
+
+  $0 mnt
+  $0 apply
+  $0 umnt
+
+elif [ "$cmd" = "mnt" ]
+then
+
+  modprobe nbd max_part=8
+  qemu-nbd --connect=/dev/nbd0 $dir/peer2.qcow2
+  mkdir -p $dir/mnt
+  mount /dev/nbd0p2 $dir/mnt
+
+elif [ "$cmd" = "umnt" ]
+then
+
+  sync
+  umount $dir/mnt
+  rm -r $dir/mnt
+  qemu-nbd --disconnect /dev/nbd0
+  sleep 2
+  rmmod nbd
+
+elif [ "$cmd" = "apply" ]
+then
+
+  rm -f $dir/mnt/etc/dropbear/dropbear_ecdsa_host_key
+  rm -f $dir/mnt/etc/dropbear/dropbear_ecdsa_host_key.pub
+  rm -f $dir/mnt/etc/dropbear/dropbear_rsa_host_key
+  rm -f $dir/mnt/etc/dropbear/dropbear_rsa_host_key.pub
+  for overrides in $(find vmimage/overrides -type f)
+  do
+    rel=${overrides#vmimage/overrides/}
+    cp -f $overrides $dir/mnt/$rel
+  done
+
+elif [ "$cmd" = "run" ]
+then
+
+  qemu-system-x86_64 \
+    -serial stdio -display none \
+    -enable-kvm -m 1024 \
+    -net nic -net user,hostfwd=tcp::10022-:22 \
+    -hda $dir/peer2.qcow2
+
+elif [ "$cmd" = "ssh" ]
+then
+
+  ssh -o StrictHostKeyChecking=no -i ~/.ssh/istudios peer2@localhost -p 10022
+
+else
+
+  echo "must specify cmd"
+  exit 1
+
+fi

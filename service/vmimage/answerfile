@@ -1,0 +1,48 @@
+# BOOT_SIZE=128 ERASE_DISKS="/dev/sda" setup-alpine -e -f answerfile; sync; poweroff
+
+# Use US layout with US variant
+KEYMAPOPTS="us us"
+
+# Set hostname
+HOSTNAMEOPTS=peer2
+
+# Set device manager to mdev
+DEVDOPTS=mdev
+
+# Contents of /etc/network/interfaces
+INTERFACESOPTS="auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet dhcp
+"
+
+# Set timezone to UTC
+TIMEZONEOPTS="UTC"
+
+# set http/ftp proxy
+PROXYOPTS=none
+
+# Add first mirror (CDN)
+APKREPOSOPTS="-1"
+
+# Create admin user
+USEROPTS="-a -u peer2"
+USERSSHKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF2SBA6odQty36H2f40aTleI1MhMyud5v3FKkjpKIwhM"
+
+# Install Dropbear
+SSHDOPTS=dropbear
+
+# Use chrony
+NTPOPTS="chrony"
+
+# Use /dev/sda as a sys disk
+DISKOPTS="-m sys -s 0 /dev/sda"
+
+# Setup storage with label APKOVL for config storage
+#LBUOPTS="LABEL=APKOVL"
+LBUOPTS=none
+
+#APKCACHEOPTS="/media/LABEL=APKOVL/cache"
+APKCACHEOPTS=none
+

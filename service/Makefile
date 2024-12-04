@@ -2,7 +2,7 @@ include $(ROOTDIR)/scripts/bdir.mk
 
 DO_RESERVED_IP := 24.199.69.99
 DO_SPACE := https://peer2.sfo3.digitaloceanspaces.com
-DO_PEER2_IMG_ID := 172069981
+DO_PEER2_IMG_ID := 172089670
 DO_PEER2_VPC_ID := a69c789c-5bab-4057-a852-652a875e53fa
 DO_PEER2_DID := 461475209
 DO_PEER2_SSHQUIC_FIREWALL_ID := 5c2c4b60-305e-443d-98f4-05df10a62e03
@@ -13,11 +13,12 @@ DO_CURL := curl -s \
 
 TAG ?= make
 DID ?= $(DO_PEER2_DID)
+IMG ?= $(BDIR)/vmimage/peer2.qcow2
 
 .PHONY: \
 	default list tag mktag create delete assignip assignfirewall firewalls \
-	rebuild ssh scp imgmnt imgumnt imginstall imgupload imgls imgget imgshow \
-	imghide
+	rebuild ssh imgmk imgupload imgls imgget imgshow imghide
+
 default:
 	echo "specify a command"
 
@@ -91,9 +92,6 @@ rebuild:
 # ==============================================================================
 ssh:
 	ssh -i ~/.ssh/istudios peer2@server.peer2.xyz
-
-scp:
-	scp -i ~/.ssh/istudios $(F) peer2@server.peer2.xyz:/root/$(notdir $(F))
 # ==============================================================================
 # ==============================================================================
 
@@ -101,35 +99,14 @@ scp:
 # ==============================================================================
 # QEMU qcow2 image
 # ==============================================================================
-imgmnt:
-	modprobe nbd max_part=8
-	qemu-nbd --connect=/dev/nbd0 $(IMG)
-	mkdir -p $(BDIR)/peer2-mnt
-	mount /dev/nbd0p3 $(BDIR)/peer2-mnt
-
-imgumnt:
-	umount $(BDIR)/peer2-mnt
-	qemu-nbd --disconnect /dev/nbd0
-	sleep 2
-	rmmod nbd
-
-imginstall:
-	modprobe nbd max_part=8
-	qemu-nbd --connect=/dev/nbd0 $(IMG)
-	mkdir -p $(BDIR)/peer2-mnt
-	mount /dev/nbd0p3 $(BDIR)/peer2-mnt
-	rm -rf $(BDIR)/peer2-mnt/etc
-	rm -rf $(BDIR)/peer2-mnt/home
-	cp -rp rootfs/etc $(BDIR)/peer2-mnt/
-	cp -rp rootfs/home $(BDIR)/peer2-mnt/
-	umount $(BDIR)/peer2-mnt
-	qemu-nbd --disconnect /dev/nbd0
-	sleep 2
-	rmmod nbd
+imgmk:
+	mkdir -p $(BDIR)/vmimage
+	BDIR=$(BDIR)/vmimage ./vmimage/mk $(CMD)
 
 # DigitalOcean Spaces
 # https://docs.digitalocean.com/products/spaces/reference/s3cmd-usage/
 
+# IMG, TAG
 imgupload:
 	mkdir -p $(BDIR)/img
 	gzip -ck -9 $(IMG) > $(BDIR)/img/$(notdir $(IMG)).gz
@@ -138,11 +115,16 @@ imgupload:
 	$(DO_CURL) -X POST \
 		-d '{"name": "$(notdir $(IMG))", "url": "$(DO_SPACE)/$(notdir $(IMG)).gz", "distribution": "Unknown", "region": "sfo3", "description": "peer2 custom image", "tags":["$(TAG)", "make"]}' \
 		"https://api.digitalocean.com/v2/images"
+	echo "Waiting for DO to pull the image..."
+	sleep 60
+	echo "Slept 60 seconds, hiding it now"
 	$(MAKE) imghide IMG=$(notdir $(IMG)).gz
+	$(MAKE) imgls
 
 imgls:
 	$(DO_CURL) -X GET \
-		"https://api.digitalocean.com/v2/images?private=true"
+		"https://api.digitalocean.com/v2/images?private=true" \
+		| jq
 	s3cmd ls s3://peer2
 
 imgget:
@@ -154,8 +136,5 @@ imgshow:
 
 imghide:
 	s3cmd setacl s3://peer2/$(IMG) --acl-private
-
-
-
 # ==============================================================================
 # ==============================================================================

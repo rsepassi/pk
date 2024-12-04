@@ -1,0 +1,15 @@
+# /etc/inittab
+
+::sysinit:/sbin/openrc sysinit
+::sysinit:/sbin/openrc boot
+::wait:/sbin/openrc default
+
+# Stuff to do for the 3-finger salute
+::ctrlaltdel:/sbin/reboot
+
+# Stuff to do before rebooting
+::shutdown:/sbin/openrc shutdown
+
+# enable login on alternative console
+#ttyS0::respawn:/sbin/getty -L 0 ttyS0 vt100
+ttyS0::respawn:sh -c 'cat /etc/motd; while true; do sleep 3600; done'
