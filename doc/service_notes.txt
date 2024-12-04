@@ -1,0 +1,146 @@
+ALPINE_URL="https://dl-cdn.alpinelinux.org/alpine/v4.21/releases/x86_64/alpine-virt-3.20.3-x86_64.iso"
+ALPINE_HASH="81df854fbd7327d293c726b1eeeb82061d3bc8f5a86a6f77eea720f6be372261"
+
+ALPINE_ISO=$(fetch $ALPINE_URL $ALPINE_HASH)
+
+qemu-img create -f qcow2 alpine-peer2.qcow2 2G
+qemu-system-x86_64 \
+  -serial stdio -display none \
+  -enable-kvm -m 1024 -net nic -net user \
+  -boot d -cdrom $ALPINE_ISO \
+  -hda alpine-peer2.qcow2
+
+# setup-alpine
+#   hostname=localhost
+#   Initialize eth0
+#   dhcp
+#   No manual network configuration
+#   Root password Bitwarden peer2 root
+#   UTC
+#   Proxy=none
+#   APK mirror=mirrors.edge.kernel.org
+#   Setup user peer2 password Bitwarden peer2
+#   SSH key = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF2SBA6odQty36H2f40aTleI1MhMyud5v3FKkjpKIwhM
+#   Dropbear SSH
+#   sda sys
+#     /mnt/boot /dev/sda1
+#     system on /dev/sda3
+
+# Root: ./alpine-peer2.2024-12-03.1513-2.qcow2
+# Surgery on: ./alpine-peer2.qcow2
+# Original: 67e5ecaa5f1b63530b4ad70289bb8ad65be2439014c2423f66cfe1317868df68  ./alpine-peer2.2024-12-03.1513.qcow2
+
+
+Filesystem                Size      Used Available Use% Mounted on
+devtmpfs                 10.0M         0     10.0M   0% /dev
+shm                     486.7M         0    486.7M   0% /dev/shm
+/dev/sdb3                 1.2G     57.4M      1.0G   5% /
+tmpfs                   194.7M    112.0K    194.6M   0% /run
+/dev/sdb1               271.1M     23.9M    228.2M   9% /boot
+tmpfs                   486.7M         0    486.7M   0% /tmp
+
+
+# Grow non-boot
+
+
+
+
+qemu-system-x86_64 \
+  -serial stdio -display none \
+  -enable-kvm -m 1024 \
+  -net nic -net user,hostfwd=tcp::10022-:22 \
+  -hda alpine-peer2.2024-12-03.1513-2.qcow2
+# ssh -i ~/.ssh/istudios peer2@localhost -p 10022
+
+#  -drive file=alpine-peer2.raw,format=raw,index=0,media=disk
+
+# 2444cc2b8152d770543aa0b5db0d21189768127b7ba528ca04c0612efc7d0a5b  alpine-peer2.qcow2
+
+# /etc/doas.d/doas.conf
+#   permit nopass peer2 as root
+# /etc/motd
+# /etc/init.d/dropbear
+#   rm ecdsa+rsa key generation
+#   rm /etc/dropbear/ ecdsa+rsa keys
+# /etc/conf.d/dropbear
+#   DROPBEAR_OPTS="-ws"
+#   -w: Disable root login
+#   -s: Disable password login
+#   -r /etc/dropbear/dropbear_ed25519_host_key
+#   -G peer2
+# apk update; apk upgrade
+# /etc/periodic/daily/update
+#   apk update
+#   apk upgrade
+# /etc/inittab
+#   rm getty's except for serial port
+# apk add chrony chrony-openrc
+# rc-update add chronyd
+# /etc/udhcpc/udhcpc.conf
+#   RESOLV_CONF="NO"
+# /etc/resolv.conf
+#   1.1.1.1
+#   1.0.0.1
+#   9.9.9.9
+# /etc/fstab
+#   rm /dev/cdrom
+#   rm /dev/usbdisk
+# rc-update del swap boot
+
+# $ fdisk -l
+# Device  Boot StartCHS    EndCHS        StartLBA     EndLBA    Sectors  Size Id Type
+# /dev/sda1 *  0,32,33     38,94,56          2048     616447     614400  300M 83 Linux
+# /dev/sda2    38,94,57    103,163,60      616448    1665023    1048576  512M 82 Linux swap
+# /dev/sda3    103,163,61  261,21,16      1665024    4194303    2529280 1235M 83 Linux
+
+# Server Dropbear ssh key
+# ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIZuesYhb+ef5Qt862cEFlqfv8m3+omj/ZWeQhofXHIb
+
+# https://docs.alpinelinux.org/user-handbook/0.1a/Working/openrc.html
+
+# Services
+# $ rc-update -a
+#                acpid |      default
+#             bootmisc | boot
+#              chronyd |      default
+#                crond |      default
+#                devfs |                                 sysinit
+#                dmesg |                                 sysinit
+#             dropbear |      default
+#             hostname | boot
+#              hwclock | boot
+#            hwdrivers |                                 sysinit
+#            killprocs |                        shutdown
+#                 mdev |                                 sysinit
+#              modules | boot
+#             mount-ro |                        shutdown
+#           networking | boot
+#            savecache |                        shutdown
+#              seedrng | boot
+#                 swap | boot
+#               sysctl | boot
+#               syslog | boot
+
+# Running processes
+#
+# /sbin/udhcpc -b -R -p /var/run/udhcpc.eth0.pid -i eth0 -x hostname:localhost
+# /sbin/syslogd -t -n
+# /sbin/acpid -f
+# /usr/sbin/chronyd -f /etc/chrony/chrony.conf
+# /usr/sbin/crond -c /etc/crontabs -f
+# /usr/sbin/dropbear -ws
+# /bin/sh -c cat /etc/motd; while true; do sleep 3600; done
+# sleep 3600
+
+# This creates a new qcow2 file that stores changes, leaving the original untouched:
+# qemu-img create -f qcow2 -b your_image.qcow2 snapshot.qcow2
+
+# fdisk to create the new partition
+# reboot
+# mkfs.ext4 /dev/vda4
+# mount /dev/vda4 ~/data
+# chown peer2 data
+# chgrp peer2 data
+
+
+doas tar --same-owner -xvf rootfs.tar.gz
