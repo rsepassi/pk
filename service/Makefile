@@ -100,8 +100,7 @@ ssh:
 # QEMU qcow2 image
 # ==============================================================================
 imgmk:
-	mkdir -p $(BDIR)/vmimage
-	BDIR=$(BDIR)/vmimage ./vmimage/mk $(CMD)
+	$(MAKE) -C vmimage
 
 # DigitalOcean Spaces
 # https://docs.digitalocean.com/products/spaces/reference/s3cmd-usage/

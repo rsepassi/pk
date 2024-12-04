@@ -22,34 +22,43 @@ set -e
 
 cmd=$1
 
-dir=${BDIR:-$PWD}
+dir=${BDIR:-$2}
 
-if [ "$cmd" = "fresh" ]
+if [ "$cmd" = "empty" ]
+then
+
+  qemu-img create -f qcow2 $dir/empty.qcow2 10G
+
+elif [ "$cmd" = "fresh" ]
 then
   url="https://dl-cdn.alpinelinux.org/alpine/v4.21/releases/x86_64/alpine-virt-3.20.3-x86_64.iso"
   hash="81df854fbd7327d293c726b1eeeb82061d3bc8f5a86a6f77eea720f6be372261"
   iso=$(fetch $url $hash)
 
-  rm -f $dir/peer2.qcow2
-  qemu-img create -f qcow2 $dir/peer2.qcow2 10G
+  rm -f $dir/fresh.qcow2 $dir/work.qcow2
+  cp $dir/empty.qcow2 $dir/work.qcow2
   qemu-system-x86_64 \
     -serial stdio -display none \
     -enable-kvm -m 1024 -net nic -net user \
     -boot d -cdrom $iso \
-    -hda $dir/peer2.qcow2
+    -hda $dir/work.qcow2
+  mv $dir/work.qcow2 $dir/fresh.qcow2
 
 elif [ "$cmd" = "combined" ]
 then
 
-  $0 mnt
-  $0 apply
-  $0 umnt
+  rm -f $dir/.apply
+  $0 umnt $dir || :
+  $0 mnt $dir
+  $0 apply $dir
+  $0 umnt $dir
 
 elif [ "$cmd" = "mnt" ]
 then
-
+  rm -f $dir/peer2.qcow2 $dir/work.qcow2
+  cp $dir/fresh.qcow2 $dir/work.qcow2
   modprobe nbd max_part=8
-  qemu-nbd --connect=/dev/nbd0 $dir/peer2.qcow2
+  qemu-nbd --connect=/dev/nbd0 $dir/work.qcow2
   mkdir -p $dir/mnt
   mount /dev/nbd0p2 $dir/mnt
 
@@ -68,11 +77,12 @@ then
 
   rm -f $dir/mnt/etc/dropbear/*.pub
   rm -f $dir/mnt/etc/dropbear/*_key
-  for overrides in $(find vmimage/overrides -type f)
+  for override in $(find overrides -type f)
   do
-    rel=${overrides#vmimage/overrides/}
-    cp -f $overrides $dir/mnt/$rel
+    rel=${override#overrides/}
+    cp -f $override $dir/mnt/$rel
   done
+  touch $dir/.apply
 
 elif [ "$cmd" = "run" ]
 then
