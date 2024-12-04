@@ -18,4 +18,5 @@ $(BDIR)/fresh.qcow2: $(BDIR)/empty.qcow2 answerfile mk
 	BDIR=$(BDIR) ./mk fresh
 
 $(BDIR)/empty.qcow2:
+	mkdir -p $(BDIR)
 	qemu-img create -f qcow2 $@ 10G
