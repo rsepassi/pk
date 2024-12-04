@@ -26,7 +26,7 @@ $(CRT): lib/clang_rt.crtend-x86_64.o
 	mkdir -p $(dir $@)
 	cp lib/* $(dir $@)/
 
-$(LIBC): $(SRC)
+$(LIBC): $(SRC) $(STDC)
 	$(MAKE) -C $(BDIR)/musl $(MK_ARGS) install-libs
 
 $(STDC): $(SRC)
