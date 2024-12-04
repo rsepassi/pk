@@ -14,10 +14,12 @@ DO_CURL := curl -s \
 TAG ?= make
 DID ?= $(DO_PEER2_DID)
 IMG ?= $(BDIR)/vmimage/peer2.qcow2
+SRC ?= $(BROOT)/cli/bin/cli
+DST ?= /home/peer2/
 
 .PHONY: \
 	default list tag mktag create delete assignip assignfirewall firewalls \
-	rebuild ssh imgmk imgupload imgls imgget imgshow imghide
+	rebuild ssh scpto scpfrom imgmk imgupload imgls imgget imgshow imghide
 
 default:
 	echo "specify a command"
@@ -92,6 +94,11 @@ rebuild:
 # ==============================================================================
 ssh:
 	ssh -i ~/.ssh/istudios peer2@server.peer2.xyz
+
+scpto:
+	scp -i ~/.ssh/istudios $(SRC) peer2@server.peer2.xyz:$(DST)
+scpfrom:
+	scp -i ~/.ssh/istudios peer2@server.peer2.xyz:$(SRC) $(DST)
 # ==============================================================================
 # ==============================================================================
 
