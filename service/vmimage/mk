@@ -66,10 +66,8 @@ then
 elif [ "$cmd" = "apply" ]
 then
 
-  rm -f $dir/mnt/etc/dropbear/dropbear_ecdsa_host_key
-  rm -f $dir/mnt/etc/dropbear/dropbear_ecdsa_host_key.pub
-  rm -f $dir/mnt/etc/dropbear/dropbear_rsa_host_key
-  rm -f $dir/mnt/etc/dropbear/dropbear_rsa_host_key.pub
+  rm -f $dir/mnt/etc/dropbear/*.pub
+  rm -f $dir/mnt/etc/dropbear/*_key
   for overrides in $(find vmimage/overrides -type f)
   do
     rel=${overrides#vmimage/overrides/}
