@@ -1,0 +1,6 @@
+Name: Linux musl libc
+Version: 1.2.5
+Description: Linux libc
+Cflags: --sysroot=${build_prefix}/sysroot
+Libs: --sysroot=${build_prefix}/sysroot \
+  -resource-dir=${build_prefix}/compiler-rt

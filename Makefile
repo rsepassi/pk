@@ -3,14 +3,13 @@
 # ==============================================================================
 export ROOTDIR := $(CURDIR)
 export BROOT := $(ROOTDIR)/build
+export BCACHE := $(ROOTDIR)/.build-cache
 export PATH := $(CURDIR)/scripts:$(PATH)
 
 ifeq ($(USE_CLANG), 1)
 export CC := clang-17
 export CCLD := clang-17
 export AR := llvm-ar
-export CFLAGS += -flto
-export LDFLAGS += -flto
 else
 export CC := zig cc
 export CCLD := zig cc
@@ -30,8 +29,7 @@ export CFLAGS += \
 	-fPIE \
 	-fstack-protector-strong -fstack-clash-protection \
 	-D_FORTIFY_SOURCE=3
-export LDFLAGS += \
-	$(OPT) -static-pie -z relro -z now -z noexecstack
+export LDFLAGS += $(OPT)
 
 TEST_DIRS := $(wildcard lib/*) vendor/base58 vendor/qrcodegen
 ALL_LIBS := cli $(wildcard lib/*) $(wildcard vendor/*)

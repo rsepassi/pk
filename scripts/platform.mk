@@ -58,26 +58,33 @@ endif
 
 # clang
 ifeq ($(USE_CLANG), 1)
-export CFLAGS += --rtlib=compiler-rt
+export CFLAGS += --rtlib=compiler-rt -flto
+export LDFLAGS += --rtlib=compiler-rt -flto -fuse-ld=lld
 endif
 
 .PHONY: platform
 
 ifeq ($(TARGET_OS), macos)
 
-export CFLAGS += -target $(TARGET) `need --cflags platform/macos`
-export PLATFORM_LDFLAGS += -target $(TARGET)
+MACTARGET := $(TARGET)
+ifeq ($(USE_CLANG), 1)
+	MACTARGET := $(TARGET_ARCH)-apple-macosx13
+endif
+
+export CFLAGS += -target $(MACTARGET) `need --cflags platform/macos`
+export PLATFORM_LDFLAGS += -target $(MACTARGET)
 
 platform:
 	:
 
 else ifeq ($(TARGET_OS), linux)
 
-export CFLAGS += -target $(TARGET)
-export PLATFORM_LDFLAGS += -target $(TARGET)
+export CFLAGS += -target $(TARGET) `need --cflags platform/linux`
+export PLATFORM_LDFLAGS += -target $(TARGET) `need --libs platform/linux` \
+	-static-pie -z relro -z now -z noexecstack
 
 platform:
-	:
+	$(MAKE) -C platform/linux
 
 else
 $(error Unsupported platform $(TARGET_OS))
