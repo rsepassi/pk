@@ -14,8 +14,9 @@ typedef struct {
 
 #define CO_AWAIT(wait)                                                         \
   do {                                                                         \
-    while (!(wait)->done)                                                      \
-      mco_yield(mco_running());                                                \
+    while (!(wait)->done) {                                                    \
+      CHECK0(mco_yield(mco_running()));                                        \
+    }                                                                          \
   } while (0)
 
 #define CO_DONE(wait)                                                          \
@@ -38,6 +39,17 @@ int uvco_fs_read(uv_loop_t* loop, uv_file fd, Bytes* contents, usize offset);
 void uvco_fs_close(uv_loop_t* loop, uv_file fd);
 int uvco_fs_writefull(uv_loop_t* loop, const char* path, Bytes contents);
 
-// UDP
+// UDP send
 int uvco_udp_send(uv_udp_t* handle, const uv_buf_t bufs[], unsigned int nbufs,
                   const struct sockaddr* addr);
+
+// UDP recv
+typedef struct {
+  uv_udp_t* udp;
+  uv_buf_t buf;
+  const struct sockaddr* addr;
+  ssize_t nread;
+  co_wait_t wait;
+} UvcoUdpRecv;
+int uvco_udp_recv_start(UvcoUdpRecv* recv, uv_udp_t* handle);
+ssize_t uvco_udp_recv_next(UvcoUdpRecv* recv);

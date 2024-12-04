@@ -34,6 +34,8 @@
 
 // Defined in pk.c
 int pk_main(int argc, char** argv);
+// Defined in echo.c
+int demo_echo(int argc, char** argv);
 
 // Global event loop
 uv_loop_t* loop;
@@ -2009,6 +2011,35 @@ static int demo_time(int argc, char** argv) {
   return 0;
 }
 
+static int demo_opts(int argc, char** argv) {
+  struct optparse options;
+  optparse_init(&options, argv);
+  int option;
+  struct optparse_long longopts[] =       //
+      {{"help", 'h', OPTPARSE_NONE},      //
+       {"port", 'p', OPTPARSE_REQUIRED},  //
+       {0}};
+
+  int port = 0;
+
+  while ((option = optparse_long(&options, longopts, NULL)) != -1) {
+    switch (option) {
+      case 'h':
+        cli_usage("opts", 0, longopts);
+        return 1;
+      case 'p':
+        port = atoi(options.optarg);
+        break;
+      case '?':
+        cli_usage("opts", 0, longopts);
+        return 1;
+    }
+  }
+
+  LOG("port=%d", port);
+  return 0;
+}
+
 typedef struct {
   int argc;
   char** argv;
@@ -2016,6 +2047,7 @@ typedef struct {
 } MainCoroCtx;
 
 static const CliCmd commands[] = {
+    {"demo-opts", demo_opts},             //
     {"demo-holepunch", demo_holepunch},   //
     {"demo-keygen", demo_keygen},         //
     {"demo-keyread", demo_keyread},       //
@@ -2029,6 +2061,7 @@ static const CliCmd commands[] = {
     {"demo-vterm", demo_vterm},           //
     {"demo-tcp2", demo_tcp2},             //
     {"demo-time", demo_time},             //
+    {"demo-echo", demo_echo},             //
     {"pk", pk_main},                      //
     {0},
 };
@@ -2041,7 +2074,7 @@ static void main_coro(mco_coro* co) {
   int argc = ctx->argc;
   char** argv = ctx->argv;
 
-  for (usize i = 0; i < ARRAY_LEN(commands) && argc > 1; ++i) {
+  for (usize i = 0; i < (ARRAY_LEN(commands) - 1) && argc > 1; ++i) {
     if (!strcmp(commands[i].cmd, argv[1]))
       return coro_exit(commands[i].fn(argc - 1, argv + 1));
   }

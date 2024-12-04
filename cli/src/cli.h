@@ -12,7 +12,10 @@ typedef struct {
 
 static inline void cli_usage(const char* name, const CliCmd* cmds,
                              struct optparse_long* opts) {
-  fprintf(stderr, "%s [options] [subcommand] [suboptions] [args]\n", name);
+  if (cmds)
+    fprintf(stderr, "%s [options] [subcommand] [suboptions] [args]\n", name);
+  else
+    fprintf(stderr, "%s [options] [args]\n", name);
 
   usize i;
 

@@ -151,3 +151,58 @@ end:
   free(req);
   return rc;
 }
+
+#define UDP_MAXSZ 1600
+
+static void udp_alloc_cb(uv_handle_t* handle, size_t suggested_size,
+                         uv_buf_t* buf) {
+  (void)handle;
+  (void)suggested_size;
+  static u8 static_buf[UDP_MAXSZ] = {0};
+  *buf = uv_buf_init((void*)static_buf, UDP_MAXSZ);
+}
+
+static void udp_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
+                        const struct sockaddr* addr, unsigned flags) {
+  (void)flags;
+
+  UvcoUdpRecv* ctx = handle->data;
+
+  // End of message, nothing needs to be done
+  if (nread == 0 && addr == NULL)
+    return;
+
+  // nobody's waiting...
+  if (ctx->wait.co == NULL) {
+    LOG("message dropped, no waiter");
+    return;
+  }
+
+  ctx->nread = nread;
+  ctx->addr = addr;
+  ctx->buf = *buf;
+  ctx->buf.len = nread >= 0 ? nread : 0;
+
+  if (ctx->buf.len > UDP_MAXSZ)
+    ctx->nread = UV_EOVERFLOW;
+
+  CO_DONE(&ctx->wait);
+}
+
+int uvco_udp_recv_start(UvcoUdpRecv* recv, uv_udp_t* handle) {
+  *recv = (UvcoUdpRecv){0};
+  recv->udp = handle;
+  recv->udp->data = recv;
+  return uv_udp_recv_start(recv->udp, udp_alloc_cb, udp_recv_cb);
+}
+
+ssize_t uvco_udp_recv_next(UvcoUdpRecv* recv) {
+  recv->udp->data = recv;
+  recv->wait = (co_wait_t){0};
+  recv->wait.co = mco_running();
+
+  CO_AWAIT(&recv->wait);
+
+  recv->wait = (co_wait_t){0};
+  return recv->nread;
+}

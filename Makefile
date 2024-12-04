@@ -9,6 +9,8 @@ ifeq ($(USE_CLANG), 1)
 export CC := clang-17
 export CCLD := clang-17
 export AR := llvm-ar
+export CFLAGS += -flto
+export LDFLAGS += -flto
 else
 export CC := zig cc
 export CCLD := zig cc
@@ -25,11 +27,11 @@ export CFLAGS += \
 	-Wall -Werror -Wextra \
 	-Wconversion -Wno-sign-conversion \
 	-Wno-unused-command-line-argument \
-	-fPIE -flto \
+	-fPIE \
 	-fstack-protector-strong -fstack-clash-protection \
 	-D_FORTIFY_SOURCE=3
 export LDFLAGS += \
-	$(OPT) -flto -static-pie -z relro -z now -z noexecstack
+	$(OPT) -static-pie -z relro -z now -z noexecstack
 
 TEST_DIRS := $(wildcard lib/*) vendor/base58 vendor/qrcodegen
 ALL_LIBS := cli $(wildcard lib/*) $(wildcard vendor/*)
