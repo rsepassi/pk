@@ -13,12 +13,19 @@ typedef struct {
   int port;
 } IpStr;
 
-static void sa_get_ipv4(IpStr* s, const struct sockaddr* sa) {
-  const struct sockaddr_in* sa_in = (void*)sa;
-  char *ip = inet_ntoa(sa_in->sin_addr);
-  s->ip.buf = (u8*)s->ip_buf;
-  s->ip.len = strlen(ip);
-  memcpy(s->ip_buf, ip, s->ip.len);
+const void* sa_get_in_addr(const struct sockaddr* sa) {
+  switch (sa->sa_family) {
+    case AF_INET: {
+      const struct sockaddr_in* sa_in = (const struct sockaddr_in*)sa;
+      return &sa_in->sin_addr;
+    }
+    case AF_INET6: {
+      const struct sockaddr_in6* sa_in6 = (const struct sockaddr_in6*)sa;
+      return &sa_in6->sin6_addr;
+    }
+    default:
+      return 0;
+  }
 }
 
 static int sa_get_port(const struct sockaddr* sa) {
@@ -37,18 +44,18 @@ static int sa_get_port(const struct sockaddr* sa) {
 }
 
 static void IpStr_log(const IpStr* s, Str tag) {
-  LOG("%.*s=%.*s:%d", (int)tag.len, tag.buf, (int)s->ip.len, s->ip.buf, s->port);
+  LOG("%.*s=%.*s:%d", (int)tag.len, tag.buf, (int)s->ip.len, s->ip.buf,
+      s->port);
 }
 
 static int IpStr_read(IpStr* out, const struct sockaddr* sa) {
-  if (sa->sa_family == AF_INET) {
-    sa_get_ipv4(out, sa);
-  } else {
-    if (inet_ntop(sa->sa_family, sa, out->ip_buf, sizeof(out->ip_buf)) == NULL)
-      return 1;
-    out->ip = str_from_c(out->ip_buf);
-  }
+  const void* addr = sa_get_in_addr(sa);
+  if (addr == NULL)
+    return 1;
 
+  if (inet_ntop(sa->sa_family, addr, out->ip_buf, sizeof(out->ip_buf)) == NULL)
+    return 1;
+  out->ip = Bytes(out->ip_buf, strlen(out->ip_buf));
   out->port = sa_get_port(sa);
   return 0;
 }
