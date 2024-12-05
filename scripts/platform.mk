@@ -67,6 +67,19 @@ export PLATFORM_LDFLAGS += -target $(BSDTARGET) `need --libs platform/freebsd`
 platform:
 	$(MAKE) -C platform/freebsd
 
+else ifeq ($(TARGET_OS), windows)
+
+WINTARGET := $(TARGET)
+ifeq ($(USE_CLANG), 1)
+	WINTARGET := $(TARGET_ARCH)-w64-mingw32
+endif
+
+export CFLAGS += -target $(WINTARGET) `need --cflags platform/windows`
+export PLATFORM_LDFLAGS += -target $(WINTARGET) `need --libs platform/windows`
+
+platform:
+	$(MAKE) -C platform/windows
+
 else
 
 $(error Unsupported platform $(TARGET_OS))

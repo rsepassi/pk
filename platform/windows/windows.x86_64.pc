@@ -1,0 +1,7 @@
+Name: Windows Mingw
+Version: 0.0.0
+Description: Windows Mingw libc
+Cflags: -isystem ${build_prefix}/mingw/generic-w64-mingw32 -isystem ${build_prefix}/mingw/x86_64-w64-mingw32/include \
+  -D_FORTIFY_SOURCE=3
+Libs: --sysroot=${build_prefix}/mingw/x86_64-w64-mingw32 \
+  -resource-dir=${build_prefix}/mingw/lib/clang/19

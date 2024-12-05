@@ -4,11 +4,7 @@
 
 #include <stdbool.h>
 
-#define REARM(req)                                                             \
-  do {                                                                         \
-    wait.done = false;                                                         \
-    (req)->data = &wait;                                                       \
-  } while (0)
+#define UV_BUFLEN_T __typeof__(((uv_buf_t*)0)->len)
 
 static void fs_cb(uv_fs_t* req) {
   co_wait_t* wait = req->data;
@@ -181,7 +177,7 @@ static void udp_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
   ctx->nread = nread;
   ctx->addr = addr;
   ctx->buf = *buf;
-  ctx->buf.len = nread >= 0 ? nread : 0;
+  ctx->buf.len = nread >= 0 ? (UV_BUFLEN_T)nread : 0;
 
   if (ctx->buf.len > UDP_MAXSZ)
     ctx->nread = UV_EOVERFLOW;

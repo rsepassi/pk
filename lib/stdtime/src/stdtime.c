@@ -3,6 +3,8 @@
 #include "log.h"
 #include "uv.h"
 
+#include <time.h>
+
 static i64 utc_offset_secs(void) {
   time_t t = stdtime_now_secs();
   struct tm* tm = gmtime(&t);

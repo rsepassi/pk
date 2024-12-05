@@ -19,13 +19,22 @@ builddir=$BROOT/$dep
 
 lib=$(basename $dep)
 
-PKG_CONFIG_PATH="$builddir:$srcdir" \
+pcfile=$builddir/$lib.pc
+if [ -f $pcfile ]
+then
+  pcpath=$builddir
+else
+  pcfile=$srcdir/$lib.pc
+  pcpath=$srcdir
+fi
+
+PKG_CONFIG_PATH="$pcpath" \
   pkg-config \
   --define-variable=src_prefix=$srcdir \
   --define-variable=build_prefix=$builddir \
   $flag $lib
 
-for dep in $(grep Requirez: $srcdir/$lib.pc | cut -c 11-)
+for dep in $(grep Requirez: $pcfile | cut -c 11-)
 do
   need $flag $dep
 done
