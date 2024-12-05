@@ -58,7 +58,7 @@ static void phex(char* tag, u8* b, u64 len) {
 #define pcrypt(k) phex(#k, (u8*)&(k), sizeof(k))
 
 static int nik_keys_kx_from_seed(const CryptoSignSeed* seed,
-                                 CryptoKxKeypair* out) {
+                                 CryptoKxKeypair*      out) {
   CryptoSignPK pk;
   CryptoSignSK sk;
   if (crypto_sign_seed_keypair((u8*)&pk, (u8*)&sk, (u8*)seed))
@@ -79,7 +79,7 @@ static void CxnCb(NIK_Cxn* cxn, void* userdata, NIK_Cxn_Event e, Bytes data,
 static int demo_nikcxn(int argc, char** argv) {
   CryptoKxKeypair kx_keys_i;
   {
-    Str A_seed_str = str_from_c(A_seed_hex);
+    Str            A_seed_str = str_from_c(A_seed_hex);
     CryptoSignSeed A_seed;
     sodium_hex2bin((u8*)&A_seed, sizeof(A_seed), (char*)A_seed_str.buf,
                    A_seed_str.len, 0, 0, 0);
@@ -88,7 +88,7 @@ static int demo_nikcxn(int argc, char** argv) {
 
   CryptoKxKeypair kx_keys_r;
   {
-    Str B_seed_str = str_from_c(B_seed_hex);
+    Str            B_seed_str = str_from_c(B_seed_hex);
     CryptoSignSeed B_seed;
     sodium_hex2bin((u8*)&B_seed, sizeof(B_seed), (char*)B_seed_str.buf,
                    B_seed_str.len, 0, 0, 0);
@@ -99,15 +99,15 @@ static int demo_nikcxn(int argc, char** argv) {
   NIK_Keys hkeys_B = {&kx_keys_r.pk, &kx_keys_r.sk, &kx_keys_i.pk, 0};
 
   NIK_Cxn cxn_A;
-  u64 ctx_A;
+  u64     ctx_A;
   NIK_Cxn cxn_B;
-  u64 ctx_B;
+  u64     ctx_B;
   LOG("cxn_A=%p", &cxn_A);
   LOG("cxn_B=%p", &cxn_B);
 
-  Bytes zero = BytesZero;
-  u64 maxdelay = UINT64_MAX;
-  u64 now = 1;
+  Bytes zero     = BytesZero;
+  u64   maxdelay = UINT64_MAX;
+  u64   now      = 1;
 
   // Initialize A as initiator
   nik_cxn_init(&cxn_A, hkeys_A, CxnCb, &ctx_A);
@@ -132,7 +132,7 @@ static int demo_nikcxn(int argc, char** argv) {
     LOG("B responds to handshake");
     CHECK(hs1.len == sizeof(NIK_HandshakeMsg1));
     NIK_HandshakeMsg1* msg1 = (NIK_HandshakeMsg1*)hs1.buf;
-    NIK_Handshake hs;
+    NIK_Handshake      hs;
     CHECK0(nik_handshake_init_check(&hs, hkeys_B, msg1));
     nik_cxn_init_responder(&cxn_B, hkeys_B, &hs, msg1, CxnCb, &ctx_B, now);
     LOGB(CryptoBytes(cxn_B.next.send));
@@ -217,9 +217,9 @@ static int demo_nikcxn(int argc, char** argv) {
     CHECK(cxn_B.handshake_state == NIK_CxnHState_I_StartWait);
 
     // Determine which one has the shorter jitter timeout
-    u64 delay_A = cxn_A.handshake.initiator.handshake_start_time;
-    u64 delay_B = cxn_B.handshake.initiator.handshake_start_time;
-    u64 delay = MIN(delay_A, delay_B);
+    u64      delay_A   = cxn_A.handshake.initiator.handshake_start_time;
+    u64      delay_B   = cxn_B.handshake.initiator.handshake_start_time;
+    u64      delay     = MIN(delay_A, delay_B);
     NIK_Cxn* initiator = delay == delay_A ? &cxn_A : &cxn_B;
     NIK_Cxn* responder = delay == delay_A ? &cxn_B : &cxn_A;
     now += delay;
@@ -258,7 +258,7 @@ static int demo_nikcxn(int argc, char** argv) {
 static int demo_nik(int argc, char** argv) {
   CryptoKxKeypair kx_keys_i;
   {
-    Str A_seed_str = str_from_c(A_seed_hex);
+    Str            A_seed_str = str_from_c(A_seed_hex);
     CryptoSignSeed A_seed;
     sodium_hex2bin((u8*)&A_seed, sizeof(A_seed), (char*)A_seed_str.buf,
                    A_seed_str.len, 0, 0, 0);
@@ -267,21 +267,21 @@ static int demo_nik(int argc, char** argv) {
 
   CryptoKxKeypair kx_keys_r;
   {
-    Str B_seed_str = str_from_c(B_seed_hex);
+    Str            B_seed_str = str_from_c(B_seed_hex);
     CryptoSignSeed B_seed;
     sodium_hex2bin((u8*)&B_seed, sizeof(B_seed), (char*)B_seed_str.buf,
                    B_seed_str.len, 0, 0, 0);
     CHECK0(nik_keys_kx_from_seed(&B_seed, &kx_keys_r));
   }
 
-  u32 id_i = 1;
-  u32 id_r = 2;
+  u32      id_i    = 1;
+  u32      id_r    = 2;
   NIK_Keys hkeys_A = {&kx_keys_i.pk, &kx_keys_i.sk, &kx_keys_r.pk, 0};
   NIK_Keys hkeys_B = {&kx_keys_r.pk, &kx_keys_r.sk, &kx_keys_i.pk, 0};
 
   // I
   LOG("i2r");
-  NIK_Handshake state_i;
+  NIK_Handshake     state_i;
   NIK_HandshakeMsg1 msg1;
   CHECK0(nik_handshake_init(&state_i, hkeys_A, id_i, &msg1));
   phex("IC", state_i.chaining_key, NIK_CHAIN_SZ);
@@ -332,7 +332,7 @@ static int demo_nik(int argc, char** argv) {
   {
     LOG("send: %.*s", (int)payload.len, payload.buf);
     u64 send_sz = nik_sendmsg_sz(payload.len);
-    send_msg = (Str){.len = send_sz, .buf = malloc(send_sz)};
+    send_msg    = (Str){.len = send_sz, .buf = malloc(send_sz)};
     CHECK(send_msg.buf);
     CHECK0(nik_msg_send(&tx_i, payload, send_msg));
   }
@@ -350,7 +350,7 @@ static int demo_nik(int argc, char** argv) {
   {
     LOG("send: %.*s", (int)payload.len, payload.buf);
     u64 send_sz = nik_sendmsg_sz(payload.len);
-    send_msg = (Str){.len = send_sz, .buf = malloc(send_sz)};
+    send_msg    = (Str){.len = send_sz, .buf = malloc(send_sz)};
     CHECK0(nik_msg_send(&tx_i, payload, send_msg));
   }
 
@@ -371,15 +371,15 @@ static int demo_nik(int argc, char** argv) {
 }
 
 typedef struct {
-  MDB_env* kv;
-  MDB_dbi db;
+  MDB_env*     kv;
+  MDB_dbi      db;
   CryptoBoxKey key;
-  Allocator allocator;
+  Allocator    allocator;
 } CryptKv;
 
 static int cryptkv_keycrypt(CryptKv* kv, Bytes key, Bytes* out) {
   // Encrypt the key with a nonce derived from the key
-  int rc = 1;
+  int rc       = 1;
   u64 ekey_len = key.len + crypto_secretbox_MACBYTES;
   if (Alloc_alloc(kv->allocator, out, u8, ekey_len))
     goto end;
@@ -480,11 +480,11 @@ end:
 
 static int cryptkv_open(CryptKv** kv_ptr, const char* kv_path,
                         CryptoBoxKey* key, Allocator allocator) {
-  *kv_ptr = sodium_malloc(sizeof(CryptKv));
+  *kv_ptr     = sodium_malloc(sizeof(CryptKv));
   CryptKv* kv = *kv_ptr;
-  *kv = (CryptKv){0};
+  *kv         = (CryptKv){0};
 
-  kv->key = *key;
+  kv->key       = *key;
   kv->allocator = allocator;
   sodium_memzero(key, sizeof(CryptoBoxKey));
 
@@ -552,8 +552,8 @@ static int demo_kv(int argc, char** argv) {
   Bytes key = str_from_c(argv[2]);
   Bytes val = cmd == KvPut ? str_from_c(argv[3]) : BytesZero;
 
-  Allocator allocator = allocator_libc();
-  CryptoBoxKey kvkey = {{1, 2, 3, 4}};
+  Allocator    allocator = allocator_libc();
+  CryptoBoxKey kvkey     = {{1, 2, 3, 4}};
 
   CryptKv* kv;
   CHECK0(cryptkv_open(&kv, "/tmp/crypt", &kvkey, allocator));
@@ -577,7 +577,7 @@ static int demosshkeyread(int argc, char** argv) {
   CHECK(argc == 2, "must provide a key path");
   const char* path = argv[1];
 
-  u8 str_buf[1024];
+  u8    str_buf[1024];
   Bytes str = BytesArray(str_buf);  // SECRET
 
   uv_file fd;
@@ -599,9 +599,9 @@ static void vt_cb(const char* s, size_t len, void* user) {
 }
 
 static int demo_vterm(int argc, char** argv) {
-  int rows = 100;
-  int cols = 80;
-  VTerm* vt = vterm_new(rows, cols);
+  int    rows = 100;
+  int    cols = 80;
+  VTerm* vt   = vterm_new(rows, cols);
   vterm_set_utf8(vt, true);
 
   VTermScreen* vt_screen = vterm_obtain_screen(vt);
@@ -650,7 +650,7 @@ static int demo_multicast(int argc, char** argv) {
   CHECK0(uv_udp_init(loop, &udp));
 
   char* multicast_group = "239.0.0.22";
-  int port = 20000;
+  int   port            = 20000;
 
   if (send) {
     struct sockaddr_in myaddr;
@@ -658,7 +658,7 @@ static int demo_multicast(int argc, char** argv) {
     CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&myaddr, 0));
 
     struct sockaddr_storage localbind;
-    int len;
+    int                     len;
     CHECK0(uv_udp_getsockname(&udp, (struct sockaddr*)&localbind, &len));
     LOG("addrlen=%d", len);
     // LOG("addr=%u", ((struct sockaddr_in*)&localbind)->sin_addr.s_addr);
@@ -666,8 +666,8 @@ static int demo_multicast(int argc, char** argv) {
     LOG("udp send");
     struct sockaddr_in multi_addr;
     CHECK0(uv_ip4_addr(multicast_group, port, &multi_addr));
-    Str peer_id = Str("mike multicast");
-    uv_buf_t buf = uv_buf_init((char*)peer_id.buf, (int)peer_id.len);
+    Str      peer_id = Str("mike multicast");
+    uv_buf_t buf     = uv_buf_init((char*)peer_id.buf, (int)peer_id.len);
     CHECK0(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&multi_addr));
     LOG("sent!");
     uvco_sleep(loop, 1000);
@@ -707,12 +707,12 @@ static int demo_holepunch(int argc, char** argv) {
 
   // Plum
   plum_config_t config = {0};
-  config.log_level = PLUM_LOG_LEVEL_WARN;
+  config.log_level     = PLUM_LOG_LEVEL_WARN;
   plum_init(&config);
   plum_mapping_t mapping = {0};
-  mapping.protocol = PLUM_IP_PROTOCOL_UDP;
-  mapping.internal_port = 20000;
-  int mapping_id = plum_create_mapping(&mapping, mapping_callback);
+  mapping.protocol       = PLUM_IP_PROTOCOL_UDP;
+  mapping.internal_port  = 20000;
+  int mapping_id         = plum_create_mapping(&mapping, mapping_callback);
   struct sockaddr_in myaddr;
   CHECK0(uv_ip4_addr("0.0.0.0", 20000, &myaddr));
 
@@ -721,8 +721,8 @@ static int demo_holepunch(int argc, char** argv) {
   CHECK0(uv_udp_init(loop, &udp));
 
   LOG("udp send");
-  Str peer_id = Str("mike multicast");
-  uv_buf_t buf = uv_buf_init((char*)peer_id.buf, (int)peer_id.len);
+  Str      peer_id = Str("mike multicast");
+  uv_buf_t buf     = uv_buf_init((char*)peer_id.buf, (int)peer_id.len);
   CHECK0(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&peer_addr));
   LOG("sent!");
 
@@ -777,9 +777,9 @@ static int demo_mimalloc(int argc, char** argv) {
   // }
 
   {
-    Bytes x = {1024, malloc(1024)};
+    Bytes         x = {1024, malloc(1024)};
     BumpAllocator b;
-    Allocator a4 = allocator_bump(&b, x);
+    Allocator     a4 = allocator_bump(&b, x);
     do_some_allocs(a4);
     LOG("i=%d", (int)b.i);
     free(x.buf);
@@ -790,7 +790,7 @@ static int demo_mimalloc(int argc, char** argv) {
 
 static int pw_prompt(Bytes* b) {
   char* pw = sodium_malloc(MAX_PW_LEN);
-  b->buf = (u8*)pw;
+  b->buf   = (u8*)pw;
   fprintf(stderr, "pw > ");
   ssize_t pw_len = getpass(pw, MAX_PW_LEN);
   if (pw_len > 0)
@@ -804,7 +804,7 @@ static int demo_keyread(int argc, char** argv) {
   CHECK(argc == 2, "must pass a path");
   const char* path = argv[1];
 
-  u8 contents_buf[256];
+  u8    contents_buf[256];
   Bytes contents = BytesArray(contents_buf);
 
   uv_file fd;
@@ -815,7 +815,7 @@ static int demo_keyread(int argc, char** argv) {
   CHECK(contents.len < 256);
 
   CryptoSignSK sk;
-  Bytes pw = {0};
+  Bytes        pw = {0};
   CHECK0(keyio_keydecode(contents, pw, &sk));
   LOGB(CryptoBytes(sk));
 
@@ -824,7 +824,7 @@ static int demo_keyread(int argc, char** argv) {
 
 static int demo_keygen(int argc, char** argv) {
   // al is our general-purpose allocator
-  Allocator al = allocatormi_allocator();
+  Allocator       al           = allocatormi_allocator();
   CryptoAllocator cryptal_base = {al};
   // sal is our secrets allocator
   Allocator sal = allocator_crypto(&cryptal_base);
@@ -836,7 +836,7 @@ static int demo_keygen(int argc, char** argv) {
   LOGB(CryptoBytes(keys->sk));
 
   // Get a passphrase
-  u8 pw_buf[2048];
+  u8    pw_buf[2048];
   Bytes pw = BytesArray(pw_buf);
   CHECK0(keyio_getpass(&pw));
   LOGS(pw);
@@ -845,7 +845,7 @@ static int demo_keygen(int argc, char** argv) {
   u8 pw_buf2[2048];
   memcpy(pw_buf2, pw_buf, sizeof(pw_buf));
   Bytes pw2 = BytesArray(pw_buf2);
-  pw2.len = pw.len;
+  pw2.len   = pw.len;
 
   // Encode the keys
   Str sk_str;
@@ -879,7 +879,7 @@ static int demo_pwhash(int argc, char** argv) {
   CHECK(pw.len > 0);
 
   // Hash the password
-  u8 pw_hash[crypto_pwhash_STRBYTES];
+  u8  pw_hash[crypto_pwhash_STRBYTES];
   u64 opslimit = crypto_pwhash_OPSLIMIT_INTERACTIVE;
   u64 memlimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
   CHECK0(crypto_pwhash_str((char*)pw_hash, (char*)pw.buf, pw.len, opslimit,
@@ -900,9 +900,9 @@ static int demo_pwhash(int argc, char** argv) {
   return 0;
 }
 
-#define TCP2_LOCALHOST "127.0.0.1"
-#define TCP2_LOCALHOST6 "::1"
-#define TCP2_CIDLEN NGTCP2_MAX_CIDLEN  // 20
+#define TCP2_LOCALHOST       "127.0.0.1"
+#define TCP2_LOCALHOST6      "::1"
+#define TCP2_CIDLEN          NGTCP2_MAX_CIDLEN  // 20
 #define TCP2_STREAM_DATAGRAM -2
 #define CHECK_TCP2(s)                                                          \
   do {                                                                         \
@@ -912,9 +912,9 @@ static int demo_pwhash(int argc, char** argv) {
 
 typedef struct Tcp2Msg {
   Bytes data;
-  i64 stream;  // TCP2_STREAM_*, or from ngtcp2_conn_open_{bidi,uni}_stream
+  i64   stream;  // TCP2_STREAM_*, or from ngtcp2_conn_open_{bidi,uni}_stream
   struct Tcp2Msg* _next;
-  usize _offset;
+  usize           _offset;
 } Tcp2Msg;
 
 typedef struct {
@@ -923,18 +923,18 @@ typedef struct {
 } Tcp2MsgQ;
 
 typedef struct {
-  u8 buf[256];
+  u8    buf[256];
   usize len;
   Bytes data;
 } Tcp2ZeroRTT;
 
 typedef struct {
   ngtcp2_conn* conn;
-  Allocator allocator;
-  ngtcp2_mem mem;
-  Tcp2MsgQ outgoing;
-  Hashmap sent;  // i64 -> Tcp2MsgQ
-  Tcp2ZeroRTT zerortt;
+  Allocator    allocator;
+  ngtcp2_mem   mem;
+  Tcp2MsgQ     outgoing;
+  Hashmap      sent;  // i64 -> Tcp2MsgQ
+  Tcp2ZeroRTT  zerortt;
 } Tcp2Ctx;
 
 static void tcp2_zerortt_save(Tcp2Ctx* ctx, Bytes params) {
@@ -955,7 +955,7 @@ static void tcp2_msgq_enqueue(Tcp2MsgQ* q, Tcp2Msg* node) {
 static void tcp2_outgoing_enqueue(Tcp2Ctx* ctx, Bytes data, i64 stream) {
   Tcp2Msg* node;
   CHECK0(Alloc_create(ctx->allocator, &node));
-  node->data = data;
+  node->data   = data;
   node->stream = stream;
   tcp2_msgq_enqueue(&ctx->outgoing, node);
 }
@@ -985,7 +985,7 @@ static void tcp2_outgoing_free(Tcp2Ctx* ctx) {
 static void tcp2_sent_free(Tcp2Ctx* ctx) {
   Tcp2Msg* msg;
 
-  i64* stream;
+  i64*      stream;
   Tcp2MsgQ* q;
 
   (void)stream;
@@ -997,36 +997,36 @@ static void tcp2_sent_free(Tcp2Ctx* ctx) {
 }
 
 typedef struct {
-  u8 secret[1];
-  u8 iv[8];
-  ngtcp2_crypto_aead_ctx aead;
+  u8                       secret[1];
+  u8                       iv[8];
+  ngtcp2_crypto_aead_ctx   aead;
   ngtcp2_crypto_cipher_ctx cipher;
-  ngtcp2_crypto_ctx ctx;
+  ngtcp2_crypto_ctx        ctx;
 } Tcp2Key;
 
 #define TCP2_AEAD_OVERHEAD crypto_aead_chacha20poly1305_IETF_ABYTES  // 16
 
 static Tcp2Key tcp2_crypto_key(void) {
-  Tcp2Key key = {0};
-  key.aead.native_handle = (void*)1;
-  key.cipher.native_handle = (void*)1;
-  key.ctx.aead.native_handle = (void*)1;
-  key.ctx.aead.max_overhead = TCP2_AEAD_OVERHEAD;
-  key.ctx.md.native_handle = (void*)1;
-  key.ctx.hp.native_handle = (void*)1;
-  key.ctx.max_encryption = UINT64_MAX;
+  Tcp2Key key                    = {0};
+  key.aead.native_handle         = (void*)1;
+  key.cipher.native_handle       = (void*)1;
+  key.ctx.aead.native_handle     = (void*)1;
+  key.ctx.aead.max_overhead      = TCP2_AEAD_OVERHEAD;
+  key.ctx.md.native_handle       = (void*)1;
+  key.ctx.hp.native_handle       = (void*)1;
+  key.ctx.max_encryption         = UINT64_MAX;
   key.ctx.max_decryption_failure = 128;
   return key;
 }
 
-static int tcp2_crypto_rw(ngtcp2_conn* conn,
+static int tcp2_crypto_rw(ngtcp2_conn*            conn,
                           ngtcp2_encryption_level encryption_level,
                           const uint8_t* data, size_t datalen,
                           void* user_data) {
   // TODO: ngtcp2_conn_set_tls_error on error
   LOG("level=%d", encryption_level);
   Tcp2Ctx* ctx = user_data;
-  int rc;
+  int      rc;
 
   if (ngtcp2_conn_is_server(conn)) {
     // Server
@@ -1037,7 +1037,7 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
         // Set remote transport params
         {
           u8 tparams_len = data[0];
-          rc = ngtcp2_conn_decode_and_set_remote_transport_params(
+          rc             = ngtcp2_conn_decode_and_set_remote_transport_params(
               conn, &data[1], tparams_len);
           if (rc != 0)
             return -1;
@@ -1047,7 +1047,7 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
         // Ack the initial message
         {
           Str resp = Str("ack");
-          rc = ngtcp2_conn_submit_crypto_data(
+          rc       = ngtcp2_conn_submit_crypto_data(
               conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, resp.buf, resp.len);
           if (rc != 0)
             return rc;
@@ -1080,8 +1080,8 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
 
         // Send the handshake message with transport params + 0rtt params
         {
-          u8 respbuf[512] = {0};
-          usize respi = 0;
+          u8    respbuf[512] = {0};
+          usize respi        = 0;
 
           // Transport params
           {
@@ -1162,14 +1162,14 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
 
           // Encode local transport params
           {
-            u8 databuf[256] = {0};
+            u8           databuf[256] = {0};
             ngtcp2_ssize nwrite = ngtcp2_conn_encode_local_transport_params(
                 conn, &databuf[1], 255);
             if (nwrite < 0)
               return -1;
-            databuf[0] = (u8)nwrite;
+            databuf[0]    = (u8)nwrite;
             usize datalen = (u8)nwrite + 1;
-            rc = ngtcp2_conn_submit_crypto_data(
+            rc            = ngtcp2_conn_submit_crypto_data(
                 conn, NGTCP2_ENCRYPTION_LEVEL_INITIAL, databuf, datalen);
             if (rc != 0)
               return rc;
@@ -1222,7 +1222,7 @@ static int tcp2_crypto_rw(ngtcp2_conn* conn,
         // Ack
         {
           Str data = Str("ok");
-          rc = ngtcp2_conn_submit_crypto_data(
+          rc       = ngtcp2_conn_submit_crypto_data(
               conn, NGTCP2_ENCRYPTION_LEVEL_HANDSHAKE, data.buf, data.len);
           if (rc != 0)
             return rc;
@@ -1284,7 +1284,7 @@ static int tcp2_recv_client_initial(ngtcp2_conn* conn, const ngtcp2_cid* dcid,
                                          sizeof(rx.iv));
 }
 
-static int tcp2_recv_crypto_data(ngtcp2_conn* conn,
+static int tcp2_recv_crypto_data(ngtcp2_conn*            conn,
                                  ngtcp2_encryption_level encryption_level,
                                  uint64_t offset, const uint8_t* data,
                                  size_t datalen, void* user_data) {
@@ -1319,7 +1319,7 @@ static int tcp2_decrypt(uint8_t* dest, const ngtcp2_crypto_aead* aead,
 
 static int tcp2_hp_mask(uint8_t* dest, const ngtcp2_crypto_cipher* hp,
                         const ngtcp2_crypto_cipher_ctx* hp_ctx,
-                        const uint8_t* sample) {
+                        const uint8_t*                  sample) {
   LOG("");
   memset(dest, 3, NGTCP2_HP_MASKLEN);
   return 0;
@@ -1342,7 +1342,7 @@ static int tcp2_get_new_connection_id(ngtcp2_conn* conn, ngtcp2_cid* cid,
 }
 
 static int tcp2_update_key(ngtcp2_conn* conn, uint8_t* rx_secret,
-                           uint8_t* tx_secret,
+                           uint8_t*                tx_secret,
                            ngtcp2_crypto_aead_ctx* rx_aead_ctx, uint8_t* rx_iv,
                            ngtcp2_crypto_aead_ctx* tx_aead_ctx, uint8_t* tx_iv,
                            const uint8_t* current_rx_secret,
@@ -1352,15 +1352,15 @@ static int tcp2_update_key(ngtcp2_conn* conn, uint8_t* rx_secret,
   return 0;
 }
 
-static void tcp2_delete_crypto_aead_ctx(ngtcp2_conn* conn,
+static void tcp2_delete_crypto_aead_ctx(ngtcp2_conn*            conn,
                                         ngtcp2_crypto_aead_ctx* aead_ctx,
-                                        void* user_data) {
+                                        void*                   user_data) {
   LOG("");
 }
 
-static void tcp2_delete_crypto_cipher_ctx(ngtcp2_conn* conn,
+static void tcp2_delete_crypto_cipher_ctx(ngtcp2_conn*              conn,
                                           ngtcp2_crypto_cipher_ctx* cipher_ctx,
-                                          void* user_data) {
+                                          void*                     user_data) {
   LOG("");
 }
 
@@ -1373,12 +1373,12 @@ static int tcp2_get_path_challenge_data(ngtcp2_conn* conn, uint8_t* data,
 
 static int tcp2_version_negotiation(ngtcp2_conn* conn, uint32_t version,
                                     const ngtcp2_cid* client_dcid,
-                                    void* user_data) {
+                                    void*             user_data) {
   LOG("");
   Tcp2Ctx* ctx = user_data;
   (void)ctx;
 
-  int rc = 0;
+  int     rc = 0;
   Tcp2Key rx = tcp2_crypto_key();
   Tcp2Key tx = tcp2_crypto_key();
   rc = ngtcp2_conn_install_vneg_initial_key(conn, version, &rx.aead, rx.iv,
@@ -1407,7 +1407,7 @@ static int tcp2_recv_stream_data(ngtcp2_conn* conn, uint32_t flags,
                                  const uint8_t* data, size_t datalen,
                                  void* user_data, void* stream_user_data) {
   bool stream_end = flags & NGTCP2_STREAM_DATA_FLAG_FIN;
-  bool zerortt = flags & NGTCP2_STREAM_DATA_FLAG_0RTT;
+  bool zerortt    = flags & NGTCP2_STREAM_DATA_FLAG_0RTT;
 
   Tcp2Ctx* ctx = user_data;
 
@@ -1449,7 +1449,7 @@ static int tcp2_acked_stream_data_offset(ngtcp2_conn* conn, int64_t stream_id,
     return -1;
 
   Tcp2MsgQ* q = hashmap_val(&ctx->sent, it);
-  Tcp2Msg* msg;
+  Tcp2Msg*  msg;
   while (datalen && (msg = q->head)) {
     usize nacked = MIN(msg->data.len, datalen);
     msg->_offset -= nacked;
@@ -1479,7 +1479,7 @@ static u64 tcp2_current_time() {
 
 void* tcp2_allocator_malloc(size_t size, void* user_data) {
   Allocator* alloc = user_data;
-  Bytes mem = {0};
+  Bytes      mem   = {0};
   if (allocator_u8(*alloc, &mem, size))
     return 0;
   return mem.buf;
@@ -1495,7 +1495,7 @@ void* tcp2_allocator_calloc(size_t nmemb, size_t size, void* user_data) {
 
 void* tcp2_allocator_realloc(void* ptr, size_t size, void* user_data) {
   Allocator* alloc = user_data;
-  Bytes mem = Bytes(ptr, 0);
+  Bytes      mem   = Bytes(ptr, 0);
   if (allocator_realloc(*alloc, &mem, size, 8))
     return 0;
   return mem.buf;
@@ -1503,17 +1503,17 @@ void* tcp2_allocator_realloc(void* ptr, size_t size, void* user_data) {
 
 void tcp2_allocator_free(void* p, void* user_data) {
   Allocator* alloc = user_data;
-  Bytes mem = Bytes(p, 1);
+  Bytes      mem   = Bytes(p, 1);
   allocator_free(*alloc, mem);
 }
 
 static ngtcp2_mem tcp2_allocator(Allocator* alloc) {
   ngtcp2_mem mem = {0};
-  mem.user_data = alloc;
-  mem.malloc = tcp2_allocator_malloc;
-  mem.free = tcp2_allocator_free;
-  mem.realloc = tcp2_allocator_realloc;
-  mem.calloc = tcp2_allocator_calloc;
+  mem.user_data  = alloc;
+  mem.malloc     = tcp2_allocator_malloc;
+  mem.free       = tcp2_allocator_free;
+  mem.realloc    = tcp2_allocator_realloc;
+  mem.calloc     = tcp2_allocator_calloc;
   return mem;
 }
 
@@ -1522,30 +1522,30 @@ static void tcp2_set_callbacks(ngtcp2_callbacks* cb, bool client) {
 
   if (client) {
     cb->client_initial = tcp2_client_initial;
-    cb->recv_retry = tcp2_recv_retry;
+    cb->recv_retry     = tcp2_recv_retry;
     // Optional
     cb->handshake_confirmed = tcp2_handshake_confirmed;
   } else {
     cb->recv_client_initial = tcp2_recv_client_initial;
   }
 
-  cb->recv_crypto_data = tcp2_recv_crypto_data;
-  cb->encrypt = tcp2_encrypt;
-  cb->decrypt = tcp2_decrypt;
-  cb->hp_mask = tcp2_hp_mask;
-  cb->rand = tcp2_rand;
-  cb->get_new_connection_id = tcp2_get_new_connection_id;
-  cb->update_key = tcp2_update_key;
-  cb->delete_crypto_aead_ctx = tcp2_delete_crypto_aead_ctx;
+  cb->recv_crypto_data         = tcp2_recv_crypto_data;
+  cb->encrypt                  = tcp2_encrypt;
+  cb->decrypt                  = tcp2_decrypt;
+  cb->hp_mask                  = tcp2_hp_mask;
+  cb->rand                     = tcp2_rand;
+  cb->get_new_connection_id    = tcp2_get_new_connection_id;
+  cb->update_key               = tcp2_update_key;
+  cb->delete_crypto_aead_ctx   = tcp2_delete_crypto_aead_ctx;
   cb->delete_crypto_cipher_ctx = tcp2_delete_crypto_cipher_ctx;
-  cb->get_path_challenge_data = tcp2_get_path_challenge_data;
-  cb->version_negotiation = tcp2_version_negotiation;
+  cb->get_path_challenge_data  = tcp2_get_path_challenge_data;
+  cb->version_negotiation      = tcp2_version_negotiation;
 
   // Optional
-  cb->recv_stream_data = tcp2_recv_stream_data;
-  cb->recv_datagram = tcp2_recv_datagram;
+  cb->recv_stream_data         = tcp2_recv_stream_data;
+  cb->recv_datagram            = tcp2_recv_datagram;
   cb->acked_stream_data_offset = tcp2_acked_stream_data_offset;
-  cb->handshake_completed = tcp2_handshake_completed;
+  cb->handshake_completed      = tcp2_handshake_completed;
 
   // ngtcp2_stream_open stream_open;
   // ngtcp2_stream_close stream_close;
@@ -1578,15 +1578,15 @@ static int tcp2_outgoing_process(Tcp2Ctx* ctx, Bytes* pkt, u64 now, u64 bytes) {
     return -1;
 
   ngtcp2_ssize stream_write;
-  Tcp2Msg* msg = 0;
-  bool pkt_full = false;
-  u64 maxbytes = ngtcp2_conn_get_send_quantum(ctx->conn);
+  Tcp2Msg*     msg      = 0;
+  bool         pkt_full = false;
+  u64          maxbytes = ngtcp2_conn_get_send_quantum(ctx->conn);
 
   while (!pkt_full && bytes < maxbytes && (msg = ctx->outgoing.head)) {
     LOG("!pkt_full, msg len=%d offset=%d", (int)msg->data.len,
         (int)msg->_offset);
 
-    u8* data = msg->data.buf + msg->_offset;
+    u8* data    = msg->data.buf + msg->_offset;
     u64 datalen = msg->data.len - msg->_offset;
 
     ngtcp2_ssize sz;
@@ -1613,8 +1613,8 @@ static int tcp2_outgoing_process(Tcp2Ctx* ctx, Bytes* pkt, u64 now, u64 bytes) {
           Alloc_destroy(ctx->allocator, done);
         } else {
           // Add the message to the sent queue to hold onto it until ack
-          HashmapStatus s = 0;
-          HashmapIter it = hashmap_put(&ctx->sent, &msg->stream, &s);
+          HashmapStatus s  = 0;
+          HashmapIter   it = hashmap_put(&ctx->sent, &msg->stream, &s);
           if (it == hashmap_end(&ctx->sent)) {
             CHECK(false, "oom");
             return -1;
@@ -1650,29 +1650,29 @@ static int tcp2_outgoing_process(Tcp2Ctx* ctx, Bytes* pkt, u64 now, u64 bytes) {
 
 static void tcp2_transport_params_default(ngtcp2_transport_params* params) {
   ngtcp2_transport_params_default(params);
-  params->initial_max_streams_bidi = 128;
-  params->initial_max_streams_uni = 128;
-  params->initial_max_stream_data_bidi_local = 128;
+  params->initial_max_streams_bidi            = 128;
+  params->initial_max_streams_uni             = 128;
+  params->initial_max_stream_data_bidi_local  = 128;
   params->initial_max_stream_data_bidi_remote = 128;
-  params->initial_max_stream_data_uni = 128;
-  params->initial_max_data = 1 << 30;
-  params->max_datagram_frame_size = 1024;
+  params->initial_max_stream_data_uni         = 128;
+  params->initial_max_data                    = 1 << 30;
+  params->max_datagram_frame_size             = 1024;
 }
 
 static int tcp2_connect(Tcp2Ctx* ctx, const ngtcp2_path* path, Bytes* pkt,
                         const Tcp2ZeroRTT* zerortt, Allocator allocator,
                         u64 now) {
   LOG("");
-  *ctx = (Tcp2Ctx){0};
+  *ctx           = (Tcp2Ctx){0};
   ctx->allocator = allocator;
   if (Hashmap_i64_create(&ctx->sent, Tcp2MsgQ, allocator))
     return -1;
 
   ngtcp2_cid scid = {0};
-  scid.datalen = TCP2_CIDLEN;
+  scid.datalen    = TCP2_CIDLEN;
   randombytes_buf(scid.data, scid.datalen);
   ngtcp2_cid dcid = {0};
-  dcid.datalen = TCP2_CIDLEN;
+  dcid.datalen    = TCP2_CIDLEN;
   randombytes_buf(dcid.data, dcid.datalen);
   ngtcp2_callbacks callbacks = {0};
   tcp2_set_callbacks(&callbacks, true);
@@ -1685,7 +1685,7 @@ static int tcp2_connect(Tcp2Ctx* ctx, const ngtcp2_path* path, Bytes* pkt,
   (void)tcp2_log_printf;
 
   ngtcp2_conn** client = &ctx->conn;
-  ctx->mem = tcp2_allocator(&ctx->allocator);
+  ctx->mem             = tcp2_allocator(&ctx->allocator);
 
   int rc = 0;
   rc = ngtcp2_conn_client_new(client, &dcid, &scid, path, NGTCP2_PROTO_VER_V1,
@@ -1742,16 +1742,16 @@ static int tcp2_accept(Tcp2Ctx* ctx, const ngtcp2_path* path, Bytes pkt,
     return rc;
 
   ngtcp2_cid scid = {0};
-  scid.datalen = TCP2_CIDLEN;
+  scid.datalen    = TCP2_CIDLEN;
   randombytes_buf(scid.data, scid.datalen);
 
   ngtcp2_callbacks callbacks = {0};
   tcp2_set_callbacks(&callbacks, false);
   ngtcp2_transport_params tparams = {0};
   tcp2_transport_params_default(&tparams);
-  tparams.original_dcid = hd.dcid;
+  tparams.original_dcid         = hd.dcid;
   tparams.original_dcid_present = 1;
-  ngtcp2_settings settings = {0};
+  ngtcp2_settings settings      = {0};
   ngtcp2_settings_default(&settings);
   settings.initial_ts = now;
   // settings.log_printf = tcp2_log_printf;
@@ -1791,18 +1791,18 @@ static int tcp2_accept(Tcp2Ctx* ctx, const ngtcp2_path* path, Bytes pkt,
 
 static ngtcp2_addr tcp2_ipv4(const char* host, u16 port,
                              ngtcp2_sockaddr_union* addru) {
-  ngtcp2_addr addr = {&addru->sa, sizeof(addru->in)};
+  ngtcp2_addr addr     = {&addru->sa, sizeof(addru->in)};
   addru->in.sin_family = AF_INET;
-  addru->in.sin_port = port;
+  addru->in.sin_port   = port;
   inet_pton(AF_INET, host, &addru->in.sin_addr);
   return addr;
 }
 
 static ngtcp2_addr tcp2_ipv6(const char* host, u16 port,
                              ngtcp2_sockaddr_union* addru) {
-  ngtcp2_addr addr = {&addru->sa, sizeof(addru->in6)};
+  ngtcp2_addr addr     = {&addru->sa, sizeof(addru->in6)};
   addru->in.sin_family = AF_INET6;
-  addru->in.sin_port = port;
+  addru->in.sin_port   = port;
   inet_pton(AF_INET6, host, &addru->in6.sin6_addr);
   return addr;
 }
@@ -1843,16 +1843,16 @@ static int demo_tcp2(int argc, char** argv) {
   u64 now = tcp2_current_time();
 
   // Client connect
-  Bytes pkt_connect;
+  Bytes       pkt_connect;
   ngtcp2_path client_path = {.local = client_addr, .remote = server_addr};
-  Tcp2Ctx client_ctx;
+  Tcp2Ctx     client_ctx;
   CHECK_TCP2(
       tcp2_connect(&client_ctx, &client_path, &pkt_connect, 0, alloc, now));
 
   // Server reply
-  now = tcp2_current_time();
-  Tcp2Ctx server_ctx = {0};
-  Bytes pkt_connect_reply;
+  now                    = tcp2_current_time();
+  Tcp2Ctx     server_ctx = {0};
+  Bytes       pkt_connect_reply;
   ngtcp2_path server_path = {.local = server_addr, .remote = client_addr};
   LOG("receiving packet");
   CHECK_TCP2(tcp2_accept(&server_ctx, &server_path, pkt_connect,
@@ -1897,11 +1897,11 @@ static int demo_tcp2(int argc, char** argv) {
   // Let's try a connection migration
   now = tcp2_current_time();
   ngtcp2_sockaddr_union client_addru_new;
-  ngtcp2_addr client_addr_new =
+  ngtcp2_addr           client_addr_new =
       tcp2_ipv4(TCP2_LOCALHOST, 2223, &client_addru_new);
-  ngtcp2_path client_path_new = {.local = client_addr_new,
+  ngtcp2_path client_path_new = {.local  = client_addr_new,
                                  .remote = server_addr};
-  ngtcp2_path server_path_new = {.local = server_addr,
+  ngtcp2_path server_path_new = {.local  = server_addr,
                                  .remote = client_addr_new};
   CHECK_TCP2(
       ngtcp2_conn_initiate_migration(client_ctx.conn, &client_path_new, now));
@@ -1938,7 +1938,7 @@ static int demo_tcp2(int argc, char** argv) {
   now = tcp2_current_time();
   CHECK_TCP2(ngtcp2_conn_read_pkt(server_ctx.conn, &server_path_new, 0,
                                   msg2.buf, msg2.len, now));
-  now = tcp2_current_time();
+  now      = tcp2_current_time();
   msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
   CHECK_TCP2(tcp2_outgoing_process(&server_ctx, &msg2, now, 0));
 
@@ -1950,11 +1950,11 @@ static int demo_tcp2(int argc, char** argv) {
   Tcp2ZeroRTT zerortt = client_ctx.zerortt;
 
   // Close the connection
-  now = tcp2_current_time();
-  msg2.len = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
+  now                = tcp2_current_time();
+  msg2.len           = NGTCP2_MAX_UDP_PAYLOAD_SIZE;
   ngtcp2_ccerr ccerr = {0};
-  ccerr.type = NGTCP2_CCERR_TYPE_APPLICATION;
-  ngtcp2_ssize sz = ngtcp2_conn_write_connection_close(
+  ccerr.type         = NGTCP2_CCERR_TYPE_APPLICATION;
+  ngtcp2_ssize sz    = ngtcp2_conn_write_connection_close(
       client_ctx.conn, &client_path_new, 0, msg2.buf, msg2.len, &ccerr, now);
   CHECK_TCP2(sz);
   msg2.len = sz;
@@ -1972,7 +1972,7 @@ static int demo_tcp2(int argc, char** argv) {
 
   // Attempt a 0-RTT data send
   LOG("0rtt send");
-  now = tcp2_current_time();
+  now          = tcp2_current_time();
   zerortt.data = Str("zero!");
   CHECK_TCP2(tcp2_connect(&client_ctx, &client_path, &pkt_connect, &zerortt,
                           alloc, now));
@@ -2014,7 +2014,7 @@ static int demo_time(int argc, char** argv) {
 static int demo_opts(int argc, char** argv) {
   struct optparse options;
   optparse_init(&options, argv);
-  int option;
+  int                  option;
   struct optparse_long longopts[] =       //
       {{"help", 'h', OPTPARSE_NONE},      //
        {"port", 'p', OPTPARSE_REQUIRED},  //
@@ -2041,8 +2041,8 @@ static int demo_opts(int argc, char** argv) {
 }
 
 typedef struct {
-  int argc;
-  char** argv;
+  int       argc;
+  char**    argv;
   Allocator allocator;
 } MainCoroCtx;
 
@@ -2071,7 +2071,7 @@ static void coro_exit(int code) { mco_push(mco_running(), &code, 1); }
 static void main_coro(mco_coro* co) {
   MainCoroCtx* ctx = (MainCoroCtx*)mco_get_user_data(co);
 
-  int argc = ctx->argc;
+  int    argc = ctx->argc;
   char** argv = ctx->argv;
 
   for (usize i = 0; i < (ARRAY_LEN(commands) - 1) && argc > 1; ++i) {
@@ -2085,11 +2085,11 @@ static void main_coro(mco_coro* co) {
 }
 
 #define MAIN_STACK_SIZE 1 << 22  // 4MiB
-#define STACK_ALIGN 4096
+#define STACK_ALIGN     4096
 
 static void* mco_alloc(size_t size, void* udata) {
   MainCoroCtx* ctx = udata;
-  Bytes stack;
+  Bytes        stack;
   CHECK0(allocator_alloc(ctx->allocator, &stack, MAIN_STACK_SIZE, STACK_ALIGN));
   return stack.buf;
 }
@@ -2113,12 +2113,12 @@ int main(int argc, char** argv) {
   uv_loop_init(loop);
 
   // coro init
-  MainCoroCtx ctx = {argc, argv, al};
-  mco_desc desc = mco_desc_init(main_coro, MAIN_STACK_SIZE);
+  MainCoroCtx ctx     = {argc, argv, al};
+  mco_desc    desc    = mco_desc_init(main_coro, MAIN_STACK_SIZE);
   desc.allocator_data = &ctx;
-  desc.alloc_cb = mco_alloc;
-  desc.dealloc_cb = mco_dealloc;
-  desc.user_data = &ctx;
+  desc.alloc_cb       = mco_alloc;
+  desc.dealloc_cb     = mco_dealloc;
+  desc.user_data      = &ctx;
   mco_coro* co;
   CHECK(mco_create(&co, &desc) == MCO_SUCCESS);
 

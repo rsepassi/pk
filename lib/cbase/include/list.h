@@ -4,24 +4,24 @@
 #include "stdtypes.h"
 
 typedef struct {
-  Bytes data;
-  usize len;
-  usize cap;
+  Bytes     data;
+  usize     len;
+  usize     cap;
   Allocator alloc;
-  usize elsz;
-  usize elalign;
+  usize     elsz;
+  usize     elalign;
 } List;
 
 #define List_init(l, T, a, n) list_init(l, sizeof(T), _Alignof(T), a, n)
-#define List_get(l, T, i) ((T*)list_get(l, i))
+#define List_get(l, T, i)     ((T*)list_get(l, i))
 
 static inline int list_init(List* ctx, usize elsz, usize elalign,
                             Allocator alloc, usize cap) {
-  ctx->data = BytesZero;
-  ctx->len = 0;
-  ctx->cap = cap;
-  ctx->alloc = alloc;
-  ctx->elsz = elsz;
+  ctx->data    = BytesZero;
+  ctx->len     = 0;
+  ctx->cap     = cap;
+  ctx->alloc   = alloc;
+  ctx->elsz    = elsz;
   ctx->elalign = elalign;
   if (cap) {
     if (allocator_alloc(alloc, &ctx->data, elsz * cap, elalign))

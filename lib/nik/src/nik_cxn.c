@@ -4,12 +4,12 @@
 
 #define JITTER_MS 334
 
-#define MS_PER_SEC 1000
-#define REKEY_AFTER_MS (NIK_LIMIT_REKEY_AFTER_SECS * MS_PER_SEC)
+#define MS_PER_SEC       1000
+#define REKEY_AFTER_MS   (NIK_LIMIT_REKEY_AFTER_SECS * MS_PER_SEC)
 #define REKEY_ATTEMPT_MS (NIK_LIMIT_REKEY_ATTEMPT_SECS * MS_PER_SEC)
 #define REKEY_TIMEOUT_MS (NIK_LIMIT_REKEY_TIMEOUT_SECS * MS_PER_SEC)
-#define KEEPALIVE_MS (NIK_LIMIT_KEEPALIVE_TIMEOUT_SECS * MS_PER_SEC)
-#define REJECT_MS (NIK_LIMIT_REJECT_AFTER_SECS * MS_PER_SEC)
+#define KEEPALIVE_MS     (NIK_LIMIT_KEEPALIVE_TIMEOUT_SECS * MS_PER_SEC)
+#define REJECT_MS        (NIK_LIMIT_REJECT_AFTER_SECS * MS_PER_SEC)
 
 typedef struct {
   u64 keepalive;
@@ -36,7 +36,7 @@ static inline NIK_Cxn_Status outgoingq_enq(NIK_Cxn* cxn, Bytes payload) {
 static inline Bytes outgoingq_deq(NIK_Cxn* cxn) {
   if (cxn->outgoing_head == cxn->outgoing_next)
     return BytesZero;
-  Bytes out = cxn->outgoing[cxn->outgoing_head];
+  Bytes out                         = cxn->outgoing[cxn->outgoing_head];
   cxn->outgoing[cxn->outgoing_head] = BytesZero;
   cxn->outgoing_head = (cxn->outgoing_head + 1) % NIK_LIMIT_MAX_OUTGOING;
   return out;
@@ -115,8 +115,8 @@ void timer_delays(NIK_Cxn* cxn, u64 now, TimerDelays* delays) {
 static void handshake_success(NIK_Cxn* cxn, u64 now) {
   DLOG("cxn=%p key rotating", cxn);
   // prev <- current <- next
-  cxn->prev = cxn->current;
-  cxn->current = cxn->next;
+  cxn->prev               = cxn->current;
+  cxn->current            = cxn->next;
   cxn->current_start_time = now;
 
   // Reset the key rotation state machine to Null.
@@ -155,7 +155,7 @@ static void handshake_init_wait(NIK_Cxn* cxn, u64 now) {
   u64 throttle =
       deadline_delay(now, cxn->last_handshake_init_time, REKEY_TIMEOUT_MS);
   cxn->handshake.initiator.handshake_start_time = now + jitter + throttle;
-  cxn->handshake_state = NIK_CxnHState_I_StartWait;
+  cxn->handshake_state                          = NIK_CxnHState_I_StartWait;
 }
 
 static void handshake_respond_checked(NIK_Cxn* cxn, NIK_Handshake* state,
@@ -183,7 +183,7 @@ static void handshake_respond(NIK_Cxn* cxn, Bytes msg, u64 now) {
   if (msg.len != sizeof(NIK_HandshakeMsg1))
     return;
   NIK_HandshakeMsg1* msg1 = (NIK_HandshakeMsg1*)msg.buf;
-  NIK_Handshake handshake;
+  NIK_Handshake      handshake;
   if (nik_handshake_init_check(&handshake, cxn->keys, msg1))
     return;
   handshake_respond_checked(cxn, &handshake, msg1, now);
@@ -208,7 +208,7 @@ static void handshake_init_send(NIK_Cxn* cxn, Bytes* msg, u64 now) {
   msg->buf = malloc(msg->len);
   memcpy(msg->buf, &cxn->handshake.initiator.msg, msg->len);
   cxn->last_handshake_init_time = now;
-  cxn->handshake_state = NIK_CxnHState_I_R2IWait;
+  cxn->handshake_state          = NIK_CxnHState_I_R2IWait;
 }
 
 static void handshake_response_send(NIK_Cxn* cxn, Bytes* msg) {
@@ -231,10 +231,10 @@ static NIK_Cxn_Status keepalive_send(NIK_Cxn* cxn, Bytes* msg) {
 
 static void cxn_init(NIK_Cxn* cxn, NIK_Keys keys, NIK_CxnCb cb,
                      void* userdata) {
-  *cxn = (NIK_Cxn){0};
+  *cxn      = (NIK_Cxn){0};
   cxn->keys = keys;
   randombytes_buf((u8*)&cxn->id, sizeof(cxn->id));
-  cxn->cb = cb;
+  cxn->cb       = cb;
   cxn->userdata = userdata;
   STATIC_CHECK(NIK_LIMIT_MAX_OUTGOING >= 2);
 }
@@ -246,12 +246,12 @@ static void cxn_expire(NIK_Cxn* cxn) {
   sodium_memzero(&cxn->prev, sizeof(cxn->prev));
   sodium_memzero(&cxn->next, sizeof(cxn->next));
   cxn->current_start_time = 0;
-  cxn->prev_start_time = 0;
-  cxn->next_start_time = 0;
-  cxn->handshake_state = 0;
+  cxn->prev_start_time    = 0;
+  cxn->next_start_time    = 0;
+  cxn->handshake_state    = 0;
   sodium_memzero(&cxn->handshake, sizeof(cxn->handshake));
-  cxn->last_send_time = 0;
-  cxn->last_recv_time = 0;
+  cxn->last_send_time           = 0;
+  cxn->last_recv_time           = 0;
   cxn->last_keepalive_send_time = 0;
   cxn->last_keepalive_recv_time = 0;
   cxn->last_handshake_init_time = 0;
@@ -468,8 +468,8 @@ NIK_Cxn_Status nik_cxn_outgoing(NIK_Cxn* cxn, Bytes* msg, u64 now) {
   if (!payload.buf)
     return 0;
 
-  msg->len = nik_sendmsg_sz(payload.len);
-  msg->buf = malloc(msg->len);
+  msg->len          = nik_sendmsg_sz(payload.len);
+  msg->buf          = malloc(msg->len);
   NIK_Status status = nik_msg_send(&cxn->current, payload, *msg);
   if (status != NIK_OK) {
     error(cxn, Str("unable to encrypt payload"));

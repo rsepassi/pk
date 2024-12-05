@@ -17,14 +17,14 @@ static void timer_cb(uv_timer_t* handle) { CO_DONE((co_wait_t*)handle->data); }
 
 static void udp_send_cb(uv_udp_send_t* req, int status) {
   co_wait_t* wait = (co_wait_t*)req->data;
-  wait->data = &status;
+  wait->data      = &status;
   CO_DONE(wait);
 }
 
 ssize_t uvco_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path) {
   co_wait_t wait = {mco_running(), 0, 0};
-  req->data = &wait;
-  ssize_t rc = uv_fs_stat(loop, req, path, fs_cb);
+  req->data      = &wait;
+  ssize_t rc     = uv_fs_stat(loop, req, path, fs_cb);
   if (rc != 0)
     return rc;
   CO_AWAIT(&wait);
@@ -33,7 +33,7 @@ ssize_t uvco_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path) {
 
 int uvco_fs_mkdir(uv_loop_t* loop, const char* path, int mode) {
   co_wait_t wait = {mco_running(), 0, 0};
-  uv_fs_t req;
+  uv_fs_t   req;
   req.data = &wait;
   if (uv_fs_mkdir(loop, &req, path, mode, fs_cb) != 0)
     return 1;
@@ -43,11 +43,11 @@ int uvco_fs_mkdir(uv_loop_t* loop, const char* path, int mode) {
 }
 
 void uvco_sleep(uv_loop_t* loop, u64 ms) {
-  co_wait_t wait = {mco_running(), 0, 0};
+  co_wait_t   wait  = {mco_running(), 0, 0};
   uv_timer_t* timer = malloc(sizeof(uv_timer_t));
   uv_timer_init(loop, timer);
   timer->data = &wait;
-  int rc = uv_timer_start(timer, timer_cb, ms, 0);
+  int rc      = uv_timer_start(timer, timer_cb, ms, 0);
   CHECK0(rc);
   CO_AWAIT(&wait);
   uv_close((uv_handle_t*)timer, del_handle_cb);
@@ -55,7 +55,7 @@ void uvco_sleep(uv_loop_t* loop, u64 ms) {
 
 int uvco_udp_send(uv_udp_t* handle, const uv_buf_t bufs[], unsigned int nbufs,
                   const struct sockaddr* addr) {
-  co_wait_t wait = {mco_running(), 0, 0};
+  co_wait_t     wait = {mco_running(), 0, 0};
   uv_udp_send_t req;
   req.data = &wait;
   CHECK0(uv_udp_send(&req, handle, bufs, nbufs, addr, udp_send_cb));
@@ -66,17 +66,17 @@ int uvco_udp_send(uv_udp_t* handle, const uv_buf_t bufs[], unsigned int nbufs,
 
 int uvco_fs_open(uv_loop_t* loop, const char* path, int flags, int mode,
                  uv_file* fd) {
-  int rc = 1;
+  int       rc   = 1;
   co_wait_t wait = {mco_running(), 0, 0};
-  uv_fs_t* req = malloc(sizeof(uv_fs_t));
-  req->data = &wait;
+  uv_fs_t*  req  = malloc(sizeof(uv_fs_t));
+  req->data      = &wait;
   if (uv_fs_open(loop, req, path, flags, mode, fs_cb))
     goto end;
   CO_AWAIT(&wait);
   if (req->result < 0)
     goto end;
   *fd = (uv_file)req->result;
-  rc = 0;
+  rc  = 0;
 end:
   uv_fs_req_cleanup(req);
   free(req);
@@ -85,18 +85,18 @@ end:
 
 int uvco_fs_write(uv_loop_t* loop, uv_file fd, Bytes contents, usize offset,
                   usize* nwritten) {
-  int rc = 1;
+  int       rc   = 1;
   co_wait_t wait = {mco_running(), 0, 0};
-  uv_fs_t* req = malloc(sizeof(uv_fs_t));
-  req->data = &wait;
-  uv_buf_t buf = uv_buf_init((char*)contents.buf, (u32)contents.len);
+  uv_fs_t*  req  = malloc(sizeof(uv_fs_t));
+  req->data      = &wait;
+  uv_buf_t buf   = uv_buf_init((char*)contents.buf, (u32)contents.len);
   if (uv_fs_write(loop, req, fd, &buf, 1, offset, fs_cb))
     goto end;
   CO_AWAIT(&wait);
   if (req->result < 0)
     goto end;
   *nwritten = req->result;
-  rc = 0;
+  rc        = 0;
 end:
   uv_fs_req_cleanup(req);
   free(req);
@@ -105,8 +105,8 @@ end:
 
 void uvco_fs_close(uv_loop_t* loop, uv_file fd) {
   co_wait_t wait = {mco_running(), 0, 0};
-  uv_fs_t* req = malloc(sizeof(uv_fs_t));
-  req->data = &wait;
+  uv_fs_t*  req  = malloc(sizeof(uv_fs_t));
+  req->data      = &wait;
   if (uv_fs_close(loop, req, fd, fs_cb))
     goto end;
   CO_AWAIT(&wait);
@@ -130,18 +130,18 @@ int uvco_fs_writefull(uv_loop_t* loop, const char* path, Bytes contents) {
 }
 
 int uvco_fs_read(uv_loop_t* loop, uv_file fd, Bytes* contents, usize offset) {
-  int rc = 1;
+  int       rc   = 1;
   co_wait_t wait = {mco_running(), 0, 0};
-  uv_fs_t* req = malloc(sizeof(uv_fs_t));
-  req->data = &wait;
-  uv_buf_t buf = uv_buf_init((char*)contents->buf, (u32)contents->len);
+  uv_fs_t*  req  = malloc(sizeof(uv_fs_t));
+  req->data      = &wait;
+  uv_buf_t buf   = uv_buf_init((char*)contents->buf, (u32)contents->len);
   if (uv_fs_read(loop, req, fd, &buf, 1, offset, fs_cb))
     goto end;
   CO_AWAIT(&wait);
   if (req->result < 0)
     goto end;
   contents->len = req->result;
-  rc = 0;
+  rc            = 0;
 end:
   uv_fs_req_cleanup(req);
   free(req);
@@ -155,7 +155,7 @@ static void udp_alloc_cb(uv_handle_t* handle, size_t suggested_size,
   (void)handle;
   (void)suggested_size;
   static u8 static_buf[UDP_MAXSZ] = {0};
-  *buf = uv_buf_init((void*)static_buf, UDP_MAXSZ);
+  *buf                            = uv_buf_init((void*)static_buf, UDP_MAXSZ);
 }
 
 static void udp_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
@@ -174,9 +174,9 @@ static void udp_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
     return;
   }
 
-  ctx->nread = nread;
-  ctx->addr = addr;
-  ctx->buf = *buf;
+  ctx->nread   = nread;
+  ctx->addr    = addr;
+  ctx->buf     = *buf;
   ctx->buf.len = nread >= 0 ? (UV_BUFLEN_T)nread : 0;
 
   if (ctx->buf.len > UDP_MAXSZ)
@@ -186,16 +186,16 @@ static void udp_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
 }
 
 int uvco_udp_recv_start(UvcoUdpRecv* recv, uv_udp_t* handle) {
-  *recv = (UvcoUdpRecv){0};
-  recv->udp = handle;
+  *recv           = (UvcoUdpRecv){0};
+  recv->udp       = handle;
   recv->udp->data = recv;
   return uv_udp_recv_start(recv->udp, udp_alloc_cb, udp_recv_cb);
 }
 
 ssize_t uvco_udp_recv_next(UvcoUdpRecv* recv) {
   recv->udp->data = recv;
-  recv->wait = (co_wait_t){0};
-  recv->wait.co = mco_running();
+  recv->wait      = (co_wait_t){0};
+  recv->wait.co   = mco_running();
 
   CO_AWAIT(&recv->wait);
 

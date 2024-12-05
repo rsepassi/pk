@@ -22,12 +22,12 @@
     *(x) = ntohl(tmp);                                                         \
   } while (0)
 
-#define PK_PK_HEADER "Ed25519 "
-#define PK_PK_FOOTER "\n"
-#define PK_SK_HEADER "-----BEGIN PK PRIVATE KEY-----\n"
-#define PK_SK_FOOTER "\n-----END PK PRIVATE KEY-----\n"
-#define PK_SKP_HEADER "-----BEGIN PROTECTED PK PRIVATE KEY-----\n"
-#define PK_SKP_FOOTER "\n-----END PROTECTED PK PRIVATE KEY-----\n"
+#define PK_PK_HEADER      "Ed25519 "
+#define PK_PK_FOOTER      "\n"
+#define PK_SK_HEADER      "-----BEGIN PK PRIVATE KEY-----\n"
+#define PK_SK_FOOTER      "\n-----END PK PRIVATE KEY-----\n"
+#define PK_SKP_HEADER     "-----BEGIN PROTECTED PK PRIVATE KEY-----\n"
+#define PK_SKP_FOOTER     "\n-----END PROTECTED PK PRIVATE KEY-----\n"
 #define OPENSSH_SK_HEADER "-----BEGIN OPENSSH PRIVATE KEY-----"
 #define OPENSSH_SK_FOOTER "-----END OPENSSH PRIVATE KEY-----"
 
@@ -175,13 +175,13 @@ int keyio_keydecode(Str buf, Str password, CryptoSignSK* out) {
   if (buf.len > sizeof(PK_SK_HEADER) &&
       memcmp(buf.buf, PK_SK_HEADER, STRLEN(PK_SK_HEADER)) == 0) {
     protected = false;
-    ctr_sz = sizeof(PK_SK_HEADER) + sizeof(PK_SK_FOOTER) - 2;
-    hdr_sz = STRLEN(PK_SK_HEADER);
+    ctr_sz    = sizeof(PK_SK_HEADER) + sizeof(PK_SK_FOOTER) - 2;
+    hdr_sz    = STRLEN(PK_SK_HEADER);
   } else if (buf.len > sizeof(PK_SKP_HEADER) &&
              memcmp(buf.buf, PK_SKP_HEADER, STRLEN(PK_SKP_HEADER)) == 0) {
     protected = true;
-    ctr_sz = sizeof(PK_SKP_HEADER) + sizeof(PK_SKP_FOOTER) - 2;
-    hdr_sz = STRLEN(PK_SKP_HEADER);
+    ctr_sz    = sizeof(PK_SKP_HEADER) + sizeof(PK_SKP_FOOTER) - 2;
+    hdr_sz    = STRLEN(PK_SKP_HEADER);
   } else {
     // Unrecognized header
     return 1;
@@ -193,7 +193,7 @@ int keyio_keydecode(Str buf, Str password, CryptoSignSK* out) {
 
   // The base64-encoded contents
   usize contents_len = buf.len - ctr_sz;
-  Bytes contents = {contents_len, buf.buf + hdr_sz};
+  Bytes contents     = {contents_len, buf.buf + hdr_sz};
 
   if (!protected) {
     // If not password-protected, decode directly into the output
@@ -214,7 +214,7 @@ int keyio_keydecode(Str buf, Str password, CryptoSignSK* out) {
     return 1;
 
   // Decode
-  u8 dec[crypto_pwhash_SALTBYTES + crypto_secretbox_NONCEBYTES +
+  u8    dec[crypto_pwhash_SALTBYTES + crypto_secretbox_NONCEBYTES +
          crypto_secretbox_MACBYTES + crypto_sign_ed25519_SECRETKEYBYTES];
   usize len;
   if (sodium_base642bin(dec, sizeof(dec), (char*)contents.buf, contents.len, 0,
@@ -224,8 +224,8 @@ int keyio_keydecode(Str buf, Str password, CryptoSignSK* out) {
     return 1;
 
   // Parse the parts
-  u8* salt = dec;
-  u8* nonce = salt + crypto_pwhash_SALTBYTES;
+  u8* salt   = dec;
+  u8* nonce  = salt + crypto_pwhash_SALTBYTES;
   u8* cipher = nonce + crypto_secretbox_NONCEBYTES;
   u8* pk = cipher + crypto_secretbox_MACBYTES + crypto_sign_ed25519_SEEDBYTES;
 
@@ -233,7 +233,7 @@ int keyio_keydecode(Str buf, Str password, CryptoSignSK* out) {
   out->pk = *(CryptoSignPK*)pk;
 
   // Derive the key
-  u8 key[crypto_secretbox_KEYBYTES];
+  u8  key[crypto_secretbox_KEYBYTES];
   u64 opslimit = crypto_pwhash_OPSLIMIT_INTERACTIVE;
   u64 memlimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
   if (crypto_pwhash(key, sizeof(key), (char*)password.buf, password.len, salt,
@@ -266,7 +266,7 @@ int keyio_keydecode_openssh_pub(Str str, CryptoSignPK* out) {
     return 1;
 
   usize start = strlen(expected_prefix);
-  usize i = start;
+  usize i     = start;
   for (; i < str.len; ++i) {
     char c = str.buf[i];
     if (c == 0 || c == ' ' || c == '\n' || c == '\t')
@@ -291,10 +291,10 @@ int keyio_keydecode_openssh(Str str, CryptoSignSK* out) {
   if (sz > 512)
     return 1;
 
-  u8 stripped_buf[512];
-  u8 decoded_buf[512];
+  u8    stripped_buf[512];
+  u8    decoded_buf[512];
   Bytes stripped = BytesArray(stripped_buf);
-  Bytes decoded = BytesArray(decoded_buf);
+  Bytes decoded  = BytesArray(decoded_buf);
 
   {
     stripped.len = 0;
@@ -362,8 +362,8 @@ int keyio_keydecode_openssh(Str str, CryptoSignSK* out) {
   //     32-bit length, comment  # comment string
   //     padding bytes 0x010203  # pad to blocksize (see notes below)
 
-  usize i = 0;
-  u32 len = 0;
+  usize i   = 0;
+  u32   len = 0;
 
   // "openssh-key-v1"0x00    # NULL-terminated "Auth Magic" string
   while (i < decoded.len && decoded.buf[i] != 0)

@@ -33,12 +33,12 @@ static int alloc_libc(void* ctx, Bytes* buf, usize sz, usize align) {
 
   if (exists) {
     // Reallocation
-    Header* h = ((void*)buf->buf - sizeof(Header));
-    usize hoffset = (void*)h - (void*)h->full.buf;
+    Header* h       = ((void*)buf->buf - sizeof(Header));
+    usize   hoffset = (void*)h - (void*)h->full.buf;
 
-    Header hnew = {0};
-    void* ptr = h->full.buf;
-    ptr = realloc(ptr, fullsz);
+    Header hnew   = {0};
+    void*  ptr    = h->full.buf;
+    ptr           = realloc(ptr, fullsz);
     hnew.full.buf = ptr;
     hnew.full.len = fullsz;
 
@@ -50,24 +50,24 @@ static int alloc_libc(void* ctx, Bytes* buf, usize sz, usize align) {
       memmove(ptr, hnew.full.buf + hoffset + sizeof(Header), MIN(sz, buf->len));
 
     *(Header*)(ptr - sizeof(Header)) = hnew;
-    buf->buf = ptr;
-    buf->len = sz;
+    buf->buf                         = ptr;
+    buf->len                         = sz;
 
     return 0;
   } else {
     // Fresh allocation
     Header h = {0};
 
-    void* ptr = NULL;
-    ptr = realloc(ptr, fullsz);
+    void* ptr  = NULL;
+    ptr        = realloc(ptr, fullsz);
     h.full.buf = ptr;
     h.full.len = fullsz;
 
     ptr += sizeof(Header);
-    ptr = CBASE_ALIGN(ptr, align);
+    ptr                              = CBASE_ALIGN(ptr, align);
     *(Header*)(ptr - sizeof(Header)) = h;
-    buf->buf = ptr;
-    buf->len = sz;
+    buf->buf                         = ptr;
+    buf->len                         = sz;
     return 0;
   }
 }
@@ -80,7 +80,7 @@ static int bump_alloc(void* ctx, Bytes* buf, usize sz, usize align) {
     return 0;
 
   u8* start = &b->mem.buf[b->i];
-  u8* p = start;
+  u8* p     = start;
   if (align > 1)
     p = ALIGN(p, align);
   usize align_offset = p - start;
@@ -97,11 +97,11 @@ static int bump_alloc(void* ctx, Bytes* buf, usize sz, usize align) {
 
 static void bump_deinit(void* ctx) {
   BumpAllocator* b = ctx;
-  b->i = 0;
+  b->i             = 0;
 }
 
 Allocator allocator_bump(BumpAllocator* b, Bytes mem) {
-  *b = (BumpAllocator){0};
+  *b     = (BumpAllocator){0};
   b->mem = mem;
   return (Allocator){b, bump_alloc, bump_deinit};
 }

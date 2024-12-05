@@ -22,15 +22,15 @@
 
 #ifndef CONTAINER_OF
 #define CONTAINER_OF(ptr, type, member)                                        \
-  ((type*)((char*)(ptr) - offsetof(type, member)))
+  ((type*)((char*)(ptr)-offsetof(type, member)))
 #endif
 
 #define CBASE_ALIGN(x, align)                                                  \
-  ((void*)(((uintptr_t)(x) + ((align) - 1)) & -(align)))
+  ((void*)(((uintptr_t)(x) + ((align)-1)) & -(align)))
 #define CBASE_ALIGNB(x, align) ((void*)((uintptr_t)(x) & -(align)))
 
 #ifndef ALIGN
-#define ALIGN CBASE_ALIGN
+#define ALIGN  CBASE_ALIGN
 #define ALIGNB CBASE_ALIGNB
 #endif
 
@@ -39,20 +39,20 @@
 #endif
 
 #ifndef IS_ODD
-#define IS_ODD(x) ((x) & 1)
+#define IS_ODD(x)  ((x) & 1)
 #define IS_EVEN(x) (!IS_ODD((x)))
 #endif
 
 #ifndef BIT
-#define BIT(x) (1 << (x))
-#define BITGET(x, i) (((x) >> (i)) & 1)
-#define BITSET(x, i) ((x) | (__typeof__(x))(1 << (i)))
-#define BITCLEAR(x, i) ((x) & (~(1 << (i))))
+#define BIT(x)          (1 << (x))
+#define BITGET(x, i)    (((x) >> (i)) & 1)
+#define BITSET(x, i)    ((x) | (__typeof__(x))(1 << (i)))
+#define BITCLEAR(x, i)  ((x) & (~(1 << (i))))
 #define BITTOGGLE(x, i) ((x) ^ (1 << (i)))
 #endif
 
 #ifndef CONCAT
-#define CONCAT(a, b) a##b
+#define CONCAT(a, b)       a##b
 #define UNIQUENAME(prefix) CONCAT(prefix, __LINE__)
 #endif
 

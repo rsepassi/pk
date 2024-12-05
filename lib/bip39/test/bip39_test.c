@@ -18,7 +18,7 @@ static void test_bip39(void) {
   }
 
   // Verify that it decodes properly
-  u8 dec_buf[sizeof(key_buf)];
+  u8    dec_buf[sizeof(key_buf)];
   Bytes dec = {sizeof(key_buf), dec_buf};
   CHECK0(bip39_mnemonic_bytes(word_idxs, ARRAY_LEN(word_idxs), &dec));
   CHECK0(memcmp(key_buf, dec_buf, sizeof(key_buf)));
@@ -31,7 +31,7 @@ static void test_bip39(void) {
 
 void setUp(void) {}
 void tearDown(void) {}
-int main(void) {
+int  main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_bip39);
   return UNITY_END();

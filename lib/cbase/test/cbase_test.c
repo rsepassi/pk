@@ -51,7 +51,7 @@ void test_macros(void) {
   }
 
   {
-    u8 x[128];
+    u8  x[128];
     u8* y = CBASE_ALIGN(&x[7], 64);
     CHECK(y > &x[7]);
     CHECK((uptr)y % 64 == 0);
@@ -88,12 +88,12 @@ void test_macros(void) {
 
     u8 els[4];
     memcpy(els, &x, 4);
-    u8 tmp = els[0];
-    els[0] = els[3];
-    els[3] = tmp;
-    tmp = els[1];
-    els[1] = els[2];
-    els[2] = tmp;
+    u8 tmp   = els[0];
+    els[0]   = els[3];
+    els[3]   = tmp;
+    tmp      = els[1];
+    els[1]   = els[2];
+    els[2]   = tmp;
     u32 swap = *(u32*)els;
     CHECK(SWAP_U32(x) == swap);
   }
@@ -116,11 +116,11 @@ void test_str(void) {
 
   {
     char* cstr = "hello world";
-    Str a = str_from_c(cstr);
+    Str   a    = str_from_c(cstr);
     CHECK(a.len == strlen(cstr));
     CHECK((uptr)a.buf == (uptr)cstr);
 
-    char buf[32];
+    char  buf[32];
     Bytes b = BytesArray(buf);
     bytes_copy(&b, a);
 
@@ -209,9 +209,9 @@ void test_containers(void) {
     }
 
     {
-      i32 x = 0;
+      i32           x = 0;
       HashmapStatus s;
-      HashmapIter it = hashmap_put(&a, &x, &s);
+      HashmapIter   it = hashmap_put(&a, &x, &s);
       CHECK(it != hashmap_end(&a));
       CHECK(s == HashmapStatus_New);
       CHECK(a.n_buckets == 4);
@@ -220,14 +220,14 @@ void test_containers(void) {
 
     for (i32 i = 1; i < 10; ++i) {
       HashmapStatus s;
-      HashmapIter it = hashmap_put(&a, &i, &s);
+      HashmapIter   it = hashmap_put(&a, &i, &s);
       CHECK(it != hashmap_end(&a));
       CHECK(s == HashmapStatus_New);
       *(i32*)hashmap_val(&a, it) = 10 - i;
     }
 
     {
-      i32 n = 0;
+      i32  n = 0;
       i32* x;
       i32* y;
       hashmap_foreach(&a, x, y, {
@@ -242,7 +242,7 @@ void test_containers(void) {
 
   {
     typedef struct {
-      i64 x;
+      i64  x;
       Node n;
     } A;
 
@@ -255,7 +255,7 @@ void test_containers(void) {
     }
 
     Node* n;
-    i64 i = 0;
+    i64   i = 0;
     while ((n = q_deq(&q))) {
       CHECK(CONTAINER_OF(n, A, n)->x == i + 22);
       ++i;

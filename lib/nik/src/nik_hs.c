@@ -3,8 +3,8 @@
 #include "log.h"
 
 #define NIK_IDENTIFIER "nik pk v1"
-#define NIK_KDF_CTX "pkikkdf1"
-#define NIK_HSZ 32
+#define NIK_KDF_CTX    "pkikkdf1"
+#define NIK_HSZ        32
 
 #define NIK_INITIATOR 1
 #define NIK_RESPONDER 0
@@ -49,13 +49,13 @@ static NIK_Status nik_dh_kdf2(u8* T1, u8* T2, const u8* C, const CryptoKxPK* pk,
 }
 
 static NIK_Status nik_handshake1_check(NIK_HandshakeState* state,
-                                       const NIK_Keys keys,
-                                       NIK_Handshake1* hs) {
-  *state = (NIK_HandshakeState){0};
+                                       const NIK_Keys      keys,
+                                       NIK_Handshake1*     hs) {
+  *state      = (NIK_HandshakeState){0};
   state->keys = keys;
 
   // Responder static key
-  CryptoKxPK* S_pub_r = keys.pk;
+  CryptoKxPK* S_pub_r  = keys.pk;
   CryptoKxSK* S_priv_r = keys.sk;
 
   // Initiator static key
@@ -113,7 +113,7 @@ static NIK_Status nik_handshake1_check(NIK_HandshakeState* state,
   u8 key_decrypt[sizeof(*S_pub_i)];
   {
     // Snapshot H_i
-    u8 H[NIK_HSZ];
+    u8                               H[NIK_HSZ];
     crypto_generichash_blake2b_state H_i;
     memcpy(&H_i, H_state, sizeof(crypto_generichash_blake2b_state));
     if (crypto_generichash_blake2b_final(&H_i, H, sizeof(H)))
@@ -145,18 +145,18 @@ static NIK_Status nik_handshake1_check(NIK_HandshakeState* state,
   return 0;
 }
 
-static NIK_Status nik_handshake2(NIK_HandshakeState* state,
+static NIK_Status nik_handshake2(NIK_HandshakeState*   state,
                                  const NIK_Handshake1* hs1,
-                                 NIK_Handshake2* hs2) {
+                                 NIK_Handshake2*       hs2) {
   *hs2 = (NIK_Handshake2){0};
 
-  u8* C_r = state->chaining_key;
+  u8*                               C_r     = state->chaining_key;
   crypto_generichash_blake2b_state* H_state = &state->hash;
 
   // (E_priv_r, E_pub_r) := DH-Generate()
   // hs.ephemeral := E_pub_r
   CryptoKxSK* E_priv_r = &state->ephemeral_sk;
-  CryptoKxPK* E_pub_r = &state->ephemeral_pk;
+  CryptoKxPK* E_pub_r  = &state->ephemeral_pk;
   if (crypto_kx_keypair((u8*)E_pub_r, (u8*)E_priv_r))
     return 1;
   memcpy(&hs2->ephemeral, E_pub_r, sizeof(*E_pub_r));
@@ -193,8 +193,8 @@ static NIK_Status nik_handshake2(NIK_HandshakeState* state,
   u8 T[NIK_HSZ] = {0};
   u8 K[NIK_HSZ] = {0};
   {
-    u8 Q0[sizeof(*state->keys.psk)] = {0};
-    u8* Q = Q0;
+    u8  Q0[sizeof(*state->keys.psk)] = {0};
+    u8* Q                            = Q0;
     if (state->keys.psk)
       Q = (u8*)state->keys.psk;
 
@@ -220,7 +220,7 @@ static NIK_Status nik_handshake2(NIK_HandshakeState* state,
   // hs.tag := AEAD(K, 0, e, H_r)
   {
     // Snapshot H_r
-    u8 H[NIK_HSZ];
+    u8                               H[NIK_HSZ];
     crypto_generichash_blake2b_state H_r = *H_state;
     if (crypto_generichash_blake2b_final(&H_r, H, sizeof(H)))
       return 1;
@@ -241,14 +241,14 @@ static NIK_Status nik_handshake2(NIK_HandshakeState* state,
   return 0;
 }
 
-static NIK_Status nik_handshake2_check(NIK_HandshakeState* state,
+static NIK_Status nik_handshake2_check(NIK_HandshakeState*   state,
                                        const NIK_Handshake2* hs) {
   // No changes are made to the state unless the message checks out
   u8 C_copy[NIK_CHAIN_SZ];
   memcpy(C_copy, state->chaining_key, NIK_CHAIN_SZ);
   crypto_generichash_blake2b_state H_copy = state->hash;
 
-  u8* C_i = C_copy;
+  u8*                               C_i     = C_copy;
   crypto_generichash_blake2b_state* H_state = &H_copy;
 
   // C_i := KDF_1(C_i, E_pub_r)
@@ -283,8 +283,8 @@ static NIK_Status nik_handshake2_check(NIK_HandshakeState* state,
   u8 K[NIK_HSZ] = {0};
   {
     STATIC_CHECK(crypto_secretbox_KEYBYTES == NIK_HSZ);
-    u8 Q0[crypto_secretbox_KEYBYTES] = {0};
-    u8* Q = Q0;
+    u8  Q0[crypto_secretbox_KEYBYTES] = {0};
+    u8* Q                             = Q0;
     if (state->keys.psk)
       Q = (u8*)state->keys.psk;
 
@@ -310,7 +310,7 @@ static NIK_Status nik_handshake2_check(NIK_HandshakeState* state,
   // hs.tag := AEAD(K, 0, e, H_i)
   {
     // Snapshot H_i
-    u8 H[NIK_HSZ];
+    u8                               H[NIK_HSZ];
     crypto_generichash_blake2b_state H_i = *H_state;
     if (crypto_generichash_blake2b_final(&H_i, H, sizeof(H)))
       return 1;
@@ -335,7 +335,7 @@ static NIK_Status nik_handshake2_check(NIK_HandshakeState* state,
 }
 
 static NIK_Status nik_handshake_done(NIK_HandshakeState* state,
-                                     NIK_SharedSecret* secret) {
+                                     NIK_SharedSecret*   secret) {
   if (crypto_generichash_blake2b((u8*)&secret->secret, sizeof(secret->secret),
                                  state->chaining_key,
                                  sizeof(state->chaining_key), 0, 0))
@@ -349,12 +349,12 @@ static NIK_Status nik_handshake_done(NIK_HandshakeState* state,
 NIK_Status nik_handshake_start(NIK_HandshakeState* state, const NIK_Keys keys,
                                NIK_Handshake1* hs) {
   *state = (NIK_HandshakeState){0};
-  *hs = (NIK_Handshake1){0};
+  *hs    = (NIK_Handshake1){0};
 
   state->keys = keys;
 
   // Initiator static key
-  CryptoKxPK* S_pub_i = keys.pk;
+  CryptoKxPK* S_pub_i  = keys.pk;
   CryptoKxSK* S_priv_i = keys.sk;
 
   // Responder static key
@@ -386,7 +386,7 @@ NIK_Status nik_handshake_start(NIK_HandshakeState* state, const NIK_Keys keys,
   // (E_priv_i, E_pub_i) := DH-Generate()
   // hs.ephemeral := E_pub_i
   CryptoKxSK* E_priv_i = &state->ephemeral_sk;
-  CryptoKxPK* E_pub_i = &state->ephemeral_pk;
+  CryptoKxPK* E_pub_i  = &state->ephemeral_pk;
   if (crypto_kx_keypair((u8*)E_pub_i, (u8*)E_priv_i))
     return 1;
   memcpy(&hs->ephemeral, E_pub_i, sizeof(*E_pub_i));
@@ -418,7 +418,7 @@ NIK_Status nik_handshake_start(NIK_HandshakeState* state, const NIK_Keys keys,
   // hs.static := AEAD(K, 0, S_pub_i, H_i)
   {
     // Snapshot H_i
-    u8 H[NIK_HSZ];
+    u8                               H[NIK_HSZ];
     crypto_generichash_blake2b_state H_i;
     memcpy(&H_i, H_state, sizeof(crypto_generichash_blake2b_state));
     if (crypto_generichash_blake2b_final(&H_i, H, sizeof(H)))
@@ -445,10 +445,10 @@ NIK_Status nik_handshake_start(NIK_HandshakeState* state, const NIK_Keys keys,
 }
 
 NIK_Status nik_handshake_responder_finish(NIK_HandshakeState* state,
-                                          const NIK_Keys keys,
-                                          NIK_Handshake1* hs1,
-                                          NIK_Handshake2* hs2,
-                                          NIK_SharedSecret* secret) {
+                                          const NIK_Keys      keys,
+                                          NIK_Handshake1*     hs1,
+                                          NIK_Handshake2*     hs2,
+                                          NIK_SharedSecret*   secret) {
   int rc = 0;
   if ((rc = nik_handshake1_check(state, keys, hs1)))
     return rc;
@@ -459,9 +459,9 @@ NIK_Status nik_handshake_responder_finish(NIK_HandshakeState* state,
   return 0;
 }
 
-NIK_Status nik_handshake_finish(NIK_HandshakeState* state,
+NIK_Status nik_handshake_finish(NIK_HandshakeState*   state,
                                 const NIK_Handshake2* hs,
-                                NIK_SharedSecret* secret) {
+                                NIK_SharedSecret*     secret) {
   int rc = 0;
   if ((rc = nik_handshake2_check(state, hs)))
     return rc;

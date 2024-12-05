@@ -34,7 +34,7 @@ X3DH_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B,
 
   // Alice ephemeral keypair
   CryptoKxPK* eph_key = &header->ephemeral;
-  CryptoKxSK A_eph_sk;
+  CryptoKxSK  A_eph_sk;
   if (crypto_kx_keypair((u8*)eph_key, (u8*)&A_eph_sk))
     return 1;
 
@@ -88,7 +88,7 @@ X3DH_Status x3dh_init(const X3DHKeys* A, const X3DHPublic* B,
     return 1;
 
   // Fill and encrypt header
-  header->identity = *A->pub.identity;
+  header->identity  = *A->pub.identity;
   header->shortterm = B->shortterm;
   {
     u8 zero_nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
@@ -134,7 +134,7 @@ X3DH_Status x3dh_init_recv(const X3DHKeys* B, const X3DHHeader* A, X3DH* out) {
     return 1;
 
   // Derive header key KDF(DH2 || DH3)
-  CryptoKxTx header_key;
+  CryptoKxTx                   header_key;
   crypto_kdf_hkdf_sha256_state kdf_state;
   crypto_kdf_hkdf_sha256_state kdf0_state;
   if (crypto_kdf_hkdf_sha256_extract_init(&kdf0_state, (u8*)X3DH_KDF_CTX,

@@ -10,5 +10,5 @@
 
 void stdtime_rfc3339_utc_format(Bytes ts, i64 epoch_secs);
 void stdtime_rfc3339_utc_now(Bytes ts);
-int stdtime_rfc3339_utc_parse(Bytes ts, i64* epoch_secs);
-i64 stdtime_now_secs(void);
+int  stdtime_rfc3339_utc_parse(Bytes ts, i64* epoch_secs);
+i64  stdtime_now_secs(void);

@@ -6,7 +6,7 @@ void test_stdtime(void) {
   i64 now = stdtime_now_secs();
 
   char ts_buf[STDTIME_RFC3339_UTC_TIMESTAMP_LEN];
-  Str ts = BytesArray(ts_buf);
+  Str  ts = BytesArray(ts_buf);
 
   stdtime_rfc3339_utc_format(ts, now);
   LOGS(ts);

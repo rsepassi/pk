@@ -10,7 +10,7 @@ void test_b64(void) {
   Str enc;
   {
     usize sz = base64_encoded_maxlen(a.len);
-    enc = (Str){sz, malloc(sz)};
+    enc      = (Str){sz, malloc(sz)};
   }
 
   CHECK0(base64_encode(a, &enc));
@@ -19,7 +19,7 @@ void test_b64(void) {
   Str dec;
   {
     usize sz = base64_decoded_maxlen(enc.len);
-    dec = (Str){sz, malloc(sz)};
+    dec      = (Str){sz, malloc(sz)};
   }
 
   CHECK0(base64_decode(enc, &dec));
@@ -33,7 +33,7 @@ void test_b64(void) {
 
 void setUp(void) {}
 void tearDown(void) {}
-int main(void) {
+int  main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_b64);
   return UNITY_END();

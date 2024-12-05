@@ -7,7 +7,7 @@
 #include "qrcodegen.h"
 #include "uv.h"
 
-#define PEER2_URL "https://peer2.xyz"
+#define PEER2_URL           "https://peer2.xyz"
 #define PEER2_URLKEY_PREFIX (PEER2_URL "?key=")
 
 // =============================================================================
@@ -23,14 +23,14 @@ typedef struct __attribute__((packed)) {
 #define PkUserKeys_KEY "keys"
 typedef struct __attribute__((packed)) {
   CryptoKxPK pk;
-  CryptoSig sig;
+  CryptoSig  sig;
 } PkUserShorttermPub;
 typedef struct __attribute__((packed)) {
-  CryptoKxSK sk;
+  CryptoKxSK         sk;
   PkUserShorttermPub pk;
 } PkUserShortterm;
 typedef struct __attribute__((packed)) {
-  CryptoSignSK sign;
+  CryptoSignSK    sign;
   PkUserShortterm shortterm;
 } PkUserKeys;
 
@@ -66,9 +66,9 @@ static int PkUserKeys_init(PkUserKeys* keys) {
 // =============================================================================
 
 typedef struct {
-  Str datadir;
+  Str      datadir;
   MDB_env* kv;
-  MDB_dbi db;
+  MDB_dbi  db;
 } Pk;
 Pk* pk_ctx = 0;
 
@@ -79,7 +79,7 @@ static int pk_user_exists(char* name, bool* exists) {
   *exists = false;
 
   MDB_txn* txn;
-  MDB_dbi userdb;
+  MDB_dbi  userdb;
   if (mdb_txn_begin(pk_ctx->kv, 0, MDB_RDONLY, &txn))
     return 1;
   int rc = mdb_dbi_open(txn, name, 0, &userdb);
@@ -108,7 +108,7 @@ static int pk_user_new(int argc, char** argv) {
   if (PkUserName_init(&username, name))
     return 1;
 
-  MDB_dbi userdb;
+  MDB_dbi  userdb;
   MDB_txn* txn;
 
   bool exists;
@@ -126,7 +126,7 @@ static int pk_user_new(int argc, char** argv) {
     {
       if (mdb_dbi_open(txn, name, MDB_CREATE, &userdb))
         goto err1;
-      Str key = Str(PkUserKeys_KEY);
+      Str        key = Str(PkUserKeys_KEY);
       PkUserKeys user_keys;
       if (PkUserKeys_init(&user_keys))
         goto err2;
@@ -137,9 +137,9 @@ static int pk_user_new(int argc, char** argv) {
 
     // Add the user to the meta db
     {
-      Bytes key = BytesObj(username);
-      u8 val_data[1] = {1};
-      MDB_val val = {1, val_data};
+      Bytes   key         = BytesObj(username);
+      u8      val_data[1] = {1};
+      MDB_val val         = {1, val_data};
       if (mdb_put(txn, pk_ctx->db, (void*)&key, &val, 0))
         goto err2;
     }
@@ -167,7 +167,7 @@ static int pk_user_show(int argc, char** argv) {
     return 1;
   }
 
-  char* name = argv[1];
+  char*      name = argv[1];
   PkUserName username;
   if (PkUserName_init(&username, name))
     return 1;
@@ -192,7 +192,7 @@ static int pk_user_show(int argc, char** argv) {
   fprintf(stdout, "\n");
 
   // b58check public key
-  char b58_buf[sizeof(*pk) * 2];
+  char  b58_buf[sizeof(*pk) * 2];
   usize b58_len = sizeof(b58_buf);
   if (!b58check_enc(b58_buf, &b58_len, 1, pk, sizeof(*pk)))
     return 1;
@@ -244,7 +244,7 @@ static int pk_user_del(int argc, char** argv) {
     return 1;
   }
 
-  char* name = argv[1];
+  char*      name = argv[1];
   PkUserName username;
   if (PkUserName_init(&username, name))
     return 1;
@@ -332,7 +332,7 @@ static const CliCmd pk_commands[] = {
 };
 
 static int pk_datadir_setup(Pk* ctx) {
-  char kv_path_buf[1024];
+  char  kv_path_buf[1024];
   char* kv_path = kv_path_buf;
   if (ctx->datadir.len > 1000)
     goto err0;
@@ -415,9 +415,9 @@ int pk_main(int argc, char** argv) {
   }
 
   LOGS(datadir);
-  Pk ctx = {0};
+  Pk ctx      = {0};
   ctx.datadir = datadir;
-  pk_ctx = &ctx;
+  pk_ctx      = &ctx;
   CHECK0(pk_datadir_setup(&ctx));
   return cli_dispatch("pk", pk_commands, argc, argv);
 }

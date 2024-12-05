@@ -21,9 +21,9 @@
     fprintf(fd, fmt "\n", ##__VA_ARGS__);                                      \
   } while (0)
 
-#define LOG(fmt, ...) LOG_(I, stderr, fmt, ##__VA_ARGS__)
+#define LOG(fmt, ...)  LOG_(I, stderr, fmt, ##__VA_ARGS__)
 #define LOGE(fmt, ...) LOG_(E, stderr, fmt, ##__VA_ARGS__)
-#define LOGS(s) LOG("%s=%.*s", #s, (int)(s).len, (s).buf)
+#define LOGS(s)        LOG("%s=%.*s", #s, (int)(s).len, (s).buf)
 #define LOGB(b)                                                                \
   do {                                                                         \
     LOG_PREFIX_(I, stderr);                                                    \
@@ -38,7 +38,7 @@
       exit(1);                                                                 \
     }                                                                          \
   } while (0)
-#define CHECK(x, ...) CHECK_(x, "" __VA_ARGS__)
+#define CHECK(x, ...)  CHECK_(x, "" __VA_ARGS__)
 #define CHECK0(x, ...) CHECK(((x) == 0), ##__VA_ARGS__)
 
 #ifdef DEBUG
@@ -52,4 +52,4 @@
 #define STATIC_CHECK(x) (void)sizeof(char[(x) ? 1 : -1])
 
 char* log_get_current_time();
-void fprinthex(FILE* stream, char* tag, Bytes b);
+void  fprinthex(FILE* stream, char* tag, Bytes b);

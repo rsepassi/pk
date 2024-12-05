@@ -20,7 +20,7 @@ char* log_get_current_time() {
            st.wMinute, st.wSecond, st.wMilliseconds);
 #else
   struct timeval tv;
-  struct tm* tm_info;
+  struct tm*     tm_info;
 
   gettimeofday(&tv, NULL);
   tm_info = gmtime(&tv.tv_sec);

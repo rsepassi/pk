@@ -16,13 +16,13 @@ typedef enum {
 
 typedef struct {
   const CryptoSignPK* identity;
-  CryptoKxPK shortterm;
-  CryptoSig shortterm_sig;
+  CryptoKxPK          shortterm;
+  CryptoSig           shortterm_sig;
 } X3DHPublic;
 
 typedef struct {
   const CryptoSignSK* identity;
-  CryptoKxSK shortterm;
+  CryptoKxSK          shortterm;
 } X3DHSecret;
 
 typedef struct {
@@ -31,15 +31,15 @@ typedef struct {
 } X3DHKeys;
 
 typedef struct __attribute__((packed)) {
-  CryptoKxPK ephemeral;   // plaintext
-  CryptoSignPK identity;  // encrypted
-  CryptoKxPK shortterm;   // encrypted
+  CryptoKxPK    ephemeral;  // plaintext
+  CryptoSignPK  identity;   // encrypted
+  CryptoKxPK    shortterm;  // encrypted
   CryptoAuthTag header_tag;
 } X3DHHeader;
 
 typedef struct {
   CryptoKxTx key;
-  u8 ad[sizeof(CryptoSignPK) * 2];
+  u8         ad[sizeof(CryptoSignPK) * 2];
 } X3DH;
 
 // Creates X3DHKeys suitable for X3DH given an identity key

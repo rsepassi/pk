@@ -33,9 +33,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define __ac_flag(flag, i) (*(i32*)(list_get(&flag, i >> 4)))
-#define __ac_isempty(flag, i) ((__ac_flag(flag, i) >> ((i & 0xfU) << 1)) & 2)
-#define __ac_isdel(flag, i) ((__ac_flag(flag, i) >> ((i & 0xfU) << 1)) & 1)
+#define __ac_flag(flag, i)     (*(i32*)(list_get(&flag, i >> 4)))
+#define __ac_isempty(flag, i)  ((__ac_flag(flag, i) >> ((i & 0xfU) << 1)) & 2)
+#define __ac_isdel(flag, i)    ((__ac_flag(flag, i) >> ((i & 0xfU) << 1)) & 1)
 #define __ac_iseither(flag, i) ((__ac_flag(flag, i) >> ((i & 0xfU) << 1)) & 3)
 #define __ac_set_isdel_false(flag, i)                                          \
   (__ac_flag(flag, i) &= ~(1ul << ((i & 0xfU) << 1)))
@@ -56,22 +56,22 @@ typedef i32 (*HashFunc)(void* key);
 typedef bool (*HashEqFunc)(void* a, void* b);
 
 typedef struct {
-  i32 n_buckets;
-  i32 size;
-  i32 n_occupied;
-  i32 upper_bound;
-  List keys;   // KeyT
-  List vals;   // ValT
-  List flags;  // i32
-  Allocator allocator;
-  HashFunc hashfn;
+  i32        n_buckets;
+  i32        size;
+  i32        n_occupied;
+  i32        upper_bound;
+  List       keys;   // KeyT
+  List       vals;   // ValT
+  List       flags;  // i32
+  Allocator  allocator;
+  HashFunc   hashfn;
   HashEqFunc hasheq;
-  bool is_map;
+  bool       is_map;
 } Hashmap;
 
 typedef Hashmap Hashset;
-typedef i32 HashmapIter;
-typedef i32 HashsetIter;
+typedef i32     HashmapIter;
+typedef i32     HashsetIter;
 
 static inline int hashmap_init(Hashmap* h, usize keysz, usize keyalign,
                                usize valsz, usize valalign, HashFunc hfn,
@@ -84,9 +84,9 @@ static inline int hashmap_init(Hashmap* h, usize keysz, usize keyalign,
   if (List_init(&h->flags, i32, a, 0))
     return -1;
   h->allocator = a;
-  h->hashfn = hfn;
-  h->hasheq = heq;
-  h->is_map = true;
+  h->hashfn    = hfn;
+  h->hasheq    = heq;
+  h->is_map    = true;
   return 0;
 }
 
@@ -98,9 +98,9 @@ static inline int hashset_init(Hashmap* h, usize keysz, usize keyalign,
   if (List_init(&h->flags, i32, a, 0))
     return -1;
   h->allocator = a;
-  h->hashfn = hfn;
-  h->hasheq = heq;
-  h->is_map = false;
+  h->hashfn    = hfn;
+  h->hasheq    = heq;
+  h->is_map    = false;
   return 0;
 }
 
@@ -115,7 +115,7 @@ static inline void hashmap_clear(Hashmap* h) {
   if (!h->flags.len)
     return;
   memset(h->flags.data.buf, 0xaa, h->flags.data.len);
-  h->size = 0;
+  h->size       = 0;
   h->n_occupied = 0;
 }
 
@@ -124,8 +124,8 @@ static inline HashmapIter hashmap_get(Hashmap* h, void* key) {
     return 0;
 
   i32 mask = h->n_buckets - 1;
-  i32 k = h->hashfn(key);
-  i32 i = k & mask;
+  i32 k    = h->hashfn(key);
+  i32 i    = k & mask;
   i32 last = i;
   i32 step = 0;
   while (!__ac_isempty(h->flags, i) &&
@@ -190,14 +190,14 @@ static inline int hashmap_resize(Hashmap* h, i32 new_n_buckets) {
     if (__ac_iseither(h->flags, j) == 0) {
       u8 keybuf[h->keys.elsz];
       memcpy(keybuf, list_get(&h->keys, j), h->keys.elsz);
-      u8 valbuf[h->vals.elsz];
+      u8  valbuf[h->vals.elsz];
       i32 new_mask = new_n_buckets - 1;
       if (h->is_map)
         memcpy(valbuf, list_get(&h->vals, j), h->vals.elsz);
       __ac_set_isdel_true(h->flags, j);
       while (1) {  // kick-out process; sort of like in Cuckoo hashing
-        i32 k = h->hashfn(keybuf);
-        i32 i = k & new_mask;
+        i32 k    = h->hashfn(keybuf);
+        i32 i    = k & new_mask;
         i32 step = 0;
         while (!__ac_isempty(new_flags, i))
           i = (i + (++step)) & new_mask;
@@ -236,9 +236,9 @@ static inline int hashmap_resize(Hashmap* h, i32 new_n_buckets) {
   }
 
   list_deinit(&h->flags);  // free the working space
-  h->flags = new_flags;
-  h->n_buckets = new_n_buckets;
-  h->n_occupied = h->size;
+  h->flags       = new_flags;
+  h->n_buckets   = new_n_buckets;
+  h->n_occupied  = h->size;
   h->upper_bound = (i32)(h->n_buckets * __ac_HASH_UPPER + 0.5);
 
   return 0;
@@ -274,8 +274,8 @@ static inline HashmapIter hashmap_put(Hashmap* h, void* key,
   {
     i32 mask = h->n_buckets - 1;
     i32 site = h->n_buckets;
-    i32 k = h->hashfn(key);
-    i32 i = k & mask;
+    i32 k    = h->hashfn(key);
+    i32 i    = k & mask;
     i32 step = 0;
 
     if (__ac_isempty(h->flags, i))
@@ -321,10 +321,10 @@ static inline HashmapIter hashmap_put(Hashmap* h, void* key,
 }
 
 #define hashmap_exist(h, x) (!__ac_iseither((h)->flags, (x)))
-#define hashmap_key(h, x) (list_get(&(h)->keys, x))
-#define hashmap_val(h, x) (list_get(&(h)->vals, x))
-#define hashmap_begin(h) ((i32)0)
-#define hashmap_end(h) ((h)->n_buckets)
+#define hashmap_key(h, x)   (list_get(&(h)->keys, x))
+#define hashmap_val(h, x)   (list_get(&(h)->vals, x))
+#define hashmap_begin(h)    ((i32)0)
+#define hashmap_end(h)      ((h)->n_buckets)
 
 #define hashmap_foreach(h, kvar, vvar, code)                                   \
   do {                                                                         \
@@ -349,16 +349,16 @@ static inline HashmapIter hashmap_put(Hashmap* h, void* key,
 
 // Hash functions
 
-#define Hashfn(fn) __hashfn_wrap_##fn
+#define Hashfn(fn)   __hashfn_wrap_##fn
 #define Hasheqfn(fn) __hasheq_wrap_##fn
 #define DECLARE_Hashfn(T, hfn, heq)                                            \
-  static inline i32 Hashfn(hfn)(void* key) { return hfn(*(T*)(key)); }         \
+  static inline i32  Hashfn(hfn)(void* key) { return hfn(*(T*)(key)); }        \
   static inline bool Hasheqfn(heq)(void* a, void* b) {                         \
     return heq(*(T*)(a), *(T*)(b));                                            \
   }                                                                            \
   struct __dummy##hfn {}
 
-static inline i32 hashmap_hash_i32(i32 i) { return i; }
+static inline i32  hashmap_hash_i32(i32 i) { return i; }
 static inline bool hashmap_hash_i32_eq(i32 a, i32 b) { return a == b; }
 DECLARE_Hashfn(i32, hashmap_hash_i32, hashmap_hash_i32_eq);
 

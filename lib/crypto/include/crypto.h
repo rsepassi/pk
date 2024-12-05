@@ -12,7 +12,7 @@ typedef struct {
 } CryptoSignPK;
 typedef struct __attribute__((packed)) {
   CryptoSignSeed seed;
-  CryptoSignPK pk;
+  CryptoSignPK   pk;
 } CryptoSignSK;
 typedef struct {
   CryptoSignPK pk;

@@ -42,12 +42,12 @@ typedef enum {
 
 // NIK Handshake Message 1: Initiator to Responder
 typedef struct __attribute__((packed)) {
-  u8 type;
-  u8 reserved[3];
-  u32 sender;
+  u8             type;
+  u8             reserved[3];
+  u32            sender;
   NIK_Handshake1 hs;
   struct {
-    u8 timestamp[NIK_TIMESTAMP_SZ];
+    u8            timestamp[NIK_TIMESTAMP_SZ];
     CryptoAuthTag tag;
   } timestamp;
   CryptoAuthTag mac1;
@@ -55,23 +55,23 @@ typedef struct __attribute__((packed)) {
 
 // NIK Handshake Message 2: Responder to Initiator
 typedef struct __attribute__((packed)) {
-  u8 type;
-  u8 reserved[3];
-  u32 sender;
-  u32 receiver;
+  u8             type;
+  u8             reserved[3];
+  u32            sender;
+  u32            receiver;
   NIK_Handshake2 hs;
-  CryptoAuthTag empty;
-  CryptoAuthTag mac1;
+  CryptoAuthTag  empty;
+  CryptoAuthTag  mac1;
 } NIK_HandshakeMsg2;
 
 // NIK data message with an authenticated length
 typedef struct __attribute__((packed)) {
-  u8 type;
-  u8 reserved[3];
-  u32 receiver;
-  u64 counter;
+  u8            type;
+  u8            reserved[3];
+  u32           receiver;
+  u64           counter;
   CryptoAuthTag tag;
-  u16 payload_len;
+  u16           payload_len;
 } NIK_MsgHeader;
 
 // A window of the last 64 messages are kept to prevent replays
@@ -79,27 +79,27 @@ typedef u64 CounterHistory;
 
 // Per-peer transfer session state
 typedef struct {
-  CryptoKxTx send;
-  CryptoKxTx recv;
-  u64 send_n;
-  u64 recv_n;
-  u32 local_idx;
-  u32 remote_idx;
-  u64 counter_max;
+  CryptoKxTx     send;
+  CryptoKxTx     recv;
+  u64            send_n;
+  u64            recv_n;
+  u32            local_idx;
+  u32            remote_idx;
+  u64            counter_max;
   CounterHistory counter_history;
-  bool isinitiator;
+  bool           isinitiator;
 } NIK_Session;
 
 // State of an ongoing handshake
 typedef struct {
-  NIK_Keys keys;
-  u32 local_idx;
-  u32 remote_idx;
-  u8 chaining_key[NIK_CHAIN_SZ];
+  NIK_Keys                         keys;
+  u32                              local_idx;
+  u32                              remote_idx;
+  u8                               chaining_key[NIK_CHAIN_SZ];
   crypto_generichash_blake2b_state hash;
-  CryptoKxSK ephemeral_sk;
-  CryptoKxPK ephemeral_pk;
-  bool initiator;
+  CryptoKxSK                       ephemeral_sk;
+  CryptoKxPK                       ephemeral_pk;
+  bool                             initiator;
 } NIK_Handshake;
 
 // Low-level handshake API
@@ -112,9 +112,9 @@ NIK_Status nik_handshake_init_check(NIK_Handshake* state, const NIK_Keys keys,
 // Responder sends HandshakeMsg2
 NIK_Status nik_handshake_respond(NIK_Handshake* state, u32 local_idx,
                                  const NIK_HandshakeMsg1* msg1,
-                                 NIK_HandshakeMsg2* msg2);
+                                 NIK_HandshakeMsg2*       msg2);
 // Initiator checks HandshakeMsg2
-NIK_Status nik_handshake_respond_check(NIK_Handshake* state,
+NIK_Status nik_handshake_respond_check(NIK_Handshake*           state,
                                        const NIK_HandshakeMsg2* msg);
 // Handshake is finalized and Session populated
 NIK_Status nik_handshake_final(NIK_Handshake* state, NIK_Session* session);

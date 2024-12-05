@@ -10,7 +10,7 @@ static int alloc(void* ctx, Bytes* buf, usize sz, usize align) {
     *buf = BytesZero;
   } else {
     void* ptr = buf->len == 0 ? NULL : buf->buf;
-    buf->buf = mi_realloc_aligned(ptr, sz, align);
+    buf->buf  = mi_realloc_aligned(ptr, sz, align);
     if (buf->buf == NULL)
       return 1;
     buf->len = sz;

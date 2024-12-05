@@ -10,8 +10,8 @@ typedef AllocStatus (*AllocFn)(void* ctx, Bytes* buf, usize sz, usize align);
 typedef void (*AllocDeinitFn)(void* ctx);
 
 typedef struct {
-  void* ctx;
-  AllocFn alloc;
+  void*         ctx;
+  AllocFn       alloc;
   AllocDeinitFn deinit;
 } Allocator;
 
@@ -41,7 +41,7 @@ static inline AllocStatus allocator_realloc(Allocator a, Bytes* b, usize sz,
 
 static inline AllocStatus allocator_create(Allocator a, void** p, usize sz,
                                            usize align) {
-  Bytes b;
+  Bytes       b;
   AllocStatus rc = allocator_alloc(a, &b, sz, align);
   memset(b.buf, 0, b.len);
   *p = b.buf;

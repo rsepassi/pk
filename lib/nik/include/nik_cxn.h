@@ -7,12 +7,12 @@
 #define NIK_LIMIT_MAX_OUTGOING 128
 #endif
 
-#define NIK_LIMIT_REKEY_AFTER_MESSAGES (UINT64_C(1) << 60)
-#define NIK_LIMIT_REJECT_AFTER_MESSAGES (UINT64_MAX - (UINT64_C(1) << 13) - 1)
-#define NIK_LIMIT_REKEY_AFTER_SECS 120
-#define NIK_LIMIT_REJECT_AFTER_SECS 180
-#define NIK_LIMIT_REKEY_ATTEMPT_SECS 90
-#define NIK_LIMIT_REKEY_TIMEOUT_SECS 5
+#define NIK_LIMIT_REKEY_AFTER_MESSAGES   (UINT64_C(1) << 60)
+#define NIK_LIMIT_REJECT_AFTER_MESSAGES  (UINT64_MAX - (UINT64_C(1) << 13) - 1)
+#define NIK_LIMIT_REKEY_AFTER_SECS       120
+#define NIK_LIMIT_REJECT_AFTER_SECS      180
+#define NIK_LIMIT_REKEY_ATTEMPT_SECS     90
+#define NIK_LIMIT_REKEY_TIMEOUT_SECS     5
 #define NIK_LIMIT_KEEPALIVE_TIMEOUT_SECS 10
 // Unused, but kept if/when we implement cookies.
 // #define NIK_LIMIT_COOKIE_REFRESH_SECS 120
@@ -67,9 +67,9 @@ typedef enum {
 typedef struct {
   union {
     struct {
-      NIK_Handshake handshake;
+      NIK_Handshake     handshake;
       NIK_HandshakeMsg1 msg;
-      u64 handshake_start_time;
+      u64               handshake_start_time;
     } initiator;
     struct {
       NIK_HandshakeMsg2 msg;
@@ -95,19 +95,19 @@ struct NIK_Cxn_s {
 
   // User callback and context
   NIK_CxnCb cb;
-  void* userdata;
+  void*     userdata;
 
   // Active sessions
   NIK_Session current;
   NIK_Session prev;
   NIK_Session next;
-  u64 current_start_time;
-  u64 prev_start_time;
-  u64 next_start_time;
+  u64         current_start_time;
+  u64         prev_start_time;
+  u64         next_start_time;
 
   // In-flight handshake state
   NIK_Cxn_HandshakeState handshake_state;
-  NIK_Cxn_Handshake handshake;
+  NIK_Cxn_Handshake      handshake;
 
   // Max observed time
   u64 maxtime;

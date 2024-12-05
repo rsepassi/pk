@@ -11,11 +11,11 @@ void test_nik(void) {
 
   // Alice initiates a handshake
   NIK_HandshakeState alice_state;
-  NIK_Handshake1 hs1;
+  NIK_Handshake1     hs1;
   {
     NIK_Keys alice_keys = {
-        .pk = &alice.pk,
-        .sk = &alice.sk,
+        .pk  = &alice.pk,
+        .sk  = &alice.sk,
         .bob = &bob.pk,
         .psk = 0,
     };
@@ -24,12 +24,12 @@ void test_nik(void) {
 
   // Bob completes the handshake and responds
   NIK_HandshakeState bob_state;
-  NIK_SharedSecret bob_secret;
-  NIK_Handshake2 hs2;
+  NIK_SharedSecret   bob_secret;
+  NIK_Handshake2     hs2;
   {
     NIK_Keys bob_keys = {
-        .pk = &bob.pk,
-        .sk = &bob.sk,
+        .pk  = &bob.pk,
+        .sk  = &bob.sk,
         .bob = &alice.pk,
         .psk = 0,
     };
@@ -42,7 +42,7 @@ void test_nik(void) {
   // Alice's state
   {
     NIK_Handshake2 bogus = {0};
-    CryptoKxSK sk;
+    CryptoKxSK     sk;
     CHECK0(crypto_box_keypair((u8*)&bogus.ephemeral, (u8*)&sk));
     randombytes_buf((u8*)&bogus.tag, sizeof(bogus.tag));
     NIK_SharedSecret s;

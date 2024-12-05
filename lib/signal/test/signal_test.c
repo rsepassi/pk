@@ -7,8 +7,8 @@ static int drat_a_to_b(DratState* A_state, DratState* B_state, Str msg,
                        Str ad) {
   // A sends
   DratHeader header;
-  usize cipher_sz = drat_encrypt_len(msg.len);
-  Bytes cipher = {cipher_sz, malloc(cipher_sz)};
+  usize      cipher_sz = drat_encrypt_len(msg.len);
+  Bytes      cipher    = {cipher_sz, malloc(cipher_sz)};
   if (drat_encrypt(A_state, msg, ad, &header, &cipher))
     return 1;
 
@@ -36,26 +36,26 @@ static void test_drat() {
 
   // Alice initiates x3dh and double ratchet
   X3DHHeader A_header;
-  X3DH A_x;
-  DratState A_state;
+  X3DH       A_x;
+  DratState  A_state;
   {
     DratInit A_init = {
         .session_key = &A_x.key,
-        .pk = &A_sec.pub.shortterm,
-        .sk = &A_sec.sec.shortterm,
+        .pk          = &A_sec.pub.shortterm,
+        .sk          = &A_sec.sec.shortterm,
     };
     CHECK0(x3dh_init(&A_sec, &B_sec.pub, &A_header, &A_x));
     CHECK0(drat_init(&A_state, &A_init));
   }
 
   // Bob receives and initiates double ratchet
-  X3DH B_x;
+  X3DH      B_x;
   DratState B_state;
   {
     CHECK0(x3dh_init_recv(&B_sec, &A_header, &B_x));
     DratInitRecv B_init = {
         .session_key = &B_x.key,
-        .bob = &A_sec.pub.shortterm,
+        .bob         = &A_sec.pub.shortterm,
     };
     CHECK0(drat_init_recv(&B_state, &B_init));
   }
@@ -101,7 +101,7 @@ static void test_x3dh() {
   CHECK0(x3dh_keys_init(&B_keys.sk, &B_sec));
 
   // Alice derives key and sends X3DHHeader
-  X3DH A_x;
+  X3DH       A_x;
   X3DHHeader A_header;
   CHECK0(x3dh_init(&A_sec, &B_sec.pub, &A_header, &A_x));
 

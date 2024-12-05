@@ -14,7 +14,7 @@ typedef struct {
 typedef Str Bytes;
 #define BytesZero ((Bytes){0, 0})
 
-#define Str(s) ((Str){STRLEN((s)), (u8*)(s)})
+#define Str(s)      ((Str){STRLEN((s)), (u8*)(s)})
 #define Bytes(b, l) ((Str){(l), (u8*)(b)})
 
 static inline Str str_from_c(const char* buf) {
@@ -22,7 +22,7 @@ static inline Str str_from_c(const char* buf) {
 }
 
 #define BytesArray(arr) ((Bytes){sizeof(arr), (u8*)(arr)})
-#define BytesObj(obj) ((Bytes){sizeof(obj), (u8*)&(obj)})
+#define BytesObj(obj)   ((Bytes){sizeof(obj), (u8*)&(obj)})
 
 static inline bool str_eq(Str a, Str b) {
   if (a.len != b.len)

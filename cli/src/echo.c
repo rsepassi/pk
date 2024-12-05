@@ -9,8 +9,8 @@ extern uv_loop_t* loop;
 
 typedef struct {
   char ip_buf[INET6_ADDRSTRLEN];
-  Str ip;
-  int port;
+  Str  ip;
+  int  port;
 } IpStr;
 
 const void* sa_get_in_addr(const struct sockaddr* sa) {
@@ -55,7 +55,7 @@ static int IpStr_read(IpStr* out, const struct sockaddr* sa) {
 
   if (inet_ntop(sa->sa_family, addr, out->ip_buf, sizeof(out->ip_buf)) == NULL)
     return 1;
-  out->ip = Bytes(out->ip_buf, strlen(out->ip_buf));
+  out->ip   = Bytes(out->ip_buf, strlen(out->ip_buf));
   out->port = sa_get_port(sa);
   return 0;
 }
@@ -80,7 +80,7 @@ static void handle_message_co(mco_coro* co) {
 int demo_echo(int argc, char** argv) {
   struct optparse options;
   optparse_init(&options, argv);
-  int option;
+  int                  option;
   struct optparse_long longopts[] =       //
       {{"help", 'h', OPTPARSE_NONE},      //
        {"port", 'p', OPTPARSE_REQUIRED},  //

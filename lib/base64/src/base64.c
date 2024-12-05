@@ -35,12 +35,12 @@ Base64_Status base64_encode(Bytes in, Bytes* out) {
     return 0;
 
   usize nchunks = in.len / 3;
-  u64 j = 0;
+  u64   j       = 0;
   for (u64 i = 0; i < nchunks; ++i) {
     u64 k = i * 3;
-    u8 a = in.buf[k];
-    u8 b = in.buf[k + 1];
-    u8 c = in.buf[k + 2];
+    u8  a = in.buf[k];
+    u8  b = in.buf[k + 1];
+    u8  c = in.buf[k + 2];
 
     out->buf[j++] = b64_chars[a >> 2];
     out->buf[j++] = b64_chars[((a & 0x03) << 4) + (b >> 4)];
@@ -50,14 +50,14 @@ Base64_Status base64_encode(Bytes in, Bytes* out) {
 
   usize rem = in.len % 3;
   if (rem == 1) {
-    u8 a = in.buf[in.len - 1];
+    u8 a          = in.buf[in.len - 1];
     out->buf[j++] = b64_chars[a >> 2];
     out->buf[j++] = b64_chars[(a & 0x03) << 4];
     out->buf[j++] = PAD;
     out->buf[j++] = PAD;
   } else if (rem == 2) {
-    u8 a = in.buf[in.len - 2];
-    u8 b = in.buf[in.len - 1];
+    u8 a          = in.buf[in.len - 2];
+    u8 b          = in.buf[in.len - 1];
     out->buf[j++] = b64_chars[a >> 2];
     out->buf[j++] = b64_chars[((a & 0x03) << 4) + (b >> 4)];
     out->buf[j++] = b64_chars[(b & 0x0f) << 2];
@@ -78,17 +78,17 @@ Base64_Status base64_decode(Bytes in, Bytes* out) {
     return 0;
 
   usize nchunks = in.len / 4;
-  bool padded = in.buf[in.len - 1] == PAD;
+  bool  padded  = in.buf[in.len - 1] == PAD;
   if (padded)
     nchunks--;
 
   u64 j = 0;
   for (usize i = 0; i < nchunks; ++i) {
     u64 k = i * 4;
-    u8 a = b64_dec[in.buf[k]];
-    u8 b = b64_dec[in.buf[k + 1]];
-    u8 c = b64_dec[in.buf[k + 2]];
-    u8 d = b64_dec[in.buf[k + 3]];
+    u8  a = b64_dec[in.buf[k]];
+    u8  b = b64_dec[in.buf[k + 1]];
+    u8  c = b64_dec[in.buf[k + 2]];
+    u8  d = b64_dec[in.buf[k + 3]];
 
     out->buf[j++] = (u8)(a << 2) | ((b & 0xf0) >> 4);
     out->buf[j++] = (u8)((b & 0x0f) << 4) | ((c & 0x3c) >> 2);
@@ -96,16 +96,16 @@ Base64_Status base64_decode(Bytes in, Bytes* out) {
   }
 
   if (padded) {
-    u64 k = nchunks * 4;
+    u64   k    = nchunks * 4;
     usize npad = in.buf[in.len - 2] == PAD ? 2 : 1;
     if (npad == 2) {
-      u8 a = b64_dec[in.buf[k]];
-      u8 b = b64_dec[in.buf[k + 1]];
+      u8 a          = b64_dec[in.buf[k]];
+      u8 b          = b64_dec[in.buf[k + 1]];
       out->buf[j++] = (u8)(a << 2) | ((b & 0xf0) >> 4);
     } else if (npad == 1) {
-      u8 a = b64_dec[in.buf[k]];
-      u8 b = b64_dec[in.buf[k + 1]];
-      u8 c = b64_dec[in.buf[k + 2]];
+      u8 a          = b64_dec[in.buf[k]];
+      u8 b          = b64_dec[in.buf[k + 1]];
+      u8 c          = b64_dec[in.buf[k + 2]];
       out->buf[j++] = (u8)(a << 2) | ((b & 0xf0) >> 4);
       out->buf[j++] = ((u8)((b & 0x0f) << 4)) | ((c & 0x3c) >> 2);
     }

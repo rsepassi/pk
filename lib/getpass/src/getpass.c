@@ -9,8 +9,8 @@
 #include <windows.h>
 
 ssize_t getpass(char* pw, size_t maxlen) {
-  HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
-  DWORD mode = 0;
+  HANDLE  hStdin = GetStdHandle(STD_INPUT_HANDLE);
+  DWORD   mode   = 0;
   ssize_t nread;
 
   if (!GetConsoleMode(hStdin, &mode))
@@ -23,7 +23,7 @@ ssize_t getpass(char* pw, size_t maxlen) {
     return -1;
   }
 
-  nread = strlen(pw) - 1;
+  nread     = strlen(pw) - 1;
   pw[nread] = 0;
 
   // Print a newline since echo is disabled
@@ -38,7 +38,7 @@ ssize_t getpass(char* pw, size_t maxlen) {
 
 ssize_t getpass(char* pw, size_t maxlen) {
   struct termios old, new;
-  ssize_t nread;
+  ssize_t        nread;
 
   if (tcgetattr(0, &old) != 0)
     return -1;
@@ -54,7 +54,7 @@ ssize_t getpass(char* pw, size_t maxlen) {
     return -1;
   }
 
-  nread = strlen(pw) - 1;
+  nread     = strlen(pw) - 1;
   pw[nread] = 0;
 
   tcsetattr(0, TCSAFLUSH, &old);

@@ -4,9 +4,9 @@
 #include "log.h"
 #include "stdmacros.h"
 
-#define DRAT_KDF_ROOT "drat-kdf-root"
+#define DRAT_KDF_ROOT  "drat-kdf-root"
 #define DRAT_KDF_CHAIN "drat-kdf-chain"
-#define DRAT_AD_HSZ 32
+#define DRAT_AD_HSZ    32
 
 static Drat_Status drat_dh(CryptoKxPK* pk, CryptoKxSK* sk, CryptoKxPK* bob,
                            CryptoKxTx* dh) {
@@ -110,16 +110,16 @@ Drat_Status drat_encrypt(DratState* state, Bytes msg, Bytes ad,
 
   // state.CKs, mk = KDF_CK(state.CKs)
   CryptoKxTx mk;
-  u8 ck[DRAT_CHAIN_SZ];
+  u8         ck[DRAT_CHAIN_SZ];
   STATIC_CHECK(sizeof(ck) == sizeof(state->chain_send));
   if (drat_kdf_ck(state->chain_send, ck, &mk))
     return 1;
   memcpy(state->chain_send, ck, sizeof(ck));
 
   // header = HEADER(state.DHs, state.PN, state.Ns)
-  header->key = state->key.pk;
+  header->key     = state->key.pk;
   header->psend_n = state->psend_n;
-  header->send_n = state->send_n;
+  header->send_n  = state->send_n;
 
   // H(AD) = BLAKE2b(CONCAT(AD, header))
   u8 h_ad[DRAT_AD_HSZ];
@@ -132,7 +132,7 @@ Drat_Status drat_encrypt(DratState* state, Bytes msg, Bytes ad,
   // ENCRYPT(mk, plaintext, H(AD))
   STATIC_CHECK(sizeof(mk) == crypto_aead_chacha20poly1305_IETF_KEYBYTES);
   u8 nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
-  *(u64*)nonce = header->send_n;
+  *(u64*)nonce                                          = header->send_n;
   if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(
           cipher->buf, (u8*)&header->tag, 0, msg.buf, msg.len, h_ad,
           sizeof(h_ad), 0, nonce, (u8*)&mk))
@@ -188,8 +188,8 @@ Drat_Status drat_decrypt(DratState* ostate, const DratHeader* header,
   // we apply all updates to a copy of the session state, and only after
   // authentication do we apply it to the actual state.
   STATIC_CHECK(sizeof(DratState) < 512);  // to ensure we limit the size
-  DratState state_copy = *ostate;
-  DratState* state = &state_copy;
+  DratState  state_copy = *ostate;
+  DratState* state      = &state_copy;
 
   // Has the peer changed keys?
   // memcmp OK: public key
@@ -210,7 +210,7 @@ Drat_Status drat_decrypt(DratState* ostate, const DratHeader* header,
 
   // state.CKr, mk = KDF_CK(state.CKr)
   CryptoKxTx mk;
-  u8 ck[DRAT_CHAIN_SZ];
+  u8         ck[DRAT_CHAIN_SZ];
   STATIC_CHECK(sizeof(ck) == sizeof(state->chain_recv));
   if (drat_kdf_ck(state->chain_recv, ck, &mk))
     return 1;
@@ -226,7 +226,7 @@ Drat_Status drat_decrypt(DratState* ostate, const DratHeader* header,
 
   // DECRYPT(mk, ciphertext, H(AD))
   u8 nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES] = {0};
-  *(u64*)nonce = header->send_n;
+  *(u64*)nonce                                          = header->send_n;
   if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(
           cipher.buf, 0, cipher.buf, cipher.len, (u8*)&header->tag, h_ad,
           sizeof(h_ad), nonce, (u8*)&mk))
