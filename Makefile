@@ -1,8 +1,10 @@
 # ==============================================================================
 # VARIABLES
 # ==============================================================================
+include scripts/target.mk
 export ROOTDIR := $(CURDIR)
-export BROOT := $(ROOTDIR)/build
+export BROOT_ALL := $(ROOTDIR)/build
+export BROOT := $(BROOT_ALL)/$(TARGET)
 export BCACHE := $(ROOTDIR)/.build-cache
 export PATH := $(CURDIR)/scripts:$(PATH)
 

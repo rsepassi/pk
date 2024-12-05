@@ -14,7 +14,7 @@ DO_CURL := curl -s \
 TAG ?= make
 DID ?= $(DO_PEER2_DID)
 IMG ?= $(BDIR)/vmimage/peer2.qcow2
-SRC ?= $(BROOT)/cli/bin/cli
+SRC ?= $(BROOT_ALL)/x86_64-linux-musl/cli/bin/cli
 DST ?= /home/peer2/
 
 .PHONY: \

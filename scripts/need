@@ -3,21 +3,21 @@
 flag=$1
 shift
 
+if [ -z "$ROOTDIR" ] || [ -z "$BROOT" ]
+then
+  echo "Must specify ROOTDIR and BROOT"
+  exit 1
+fi
+
 while [ -n "$1" ]
 do
 
 dep=$1
 
-srcdir=$dep
-builddir=build/$dep
+srcdir=$ROOTDIR/$dep
+builddir=$BROOT/$dep
 
 lib=$(basename $dep)
-
-if [ -n "$ROOTDIR" ]
-then
-  srcdir=$ROOTDIR/$srcdir
-  builddir=$ROOTDIR/$builddir
-fi
 
 PKG_CONFIG_PATH="$builddir:$srcdir" \
   pkg-config \

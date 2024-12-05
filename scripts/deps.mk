@@ -3,7 +3,7 @@ include $(ROOTDIR)/scripts/bdir.mk
 DEPS_TARGET ?= deps
 
 DEPS_OK := $(BDIR)/.$(DEPS_TARGET).ok
-DEPS_BUILDS := $(addprefix $(ROOTDIR)/build/, $(addsuffix /.build, $(DEPS)))
+DEPS_BUILDS := $(addprefix $(BROOT)/, $(addsuffix /.build, $(DEPS)))
 $(DEPS_OK): $(DEPS_BUILDS)
 	mkdir -p $(dir $(DEPS_OK))
 	touch $(DEPS_OK)
@@ -12,9 +12,9 @@ $(DEPS_OK): $(DEPS_BUILDS)
 $(DEPS_TARGET): $(DEPS)
 $(DEPS):
 	$(MAKE) -C $(ROOTDIR)/$@ deps
-	mkdir -p $(ROOTDIR)/build/$@
-	touch $(ROOTDIR)/build/$@/.lock
-	flock $(ROOTDIR)/build/$@/.lock -c "$(MAKE) -C $(ROOTDIR)/$@"
+	mkdir -p $(BROOT)/$@
+	touch $(BROOT)/$@/.lock
+	flock $(BROOT)/$@/.lock -c "$(MAKE) -C $(ROOTDIR)/$@"
 
 DEPS_CLEAN := $(addsuffix -clean, $(DEPS))
 .PHONY: clean-$(DEPS_TARGET) $(DEPS_CLEAN)
