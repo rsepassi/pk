@@ -17,12 +17,12 @@ MK_ARGS := \
 LIBC := $(BDIR)/sysroot/usr/lib/libc.a
 STDC := $(BDIR)/sysroot/usr/include/stdint.h
 SRC := $(BDIR)/musl/README
-CRT := $(BDIR)/compiler-rt/lib/linux/clang_rt.crtend-x86_64.o
+CRT := $(BDIR)/compiler-rt/lib/linux/clang_rt.crtend-aarch64.o
 
 $(BDIR)/.build: $(LIBC) $(STDC) $(CRT)
 	touch $(BDIR)/.build
 
-$(CRT): lib/clang_rt.crtend-x86_64.o
+$(CRT): lib/clang_rt.crtend-aarch64.o
 	mkdir -p $(dir $@)
 	cp lib/* $(dir $@)/
 
