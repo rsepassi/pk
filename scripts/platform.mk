@@ -54,6 +54,21 @@ export PLATFORM_LDFLAGS += -target $(TARGET) `need --libs platform/linux` \
 platform:
 	$(MAKE) -C platform/linux
 
+else ifeq ($(TARGET_OS), freebsd)
+
+BSDTARGET := $(TARGET)
+ifeq ($(USE_CLANG), 1)
+	BSDTARGET := $(TARGET_ARCH)-unknown-freebsd
+endif
+
+export CFLAGS += -target $(BSDTARGET) `need --cflags platform/freebsd`
+export PLATFORM_LDFLAGS += -target $(BSDTARGET) `need --libs platform/freebsd`
+
+platform:
+	$(MAKE) -C platform/freebsd
+
 else
+
 $(error Unsupported platform $(TARGET_OS))
+
 endif

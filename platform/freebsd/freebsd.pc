@@ -1,0 +1,5 @@
+Name: FreeBSD
+Version: 14.2
+Description: FreeBSD sysroot
+Cflags: --sysroot=${build_prefix}/freebsd
+Libs: --sysroot=${build_prefix}/freebsd -lpthread

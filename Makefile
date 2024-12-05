@@ -29,8 +29,7 @@ export CFLAGS += \
 	-Wconversion -Wno-sign-conversion \
 	-Wno-unused-command-line-argument \
 	-fPIE \
-	-fstack-protector-strong -fstack-clash-protection \
-	-D_FORTIFY_SOURCE=3
+	-fstack-protector-strong -fstack-clash-protection
 export LDFLAGS += $(OPT)
 
 TEST_DIRS := $(wildcard lib/*) vendor/base58 vendor/qrcodegen
