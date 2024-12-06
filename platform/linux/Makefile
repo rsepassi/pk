@@ -20,6 +20,7 @@ SRC := $(BDIR)/musl/README
 CRT := $(BDIR)/compiler-rt/lib/linux/clang_rt.crtend-aarch64.o
 
 $(BDIR)/.build: $(LIBC) $(STDC) $(CRT)
+	ln -s $(LIBC) $(BDIR)/sysroot/usr/lib/libssp_nonshared.a
 	touch $(BDIR)/.build
 
 $(CRT): lib/clang_rt.crtend-aarch64.o
