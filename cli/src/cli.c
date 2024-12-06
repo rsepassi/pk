@@ -667,7 +667,7 @@ static int demo_multicast(int argc, char** argv) {
     struct sockaddr_in multi_addr;
     CHECK0(uv_ip4_addr(multicast_group, port, &multi_addr));
     Str      peer_id = Str("mike multicast");
-    uv_buf_t buf     = uv_buf_init((char*)peer_id.buf, (int)peer_id.len);
+    uv_buf_t buf     = UvBuf(peer_id);
     CHECK0(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&multi_addr));
     LOG("sent!");
     uvco_sleep(loop, 1000);
@@ -722,7 +722,7 @@ static int demo_holepunch(int argc, char** argv) {
 
   LOG("udp send");
   Str      peer_id = Str("mike multicast");
-  uv_buf_t buf     = uv_buf_init((char*)peer_id.buf, (int)peer_id.len);
+  uv_buf_t buf     = UvBuf(peer_id);
   CHECK0(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&peer_addr));
   LOG("sent!");
 
