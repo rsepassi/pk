@@ -73,6 +73,7 @@ test-clean:
 $(ALL_LIBS): platform
 	$(MAKE) -C $@ deps
 	$(MAKE) -C $@ $(T)
+	ln -sf $(BROOT)/$@ $(BROOT_ALL)/out
 
 $(ALL_TESTS): platform vendor/unity scripts/test.mk
 	$(MAKE) -C $(@:%/test=%) deps
