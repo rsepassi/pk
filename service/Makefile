@@ -1,7 +1,6 @@
 include $(ROOTDIR)/scripts/bdir.mk
 
 DO_RESERVED_IP := 24.199.69.99
-DO_SPACE := https://peer2.sfo3.digitaloceanspaces.com
 DO_PEER2_IMG_ID := 172089670
 DO_PEER2_VPC_ID := a69c789c-5bab-4057-a852-652a875e53fa
 DO_PEER2_DID := 461475209
@@ -19,7 +18,7 @@ DST ?= /home/peer2/
 
 .PHONY: \
 	default list tag mktag create delete assignip assignfirewall firewalls \
-	rebuild ssh scpto scpfrom imgmk imgupload imgls imgget imgshow imghide
+	rebuild ssh scpto scpfrom imgmk
 
 default:
 	echo "specify a command"
@@ -109,38 +108,5 @@ scpfrom:
 imgmk:
 	$(MAKE) -C vmimage
 
-# DigitalOcean Spaces
-# https://docs.digitalocean.com/products/spaces/reference/s3cmd-usage/
-
-# IMG, TAG
-imgupload:
-	mkdir -p $(BDIR)/img
-	gzip -ck -9 $(IMG) > $(BDIR)/img/$(notdir $(IMG)).gz
-	s3cmd put file $(BDIR)/img/$(notdir $(IMG)).gz s3://peer2/$(notdir $(IMG)).gz
-	$(MAKE) imgshow IMG=$(notdir $(IMG)).gz
-	$(DO_CURL) -X POST \
-		-d '{"name": "$(notdir $(IMG))", "url": "$(DO_SPACE)/$(notdir $(IMG)).gz", "distribution": "Unknown", "region": "sfo3", "description": "peer2 custom image", "tags":["$(TAG)", "make"]}' \
-		"https://api.digitalocean.com/v2/images"
-	echo "Waiting for DO to pull the image..."
-	sleep 60
-	echo "Slept 60 seconds, hiding it now"
-	$(MAKE) imghide IMG=$(notdir $(IMG)).gz
-	$(MAKE) imgls
-
-imgls:
-	$(DO_CURL) -X GET \
-		"https://api.digitalocean.com/v2/images?private=true" \
-		| jq
-	s3cmd ls s3://peer2
-
-imgget:
-	mkdir -p $(BDIR)/img
-	s3cmd get s3://peer2/$(IMG) $(BDIR)/img/
-
-imgshow:
-	s3cmd setacl s3://peer2/$(IMG) --acl-public
-
-imghide:
-	s3cmd setacl s3://peer2/$(IMG) --acl-private
 # ==============================================================================
 # ==============================================================================
