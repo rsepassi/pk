@@ -23,6 +23,9 @@ typedef Bytes Str;
 #define BytesArray(arr) ((Bytes){sizeof(arr), (uint8_t*)(arr)})
 #define BytesObj(obj)   ((Bytes){sizeof(obj), (uint8_t*)&(obj)})
 
+#define PRIBytes    ".*s"
+#define BytesPRI(b) (int)(b).len, (b).buf
+
 static inline bool str_eq(Str a, Str b) {
   if (a.len != b.len)
     return false;
