@@ -1,5 +1,7 @@
 #include "log.h"
 
+#include "str.h"
+
 #include <inttypes.h>
 #include <time.h>
 
@@ -32,7 +34,8 @@ char* log_get_current_time() {
   return time_str;
 }
 
-void fprinthex(FILE* stream, char* tag, Bytes b) {
+void fprinthex(FILE* stream, char* tag, const uint8_t* buf, size_t buf_len) {
+  Bytes b = Bytes(buf, buf_len);
   fprintf(stream, "%s(%" PRIu64 ")=", tag, b.len);
   for (uint64_t i = 0; i < b.len; ++i)
     fprintf(stream, "%02X", b.buf[i]);

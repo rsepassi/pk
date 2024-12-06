@@ -1,5 +1,6 @@
 #pragma once
 
+#include "log.h"
 #include "stdmacros.h"
 
 #include <stdbool.h>
@@ -7,7 +8,7 @@
 #include <string.h>
 
 typedef struct {
-  uint64_t len;
+  size_t   len;
   uint8_t* buf;
 } Bytes;
 
@@ -15,17 +16,17 @@ typedef struct {
 typedef Bytes Str;
 
 // Convenience constructors
-#define Str(s)          ((Str){STRLEN((s)), (u8*)(s)})
-#define Str0(s)         ((Str){strlen((s)), (u8*)(s)})
+#define Str(s)          ((Str){STRLEN((s)), (uint8_t*)(s)})
+#define Str0(s)         ((Str){strlen((s)), (uint8_t*)(s)})
 #define BytesZero       ((Bytes){0, 0})
-#define Bytes(b, l)     ((Bytes){(l), (u8*)(b)})
-#define BytesArray(arr) ((Bytes){sizeof(arr), (u8*)(arr)})
-#define BytesObj(obj)   ((Bytes){sizeof(obj), (u8*)&(obj)})
+#define Bytes(b, l)     ((Bytes){(l), (uint8_t*)(b)})
+#define BytesArray(arr) ((Bytes){sizeof(arr), (uint8_t*)(arr)})
+#define BytesObj(obj)   ((Bytes){sizeof(obj), (uint8_t*)&(obj)})
 
 static inline bool str_eq(Str a, Str b) {
   if (a.len != b.len)
     return false;
-  for (uint64_t i = 0; i < a.len; ++i) {
+  for (size_t i = 0; i < a.len; ++i) {
     if (a.buf[i] != b.buf[i])
       return false;
   }
@@ -39,6 +40,7 @@ static inline bool str_startswith(Str s, Str prefix) {
 }
 
 static inline void bytes_copy(Bytes* dst, Bytes src) {
+  CHECK(dst->len >= src.len);
   dst->len = src.len;
   memcpy(dst->buf, src.buf, src.len);
 }

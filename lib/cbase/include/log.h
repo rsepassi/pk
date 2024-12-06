@@ -1,7 +1,5 @@
 #pragma once
 
-#include "str.h"
-
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,7 +25,7 @@
 #define LOGB(b)                                                                \
   do {                                                                         \
     LOG_PREFIX_(I, stderr);                                                    \
-    fprinthex(stderr, #b, (b));                                                \
+    fprinthex(stderr, #b, (b).buf, (b).len);                                   \
     fprintf(stderr, "\n");                                                     \
   } while (0)
 
@@ -52,4 +50,4 @@
 #define STATIC_CHECK(x) (void)sizeof(char[(x) ? 1 : -1])
 
 char* log_get_current_time();
-void  fprinthex(FILE* stream, char* tag, Bytes b);
+void  fprinthex(FILE* stream, char* tag, const uint8_t* buf, size_t buf_len);

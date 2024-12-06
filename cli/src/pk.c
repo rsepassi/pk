@@ -187,8 +187,9 @@ static int pk_user_show(int argc, char** argv) {
   // hex public key
   PkUserKeys user_keys;
   bytes_copy(&BytesObj(user_keys), val);
-  CryptoSignPK* pk = &user_keys.sign.pk;
-  fprinthex(stdout, "pk", BytesObj(*pk));
+  CryptoSignPK* pk       = &user_keys.sign.pk;
+  Bytes         pk_bytes = BytesObj(*pk);
+  fprinthex(stdout, "pk", pk_bytes.buf, pk_bytes.len);
   fprintf(stdout, "\n");
 
   // b58check public key
