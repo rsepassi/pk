@@ -9,18 +9,16 @@
 typedef struct {
   uint64_t len;
   uint8_t* buf;
-} Str;
+} Bytes;
 
-typedef Str Bytes;
-#define BytesZero ((Bytes){0, 0})
+// Str is just another name for Bytes
+typedef Bytes Str;
 
-#define Str(s)      ((Str){STRLEN((s)), (u8*)(s)})
-#define Bytes(b, l) ((Str){(l), (u8*)(b)})
-
-static inline Str str_from_c(const char* buf) {
-  return (Str){.len = strlen(buf), .buf = (uint8_t*)buf};
-}
-
+// Convenience constructors
+#define Str(s)          ((Str){STRLEN((s)), (u8*)(s)})
+#define Str0(s)         ((Str){strlen((s)), (u8*)(s)})
+#define BytesZero       ((Bytes){0, 0})
+#define Bytes(b, l)     ((Bytes){(l), (u8*)(b)})
 #define BytesArray(arr) ((Bytes){sizeof(arr), (u8*)(arr)})
 #define BytesObj(obj)   ((Bytes){sizeof(obj), (u8*)&(obj)})
 

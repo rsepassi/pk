@@ -397,7 +397,7 @@ int pk_main(int argc, char** argv) {
         cli_usage("pk", pk_commands, longopts);
         return 1;
       case 'd':
-        datadir = str_from_c(options.optarg);
+        datadir = Str0(options.optarg);
         break;
       case '?':
         cli_usage("pk", pk_commands, longopts);

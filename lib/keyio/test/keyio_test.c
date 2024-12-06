@@ -19,8 +19,8 @@ const char* ssh_pub =
     "foo@bar\n";
 
 void test_keyio(void) {
-  Str sk_contents = str_from_c(ssh_private);
-  Str pk_contents = str_from_c(ssh_pub);
+  Str sk_contents = Str0(ssh_private);
+  Str pk_contents = Str0(ssh_pub);
 
   CryptoSignSK sk;
   CHECK0(keyio_keydecode_openssh(sk_contents, &sk));

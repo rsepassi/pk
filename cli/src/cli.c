@@ -79,7 +79,7 @@ static void CxnCb(NIK_Cxn* cxn, void* userdata, NIK_Cxn_Event e, Bytes data,
 static int demo_nikcxn(int argc, char** argv) {
   CryptoKxKeypair kx_keys_i;
   {
-    Str            A_seed_str = str_from_c(A_seed_hex);
+    Str            A_seed_str = Str0(A_seed_hex);
     CryptoSignSeed A_seed;
     sodium_hex2bin((u8*)&A_seed, sizeof(A_seed), (char*)A_seed_str.buf,
                    A_seed_str.len, 0, 0, 0);
@@ -88,7 +88,7 @@ static int demo_nikcxn(int argc, char** argv) {
 
   CryptoKxKeypair kx_keys_r;
   {
-    Str            B_seed_str = str_from_c(B_seed_hex);
+    Str            B_seed_str = Str0(B_seed_hex);
     CryptoSignSeed B_seed;
     sodium_hex2bin((u8*)&B_seed, sizeof(B_seed), (char*)B_seed_str.buf,
                    B_seed_str.len, 0, 0, 0);
@@ -258,7 +258,7 @@ static int demo_nikcxn(int argc, char** argv) {
 static int demo_nik(int argc, char** argv) {
   CryptoKxKeypair kx_keys_i;
   {
-    Str            A_seed_str = str_from_c(A_seed_hex);
+    Str            A_seed_str = Str0(A_seed_hex);
     CryptoSignSeed A_seed;
     sodium_hex2bin((u8*)&A_seed, sizeof(A_seed), (char*)A_seed_str.buf,
                    A_seed_str.len, 0, 0, 0);
@@ -267,7 +267,7 @@ static int demo_nik(int argc, char** argv) {
 
   CryptoKxKeypair kx_keys_r;
   {
-    Str            B_seed_str = str_from_c(B_seed_hex);
+    Str            B_seed_str = Str0(B_seed_hex);
     CryptoSignSeed B_seed;
     sodium_hex2bin((u8*)&B_seed, sizeof(B_seed), (char*)B_seed_str.buf,
                    B_seed_str.len, 0, 0, 0);
@@ -549,8 +549,8 @@ static int demo_kv(int argc, char** argv) {
     }
   }
 
-  Bytes key = str_from_c(argv[2]);
-  Bytes val = cmd == KvPut ? str_from_c(argv[3]) : BytesZero;
+  Bytes key = Str0(argv[2]);
+  Bytes val = cmd == KvPut ? Str0(argv[3]) : BytesZero;
 
   Allocator    allocator = allocator_libc();
   CryptoBoxKey kvkey     = {{1, 2, 3, 4}};
@@ -884,7 +884,7 @@ static int demo_pwhash(int argc, char** argv) {
   u64 memlimit = crypto_pwhash_MEMLIMIT_INTERACTIVE;
   CHECK0(crypto_pwhash_str((char*)pw_hash, (char*)pw.buf, pw.len, opslimit,
                            memlimit));
-  LOGS(str_from_c((char*)pw_hash));
+  LOGS(Str0((char*)pw_hash));
   CHECK0(crypto_pwhash_str_verify((char*)pw_hash, (char*)pw.buf, pw.len));
 
   // Derive a key

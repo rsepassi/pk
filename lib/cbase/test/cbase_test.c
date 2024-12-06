@@ -116,7 +116,7 @@ void test_str(void) {
 
   {
     char* cstr = "hello world";
-    Str   a    = str_from_c(cstr);
+    Str   a    = Str0(cstr);
     CHECK(a.len == strlen(cstr));
     CHECK((uptr)a.buf == (uptr)cstr);
 
