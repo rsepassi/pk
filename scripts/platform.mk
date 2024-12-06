@@ -24,12 +24,6 @@ export LDFLAGS += -fprofile-instr-generate -fcoverage-mapping
 export EXEC_PREFIX := LLVM_PROFILE_FILE=$(BROOT)/coverage/default.profraw
 endif
 
-# clang
-ifeq ($(USE_CLANG), 1)
-export CFLAGS += --rtlib=compiler-rt -flto
-export LDFLAGS += --rtlib=compiler-rt -flto -fuse-ld=lld
-endif
-
 .PHONY: platform
 
 ifeq ($(TARGET_OS), macos)

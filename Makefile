@@ -8,6 +8,7 @@ export BROOT := $(BROOT_ALL)/$(TARGET)
 export BCACHE := $(ROOTDIR)/.build-cache
 export PATH := $(CURDIR)/scripts:$(PATH)
 
+USE_CLANG ?= 1
 ifeq ($(USE_CLANG), 1)
 export CC := clang-17
 export CCLD := clang-17
@@ -31,6 +32,11 @@ export CFLAGS += \
 	-fPIE \
 	-fstack-protector-strong -fstack-clash-protection
 export LDFLAGS += $(OPT)
+
+ifeq ($(USE_CLANG), 1)
+export CFLAGS += --rtlib=compiler-rt -flto
+export LDFLAGS += --rtlib=compiler-rt -flto -fuse-ld=lld
+endif
 
 TEST_DIRS := $(wildcard lib/*) vendor/base58 vendor/qrcodegen
 ALL_LIBS := cli $(wildcard lib/*) $(wildcard vendor/*)
