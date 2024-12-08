@@ -202,3 +202,43 @@ ssize_t uvco_udp_recv_next(UvcoUdpRecv* recv) {
   recv->wait = (co_wait_t){0};
   return recv->nread;
 }
+
+typedef struct {
+  co_wait_t wait;
+  int uv_status;
+  int fn_status;
+  uvco_trun_fn work;
+  void* arg;
+} TRun;
+
+static void trun_after_work(uv_work_t *req, int status) {
+  TRun* trun = req->data;
+  trun->uv_status = status;
+  CO_DONE(&trun->wait);
+}
+
+static void trun_work(uv_work_t *req) {
+  TRun* trun = req->data;
+  trun->fn_status = trun->work(trun->arg);
+}
+
+
+int uvco_trun(uv_loop_t* loop, uvco_trun_fn work, void* arg) {
+  TRun trun = {0};
+  trun.work = work;
+  trun.arg = arg;
+  trun.wait.co = mco_running();
+
+  uv_work_t req;
+  req.data = &trun;
+  int rc;
+  if ((rc = uv_queue_work(loop, &req, trun_work, trun_after_work)))
+    return rc;
+
+  CO_AWAIT(&trun.wait);
+
+  if (trun.uv_status != 0)
+    return trun.uv_status;
+
+  return trun.fn_status;
+}

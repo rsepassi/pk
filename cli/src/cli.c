@@ -1995,6 +1995,20 @@ static int demo_tcp2(int argc, char** argv) {
   return 0;
 }
 
+static int thread_runfn(void* arg) {
+  int* x = arg;
+  *x = *x + 1;
+  return 0;
+}
+
+static int demo_thread(int argc, char** argv) {
+  LOG("");
+  int x = 22;
+  CHECK0(uvco_trun(loop, thread_runfn, &x));
+  CHECK(x == 23);
+  return 0;
+}
+
 static int demo_time(int argc, char** argv) {
   {
     struct taia t;
@@ -2062,6 +2076,7 @@ static const CliCmd commands[] = {
     {"demo-tcp2", demo_tcp2},             //
     {"demo-time", demo_time},             //
     {"demo-echo", demo_echo},             //
+    {"demo-thread", demo_thread},             //
     {"pk", pk_main},                      //
     {0},
 };

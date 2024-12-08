@@ -30,6 +30,10 @@ typedef struct {
 // Time
 void uvco_sleep(uv_loop_t* loop, u64 ms);
 
+// Thread
+typedef int (*uvco_trun_fn)(void*);
+int uvco_trun(uv_loop_t* loop, uvco_trun_fn work, void* arg);
+
 // Filesystem
 ssize_t uvco_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path);
 int     uvco_fs_mkdir(uv_loop_t* loop, const char* path, int mode);
