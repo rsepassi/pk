@@ -107,14 +107,13 @@ extern uv_loop_t* loop;
 //   Alice and Bob both have a short code
 
 static void IpStr_log(const IpStr* s, Str tag) {
-  LOG("%" PRIBytes "=%" PRIBytes ":%d", BytesPRI(tag), BytesPRI(s->ip),
-      s->port);
+  LOG("%" PRIBytes "=%" PRIIpStr, BytesPRI(tag), IpStrPRI(*s));
 }
 
 static void handle_message(UvcoUdpRecv* recv) {
-  IpStr ip_str;
+  IpStrStorage ip_str;
   CHECK0(IpStr_read(&ip_str, recv->addr));
-  IpStr_log(&ip_str, Str("source"));
+  IpStr_log((IpStr*)&ip_str, Str("source"));
 
   Str msg = Bytes(recv->buf.base, recv->buf.len);
   LOGS(msg);
@@ -163,9 +162,9 @@ int demo_echo(int argc, char** argv) {
   CHECK0(uv_ip4_addr("0.0.0.0", port, &myaddr));
   CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&myaddr, 0));
 
-  IpStr me;
+  IpStrStorage me;
   IpStr_read(&me, (const struct sockaddr*)(&myaddr));
-  IpStr_log(&me, Str("me"));
+  IpStr_log((IpStr*)&me, Str("me"));
 
   // This coroutine will only be responsible for fielding incoming messages
   // and spawning a handler coroutine.
