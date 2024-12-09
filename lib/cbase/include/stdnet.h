@@ -1,15 +1,26 @@
 #include "str.h"
 
+#define STDNET_IPV4_ANY "0.0.0.0"
+#define STDNET_IPV6_ANY "::"
+
 #define STDNET_INET6_ADDRSTRLEN 46
 #define STDNET_INET6_ADDRLEN    16
 
 struct sockaddr;
 
 typedef struct {
-  char ip_buf[STDNET_INET6_ADDRSTRLEN];
   Str  ip;
   int  port;
+  char ip_buf[STDNET_INET6_ADDRSTRLEN];
+} IpStrStorage;
+
+typedef struct {
+  Str ip;
+  int port;
 } IpStr;
+
+#define PRIIpStr    ".*s:%d"
+#define IpStrPRI(x) (int)(x).ip.len, (x).ip.buf, (x).port
 
 typedef enum {
   IpType_IPv4,
@@ -25,5 +36,5 @@ typedef struct __attribute__((packed)) {
   uint8_t  _pad;
 } IpMsg;
 
-int IpStr_read(IpStr* out, const struct sockaddr* sa);
+int IpStr_read(IpStrStorage* out, const struct sockaddr* sa);
 int IpMsg_read(IpMsg* out, const struct sockaddr* sa);

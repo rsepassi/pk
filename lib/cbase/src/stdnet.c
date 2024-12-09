@@ -39,7 +39,7 @@ static int sa_get_port(const struct sockaddr* sa) {
   }
 }
 
-int IpStr_read(IpStr* out, const struct sockaddr* sa) {
+int IpStr_read(IpStrStorage* out, const struct sockaddr* sa) {
   const void* addr = sa_get_in_addr(sa);
   if (addr == NULL)
     return 1;
