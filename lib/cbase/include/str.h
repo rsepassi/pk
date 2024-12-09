@@ -23,6 +23,7 @@ typedef Bytes Str;
 #define BytesArray(arr) ((Bytes){sizeof(arr), (uint8_t*)(arr)})
 #define BytesObj(obj)   ((Bytes){sizeof(obj), (uint8_t*)&(obj)})
 
+#define PRIusz      "lu"
 #define PRIBytes    ".*s"
 #define BytesPRI(b) (int)(b).len, (b).buf
 
@@ -46,4 +47,17 @@ static inline void bytes_copy(Bytes* dst, Bytes src) {
   CHECK(dst->len >= src.len);
   dst->len = src.len;
   memcpy(dst->buf, src.buf, src.len);
+}
+
+static inline Bytes bytes_advance(Bytes* in, size_t step) {
+  Bytes out = *in;
+  if (step >= in->len) {
+    *in = BytesZero;
+    return out;
+  }
+
+  out.len = step;
+  in->buf += step;
+  in->len -= step;
+  return out;
 }

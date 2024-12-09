@@ -1,5 +1,7 @@
 #include "stdnet.h"
 
+#include "log.h"
+
 #ifdef _WIN32
 #include <ws2tcpip.h>
 #else
@@ -46,5 +48,26 @@ int IpStr_read(IpStr* out, const struct sockaddr* sa) {
     return 1;
   out->ip   = Str0(out->ip_buf);
   out->port = sa_get_port(sa);
+  return 0;
+}
+
+int IpMsg_read(IpMsg* out, const struct sockaddr* sa) {
+  STATIC_CHECK(sizeof(IpMsg) == STDNET_INET6_ADDRLEN + 4);
+  switch (sa->sa_family) {
+    case AF_INET: {
+      const struct sockaddr_in* sa_in = (void*)sa;
+      out->ip_type                    = IpType_IPv4;
+      out->port                       = sa_in->sin_port;
+      memcpy(out->ip_buf, &sa_in->sin_addr, 4);
+    } break;
+    case AF_INET6: {
+      const struct sockaddr_in6* sa_in6 = (void*)sa;
+      out->ip_type                      = IpType_IPv6;
+      out->port                         = sa_in6->sin6_port;
+      memcpy(out->ip_buf, &sa_in6->sin6_addr, 16);
+    } break;
+    default:
+      return 1;
+  }
   return 0;
 }

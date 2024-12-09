@@ -9,6 +9,16 @@ typedef struct {
   Node* tail;
 } Queue;
 
+typedef struct Node2 {
+  struct Node2* next;
+  struct Node2* prev;
+} Node2;
+
+typedef struct {
+  Node2* head;
+  Node2* tail;
+} Queue2;
+
 static inline void q_enq(Queue* q, Node* x) {
   if (q->tail) {
     q->tail->next = x;

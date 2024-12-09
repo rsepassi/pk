@@ -79,3 +79,8 @@ static inline uint64_t SWAP_U64(uint64_t val) {
 #endif
 
 #define UNUSED(x) (void)x
+
+#define ZERO(x)                                                                \
+  do {                                                                         \
+    *(x) = (__typeof__(*x)){0};                                                \
+  } while (0)
