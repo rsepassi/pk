@@ -2,6 +2,7 @@
 
 #include "cli.h"
 #include "coco.h"
+#include "crypto.h"
 #include "log.h"
 #include "sodium.h"
 #include "stdnet.h"
@@ -14,14 +15,69 @@ typedef struct __attribute__((packed)) {
 } DiscoLocalAdvert;
 
 typedef struct {
-  Str                multicast_group;
-  int                multicast_port;
-  uv_udp_t           multicast_udp;
+  IpStr              multicast_addrs;
   struct sockaddr_in multicast_addr;
+  uv_udp_t           multicast_udp;
   uv_udp_t           udp;
   int                port;
   u64                id;
 } DiscoLocalCtx;
+
+static void multicast_ipv4_addr_derive(struct sockaddr_in* addr, Bytes in) {
+  u8 h[5];
+  CHECK0(crypto_generichash_blake2b(h, sizeof(h), in.buf, in.len, 0, 0));
+
+  addr->sin_family = AF_INET;
+
+  // First 2 bytes are used for the port
+  // Windows, Mac use >=49152
+  // Linux uses <=60999
+  u16 port       = *(u16*)h;
+  addr->sin_port = 49152 + (port % (60999 - 49152));
+
+  // Last 3 bytes are used for the IP
+  u8* ip = (u8*)&addr->sin_addr;
+  ip[0]  = 239;
+  ip[1]  = h[2];
+  ip[2]  = h[3];
+  ip[3]  = h[4];
+}
+
+static void multicast_ipv4_addr_all(struct sockaddr_in* addr) {
+  // 239.18.132.107:35544
+  multicast_ipv4_addr_derive(addr, Str("pk-multicast"));
+}
+
+static void multicast_ipv4_addr_peer(struct sockaddr_in* addr,
+                                     const CryptoSignPK* pk) {
+  multicast_ipv4_addr_derive(addr, BytesObj(*pk));
+}
+
+static void multicast_ipv4_addr_channel(struct sockaddr_in* addr,
+                                        Str                 channel_id) {
+  multicast_ipv4_addr_derive(addr, channel_id);
+}
+
+static void multicast_ipv4_addr_peer_mutual(struct sockaddr_in*    addr,
+                                            const CryptoKxKeypair* me,
+                                            const CryptoKxPK*      bob) {
+  // memcmp OK: public key
+  CryptoKxTx shared;
+  if (memcmp(&me->pk, bob, sizeof(*bob)) > 0) {
+    CHECK0(crypto_kx_server_session_keys((u8*)&shared, 0, (u8*)&me->pk,
+                                         (u8*)&me->sk, (u8*)bob));
+  } else {
+    CHECK0(crypto_kx_client_session_keys((u8*)&shared, 0, (u8*)&me->pk,
+                                         (u8*)&me->sk, (u8*)bob));
+  }
+
+  u8 subkey[32];
+  STATIC_CHECK(sizeof(shared) == crypto_kdf_blake2b_KEYBYTES);
+  CHECK0(crypto_kdf_blake2b_derive_from_key(subkey, sizeof(subkey), 1,
+                                            "pk-multi", (u8*)&shared));
+
+  multicast_ipv4_addr_derive(addr, BytesArray(subkey));
+}
 
 static void advertco_fn(void* data) {
   DiscoLocalCtx* ctx = data;
@@ -31,8 +87,10 @@ static void advertco_fn(void* data) {
 
   while (1) {
     uv_buf_t buf = UvBuf(BytesObj(advert));
-    CHECK0(uvco_udp_send(&ctx->udp, &buf, 1,
-                         (struct sockaddr*)&ctx->multicast_addr));
+    int      rc  = uvco_udp_send(&ctx->udp, &buf, 1,
+                                 (struct sockaddr*)&ctx->multicast_addr);
+    if (rc != 0)
+      LOG("err=%s", uv_strerror(rc));
     uvco_sleep(loop, 1000);
   }
 }
@@ -40,20 +98,29 @@ static void advertco_fn(void* data) {
 static int disco_local(int argc, char** argv) {
   LOG("");
 
+  (void)multicast_ipv4_addr_peer;
+  (void)multicast_ipv4_addr_peer_mutual;
+
   struct optparse options;
   optparse_init(&options, argv);
   int option;
 
   struct optparse_long longopts[] =        //
-      {{"advertise", 'a', OPTPARSE_NONE},  //
+      {                                    //
+       {"advertise", 'a', OPTPARSE_NONE},  //
+       {"channel", 'c', OPTPARSE_REQUIRED},  //
        {0}};
 
   bool advertise = false;
+  Str channel = {0};
 
   while ((option = optparse_long(&options, longopts, NULL)) != -1) {
     switch (option) {
       case 'a':
         advertise = true;
+        break;
+      case 'c':
+        channel = Str0(options.optarg);
         break;
       case '?':
         cli_usage("disco local", 0, longopts);
@@ -61,14 +128,22 @@ static int disco_local(int argc, char** argv) {
     }
   }
 
-  DiscoLocalCtx ctx   = {0};
-  ctx.multicast_group = Str("239.0.0.22");
-  ctx.multicast_port  = 20000;
-  CHECK0(uv_ip4_addr((char*)ctx.multicast_group.buf, ctx.multicast_port,
-                     &ctx.multicast_addr));
-  CHECK0(uv_udp_init(loop, &ctx.multicast_udp));
-  CHECK0(uv_udp_init(loop, &ctx.udp));
-  randombytes_buf(&ctx.id, sizeof(ctx.id));
+  IpStrStorage  multicast_addrs;
+  DiscoLocalCtx ctx = {0};
+  {
+    // Determine our multicast address
+    if (channel.len > 0)
+      multicast_ipv4_addr_channel(&ctx.multicast_addr, channel);
+    else
+      multicast_ipv4_addr_all(&ctx.multicast_addr);
+    CHECK0(IpStr_read(&multicast_addrs, (struct sockaddr*)&ctx.multicast_addr));
+    ctx.multicast_addrs = *(IpStr*)&multicast_addrs;
+    LOG("multicast=%" PRIIpStr, IpStrPRI(multicast_addrs));
+    // Initialize UDP handles
+    CHECK0(uv_udp_init(loop, &ctx.multicast_udp));
+    CHECK0(uv_udp_init(loop, &ctx.udp));
+    randombytes_buf(&ctx.id, sizeof(ctx.id));
+  }
 
   // Log our local IPV4 interfaces
   {
@@ -108,16 +183,17 @@ static int disco_local(int argc, char** argv) {
   // Advertise on the multicast group if requested
   mco_coro* advertco = 0;
   if (advertise)
-    CHECK0(coco_go(&advertco, 4096, advertco_fn, &ctx));
+    CHECK0(coco_go(&advertco, 0, advertco_fn, &ctx));
 
   // Listen on the multicast group
   struct sockaddr_storage multicast_me;
-  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, ctx.multicast_port,
+  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, ctx.multicast_addrs.port,
                      (struct sockaddr_in*)&multicast_me));
   CHECK0(uv_udp_bind(&ctx.multicast_udp, (struct sockaddr*)&multicast_me,
                      UV_UDP_REUSEADDR));
-  CHECK0(uv_udp_set_membership(
-      &ctx.multicast_udp, (char*)ctx.multicast_group.buf, NULL, UV_JOIN_GROUP));
+  CHECK0(uv_udp_set_membership(&ctx.multicast_udp,
+                               (char*)ctx.multicast_addrs.ip.buf, NULL,
+                               UV_JOIN_GROUP));
   UvcoUdpRecv recv;
   CHECK0(uvco_udp_recv_start(&recv, &ctx.multicast_udp));
   while (1) {
