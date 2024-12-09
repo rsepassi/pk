@@ -15,14 +15,8 @@ static void del_handle_cb(uv_handle_t* req) { free(req); }
 
 static void timer_cb(uv_timer_t* handle) { CO_DONE((co_wait_t*)handle->data); }
 
-static void udp_send_cb(uv_udp_send_t* req, int status) {
-  co_wait_t* wait = (co_wait_t*)req->data;
-  wait->data      = &status;
-  CO_DONE(wait);
-}
-
 ssize_t uvco_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path) {
-  co_wait_t wait = {mco_running(), 0, 0};
+  co_wait_t wait = CO_WAIT_NEW();
   req->data      = &wait;
   ssize_t rc     = uv_fs_stat(loop, req, path, fs_cb);
   if (rc != 0)
@@ -32,7 +26,7 @@ ssize_t uvco_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path) {
 }
 
 int uvco_fs_mkdir(uv_loop_t* loop, const char* path, int mode) {
-  co_wait_t wait = {mco_running(), 0, 0};
+  co_wait_t wait = CO_WAIT_NEW();
   uv_fs_t   req;
   req.data = &wait;
   if (uv_fs_mkdir(loop, &req, path, mode, fs_cb) != 0)
@@ -43,7 +37,7 @@ int uvco_fs_mkdir(uv_loop_t* loop, const char* path, int mode) {
 }
 
 void uvco_sleep(uv_loop_t* loop, u64 ms) {
-  co_wait_t   wait  = {mco_running(), 0, 0};
+  co_wait_t   wait  = CO_WAIT_NEW();
   uv_timer_t* timer = malloc(sizeof(uv_timer_t));
   uv_timer_init(loop, timer);
   timer->data = &wait;
@@ -53,21 +47,32 @@ void uvco_sleep(uv_loop_t* loop, u64 ms) {
   uv_close((uv_handle_t*)timer, del_handle_cb);
 }
 
+typedef struct {
+  co_wait_t wait;
+  int       status;
+} Send;
+
+static void udp_send_cb(uv_udp_send_t* req, int status) {
+  Send* send   = req->data;
+  send->status = status;
+  CO_DONE(&send->wait);
+}
+
 int uvco_udp_send(uv_udp_t* handle, const uv_buf_t bufs[], unsigned int nbufs,
                   const struct sockaddr* addr) {
-  co_wait_t     wait = {mco_running(), 0, 0};
+  Send send    = {0};
+  send.wait.co = mco_running();
   uv_udp_send_t req;
-  req.data = &wait;
+  req.data = &send;
   CHECK0(uv_udp_send(&req, handle, bufs, nbufs, addr, udp_send_cb));
-  CO_AWAIT(&wait);
-  int status = *(int*)wait.data;
-  return status;
+  CO_AWAIT(&send.wait);
+  return send.status;
 }
 
 int uvco_fs_open(uv_loop_t* loop, const char* path, int flags, int mode,
                  uv_file* fd) {
   int       rc   = 1;
-  co_wait_t wait = {mco_running(), 0, 0};
+  co_wait_t wait = CO_WAIT_NEW();
   uv_fs_t*  req  = malloc(sizeof(uv_fs_t));
   req->data      = &wait;
   if (uv_fs_open(loop, req, path, flags, mode, fs_cb))
@@ -86,7 +91,7 @@ end:
 int uvco_fs_write(uv_loop_t* loop, uv_file fd, Bytes contents, usize offset,
                   usize* nwritten) {
   int       rc   = 1;
-  co_wait_t wait = {mco_running(), 0, 0};
+  co_wait_t wait = CO_WAIT_NEW();
   uv_fs_t*  req  = malloc(sizeof(uv_fs_t));
   req->data      = &wait;
   uv_buf_t buf   = uv_buf_init((char*)contents.buf, (u32)contents.len);
@@ -104,7 +109,7 @@ end:
 }
 
 void uvco_fs_close(uv_loop_t* loop, uv_file fd) {
-  co_wait_t wait = {mco_running(), 0, 0};
+  co_wait_t wait = CO_WAIT_NEW();
   uv_fs_t*  req  = malloc(sizeof(uv_fs_t));
   req->data      = &wait;
   if (uv_fs_close(loop, req, fd, fs_cb))
@@ -131,7 +136,7 @@ int uvco_fs_writefull(uv_loop_t* loop, const char* path, Bytes contents) {
 
 int uvco_fs_read(uv_loop_t* loop, uv_file fd, Bytes* contents, usize offset) {
   int       rc   = 1;
-  co_wait_t wait = {mco_running(), 0, 0};
+  co_wait_t wait = CO_WAIT_NEW();
   uv_fs_t*  req  = malloc(sizeof(uv_fs_t));
   req->data      = &wait;
   uv_buf_t buf   = uv_buf_init((char*)contents->buf, (u32)contents->len);
@@ -204,29 +209,28 @@ ssize_t uvco_udp_recv_next(UvcoUdpRecv* recv) {
 }
 
 typedef struct {
-  co_wait_t wait;
-  int uv_status;
-  int fn_status;
+  co_wait_t    wait;
+  int          uv_status;
+  int          fn_status;
   uvco_trun_fn work;
-  void* arg;
+  void*        arg;
 } TRun;
 
-static void trun_after_work(uv_work_t *req, int status) {
-  TRun* trun = req->data;
+static void trun_after_work(uv_work_t* req, int status) {
+  TRun* trun      = req->data;
   trun->uv_status = status;
   CO_DONE(&trun->wait);
 }
 
-static void trun_work(uv_work_t *req) {
-  TRun* trun = req->data;
+static void trun_work(uv_work_t* req) {
+  TRun* trun      = req->data;
   trun->fn_status = trun->work(trun->arg);
 }
 
-
 int uvco_trun(uv_loop_t* loop, uvco_trun_fn work, void* arg) {
-  TRun trun = {0};
-  trun.work = work;
-  trun.arg = arg;
+  TRun trun    = {0};
+  trun.work    = work;
+  trun.arg     = arg;
   trun.wait.co = mco_running();
 
   uv_work_t req;

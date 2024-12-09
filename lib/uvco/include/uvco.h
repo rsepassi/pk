@@ -7,10 +7,11 @@
 typedef struct {
   mco_coro* co;
   bool      done;
-  void*     data;
 } co_wait_t;
 
 #define UVCO_DEFAULT_FILE_MODE (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
+
+#define CO_WAIT_NEW() ((co_wait_t){mco_running(), 0})
 
 #define CO_AWAIT(wait)                                                         \
   do {                                                                         \
