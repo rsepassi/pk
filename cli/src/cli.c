@@ -36,6 +36,8 @@
 int pk_main(int argc, char** argv);
 // Defined in echo.c
 int demo_echo(int argc, char** argv);
+// Defined in disco.c
+int demo_disco(int argc, char** argv);
 
 // Global event loop
 uv_loop_t* loop;
@@ -1997,7 +1999,7 @@ static int demo_tcp2(int argc, char** argv) {
 
 static int thread_runfn(void* arg) {
   int* x = arg;
-  *x = *x + 1;
+  *x     = *x + 1;
   return 0;
 }
 
@@ -2076,7 +2078,8 @@ static const CliCmd commands[] = {
     {"demo-tcp2", demo_tcp2},             //
     {"demo-time", demo_time},             //
     {"demo-echo", demo_echo},             //
-    {"demo-thread", demo_thread},             //
+    {"demo-thread", demo_thread},         //
+    {"demo-disco", demo_disco},           //
     {"pk", pk_main},                      //
     {0},
 };
