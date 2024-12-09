@@ -64,7 +64,9 @@ int uvco_udp_send(uv_udp_t* handle, const uv_buf_t bufs[], unsigned int nbufs,
   send.wait.co = mco_running();
   uv_udp_send_t req;
   req.data = &send;
-  CHECK0(uv_udp_send(&req, handle, bufs, nbufs, addr, udp_send_cb));
+  int rc;
+  if ((rc = uv_udp_send(&req, handle, bufs, nbufs, addr, udp_send_cb)))
+    return rc;
   CO_AWAIT(&send.wait);
   return send.status;
 }

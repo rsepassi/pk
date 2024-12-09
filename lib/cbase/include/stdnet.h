@@ -3,8 +3,8 @@
 #define STDNET_IPV4_ANY "0.0.0.0"
 #define STDNET_IPV6_ANY "::"
 
-#define STDNET_INET6_ADDRSTRLEN 46
-#define STDNET_INET6_ADDRLEN    16
+#define STDNET_INET6_ADDRSTRLEN (45 + 1)
+#define STDNET_INET6_ADDRLEN    (15 + 1)
 
 struct sockaddr;
 
