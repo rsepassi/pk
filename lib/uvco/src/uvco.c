@@ -197,7 +197,7 @@ int uvco_udp_recv_start(UvcoUdpRecv* recv, uv_udp_t* handle) {
   return uv_udp_recv_start(recv->udp, udp_alloc_cb, udp_recv_cb);
 }
 
-ssize_t uvco_udp_recv_next(UvcoUdpRecv* recv) {
+int uvco_udp_recv_next(UvcoUdpRecv* recv) {
   recv->udp->data = recv;
   recv->wait      = (co_wait_t){0};
   recv->wait.co   = mco_running();
@@ -205,7 +205,9 @@ ssize_t uvco_udp_recv_next(UvcoUdpRecv* recv) {
   CO_AWAIT(&recv->wait);
 
   recv->wait = (co_wait_t){0};
-  return recv->nread;
+  if (recv->nread >= 0)
+    return 0;
+  return (int)recv->nread;
 }
 
 typedef struct {

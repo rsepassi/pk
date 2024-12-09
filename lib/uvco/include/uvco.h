@@ -26,7 +26,8 @@ typedef struct {
     CHECK(mco_resume((wait)->co) == MCO_SUCCESS);                              \
   } while (0)
 
-#define UvBuf(b) uv_buf_init((char*)(b).buf, (unsigned int)(b).len)
+#define UvBuf(b)   uv_buf_init((char*)(b).buf, (unsigned int)(b).len)
+#define UvBytes(b) Bytes((b).base, (b).len)
 
 // Time
 void uvco_sleep(uv_loop_t* loop, u64 ms);
@@ -58,5 +59,5 @@ typedef struct {
   ssize_t                nread;
   co_wait_t              wait;
 } UvcoUdpRecv;
-int     uvco_udp_recv_start(UvcoUdpRecv* recv, uv_udp_t* handle);
-ssize_t uvco_udp_recv_next(UvcoUdpRecv* recv);
+int uvco_udp_recv_start(UvcoUdpRecv* recv, uv_udp_t* handle);
+int uvco_udp_recv_next(UvcoUdpRecv* recv);
