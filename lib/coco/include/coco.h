@@ -54,3 +54,4 @@ struct CocoPool_s {
 int  CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al);
 void CocoPool_deinit(CocoPool* pool);
 int  CocoPool_go(CocoPool* pool, CocoFn fn, void* arg);
+int  CocoPool_gonow(CocoPool* pool, CocoFn fn, void* arg);

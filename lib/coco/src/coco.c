@@ -113,20 +113,30 @@ int CocoPool_go(CocoPool* pool, CocoFn fn, void* arg) {
   (void)arg;
 
   while (1) {
-    Node* n = q_deq(&pool->free);
-    if (n) {
-      CocoPoolItem* x = CONTAINER_OF(n, CocoPoolItem, node);
-      x->work.fn      = fn;
-      x->work.arg     = arg;
-      CHECK0(mco_resume(x->co));
-      break;
-    } else {
+    int rc = CocoPool_gonow(pool, fn, arg);
+    if (rc == 0)
+      return 0;
+
+    if (rc == 1) {
       CocoWait wait;
       q_enq(&pool->waiters, &wait.node);
       COCO_AWAIT(&wait);
       continue;
     }
   }
+
+  return 0;
+}
+
+int CocoPool_gonow(CocoPool* pool, CocoFn fn, void* arg) {
+  Node* n = q_deq(&pool->free);
+  if (n == NULL)
+    return 1;
+
+  CocoPoolItem* x = CONTAINER_OF(n, CocoPoolItem, node);
+  x->work.fn      = fn;
+  x->work.arg     = arg;
+  CHECK0(mco_resume(x->co));
 
   return 0;
 }
