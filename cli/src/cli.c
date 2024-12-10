@@ -689,63 +689,6 @@ static int demo_multicast(int argc, char** argv) {
   return 0;
 }
 
-#ifndef PK_PLUM_DISABLED
-#include "plum/plum.h"
-static void mapping_callback(int id, plum_state_t state,
-                             const plum_mapping_t* mapping) {
-  LOG("map!");
-  CHECK(state == PLUM_STATE_SUCCESS);
-  LOG("External address: %s:%hu\n", mapping->external_host,
-      mapping->external_port);
-}
-
-static int demo_holepunch(int argc, char** argv) {
-  // TODO:
-  // Hit discovery server to get peer_addr
-
-  // Hard-coding for now
-  struct sockaddr_in peer_addr;
-  CHECK0(uv_ip4_addr("75.164.165.93", 8087, &peer_addr));
-
-  // Plum
-  plum_config_t config = {0};
-  config.log_level     = PLUM_LOG_LEVEL_WARN;
-  plum_init(&config);
-  plum_mapping_t mapping = {0};
-  mapping.protocol       = PLUM_IP_PROTOCOL_UDP;
-  mapping.internal_port  = 20000;
-  int mapping_id         = plum_create_mapping(&mapping, mapping_callback);
-  struct sockaddr_in myaddr;
-  CHECK0(uv_ip4_addr("0.0.0.0", 20000, &myaddr));
-
-  LOG("udp init");
-  uv_udp_t udp;
-  CHECK0(uv_udp_init(loop, &udp));
-
-  LOG("udp send");
-  Str      peer_id = Str("mike multicast");
-  uv_buf_t buf     = UvBuf(peer_id);
-  CHECK0(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&peer_addr));
-  LOG("sent!");
-
-  LOG("udp recv");
-  CHECK0(uv_udp_recv_start(&udp, alloc_cb, recv_cb));
-  uvco_sleep(loop, 60000);
-  uv_udp_recv_stop(&udp);
-
-  plum_destroy_mapping(mapping_id);
-
-  // TODO: Start sending messages to peer address
-
-  return 0;
-}
-#else
-static int demo_holepunch(int argc, char** argv) {
-  CHECK(false, "disabled");
-  return 0;
-}
-#endif  // PK_PLUM_DISABLED
-
 static void do_some_allocs(Allocator a) {
   Bytes b1 = {0};
   Alloc_alloc(a, &b1, u8, 16);
@@ -2064,7 +2007,6 @@ typedef struct {
 
 static const CliCmd commands[] = {
     {"demo-opts", demo_opts},             //
-    {"demo-holepunch", demo_holepunch},   //
     {"demo-keygen", demo_keygen},         //
     {"demo-keyread", demo_keyread},       //
     {"demo-kv", demo_kv},                 //

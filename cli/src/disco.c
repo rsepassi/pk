@@ -1,14 +1,28 @@
 // Discovery
 
+#include "allocatormi.h"
 #include "cli.h"
 #include "coco.h"
 #include "crypto.h"
 #include "log.h"
+#include "plum/plum.h"
 #include "sodium.h"
 #include "stdnet.h"
 #include "uvco.h"
 
 extern uv_loop_t* loop;
+
+static u16 udp_getsockport(uv_udp_t* udp) {
+  struct sockaddr_storage me;
+  int                     me_len = sizeof(me);
+  CHECK0(uv_udp_getsockname(udp, (struct sockaddr*)&me, &me_len));
+  CHECK(me_len == sizeof(struct sockaddr_in));
+  CHECK(me.ss_family == AF_INET);
+
+  IpStrStorage me_str;
+  CHECK0(IpStr_read(&me_str, (struct sockaddr*)&me));
+  return me_str.port;
+}
 
 typedef struct __attribute__((packed)) {
   u64 id;
@@ -97,22 +111,21 @@ static void advertco_fn(void* data) {
 
 static int disco_local(int argc, char** argv) {
   LOG("");
-
   (void)multicast_ipv4_addr_peer;
   (void)multicast_ipv4_addr_peer_mutual;
 
   struct optparse options;
   optparse_init(&options, argv);
-  int option;
-
-  struct optparse_long longopts[] =        //
-      {                                    //
-       {"advertise", 'a', OPTPARSE_NONE},  //
-       {"channel", 'c', OPTPARSE_REQUIRED},  //
-       {0}};
+  int                  option;
+  struct optparse_long longopts[] =  //
+      {
+          {"advertise", 'a', OPTPARSE_NONE},    //
+          {"channel", 'c', OPTPARSE_REQUIRED},  //
+          {0}                                   //
+      };
 
   bool advertise = false;
-  Str channel = {0};
+  Str  channel   = {0};
 
   while ((option = optparse_long(&options, longopts, NULL)) != -1) {
     switch (option) {
@@ -167,17 +180,8 @@ static int disco_local(int argc, char** argv) {
     struct sockaddr_storage me;
     CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, 0, (struct sockaddr_in*)&me));
     CHECK0(uv_udp_bind(&ctx.udp, (struct sockaddr*)&me, UV_UDP_REUSEADDR));
-
-    int me_len = sizeof(me);
-    CHECK0(uv_udp_getsockname(&ctx.udp, (struct sockaddr*)&me, &me_len));
-    CHECK(me_len == sizeof(struct sockaddr_in));
-    CHECK(me.ss_family == AF_INET);
-
-    IpStrStorage me_str;
-    CHECK0(IpStr_read(&me_str, (struct sockaddr*)&me));
-    LOG("me=%" PRIIpStr " id=%" PRIu64, IpStrPRI(me_str), ctx.id);
-
-    ctx.port = me_str.port;
+    ctx.port = udp_getsockport(&ctx.udp);
+    LOG("me=%s:%d", STDNET_IPV4_ANY, ctx.port);
   }
 
   // Advertise on the multicast group if requested
@@ -213,11 +217,135 @@ static int disco_local(int argc, char** argv) {
     LOG("id=%" PRIu64, advert->id);
   }
 
+  uvco_close((uv_handle_t*)&ctx.udp);
+  uvco_close((uv_handle_t*)&ctx.multicast_udp);
+
+  return 0;
+}
+
+typedef struct {
+  u16         internal_port;
+  u16         external_port;
+  uv_async_t* async;
+  int         mapping_id;
+} PlumCtx;
+
+static void mapping_callback(int id, plum_state_t state,
+                             const plum_mapping_t* mapping) {
+  PlumCtx* ctx = mapping->user_ptr;
+  if (state == PLUM_STATE_SUCCESS)
+    ctx->external_port = mapping->external_port;
+  uv_async_send(ctx->async);
+}
+
+static void async_plumfn(uv_async_t* async, void* arg) {
+  PlumCtx* ctx         = arg;
+  ctx->async           = async;
+  plum_config_t config = {0};
+  config.log_level     = PLUM_LOG_LEVEL_WARN;
+  plum_init(&config);
+  plum_mapping_t mapping = {0};
+  mapping.protocol       = PLUM_IP_PROTOCOL_UDP;
+  mapping.internal_port  = ctx->internal_port;
+  mapping.user_ptr       = ctx;
+  ctx->mapping_id        = plum_create_mapping(&mapping, mapping_callback);
+}
+
+void handle_giveip(void* arg) {
+  UvcoUdpRecv* recv = arg;
+  IpMsg        msg;
+  CHECK0(IpMsg_read(&msg, recv->addr));
+
+  IpStrStorage sender;
+  CHECK0(IpStr_read(&sender, recv->addr));
+  LOG("sender=%" PRIIpStr, IpStrPRI(sender));
+
+  struct sockaddr addr = *recv->addr;
+  uv_buf_t        buf  = UvBuf(BytesObj(msg));
+  CHECK0(uvco_udp_send(recv->udp, &buf, 1, &addr));
+}
+
+static int disco_giveip(int argc, char** argv) {
+  LOG("");
+
+  struct optparse options;
+  optparse_init(&options, argv);
+  int                  option;
+  struct optparse_long longopts[] =  //
+      {
+          {"port", 'p', OPTPARSE_REQUIRED},  //
+          {0}                                //
+      };
+
+  u16 port = 0;
+
+  while ((option = optparse_long(&options, longopts, NULL)) != -1) {
+    switch (option) {
+      case 'p': {
+        int iport = atoi(options.optarg);
+        CHECK(iport <= UINT16_MAX);
+        port = (u16)iport;
+      } break;
+      case '?':
+        cli_usage("disco giveip", 0, longopts);
+        return 1;
+    }
+  }
+
+  uv_udp_t udp;
+  CHECK0(uv_udp_init(loop, &udp));
+  struct sockaddr_storage me;
+  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&me));
+  CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&me, UV_UDP_REUSEADDR));
+  port = udp_getsockport(&udp);
+  LOG("me=%s:%d", STDNET_IPV4_ANY, port);
+
+  Allocator al = allocatormi_allocator();
+
+  CocoPool pool;
+  CHECK0(CocoPool_init(&pool, 64, 1024 * 4, al));
+
+  UvcoUdpRecv recv;
+  CHECK0(uvco_udp_recv_start(&recv, &udp));
+  while (1) {
+    CHECK(uvco_udp_recv_next(&recv) >= 0);
+    CHECK0(CocoPool_go(&pool, handle_giveip, &recv));
+  }
+
+  uvco_close((uv_handle_t*)&udp);
+  CocoPool_deinit(&pool);
+}
+
+static int disco_plum(int argc, char** argv) {
+  uv_udp_t udp;
+  CHECK0(uv_udp_init(loop, &udp));
+
+  // Bind to know our own local port
+  u16 port;
+  {
+    struct sockaddr_storage me;
+    CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, 0, (struct sockaddr_in*)&me));
+    CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&me, UV_UDP_REUSEADDR));
+    port = udp_getsockport(&udp);
+    LOG("me=%s:%d", STDNET_IPV4_ANY, port);
+  }
+
+  // Plum
+  PlumCtx ctx       = {0};
+  ctx.internal_port = port;
+  CHECK0(uvco_arun(loop, async_plumfn, &ctx));
+  LOG("port=%d->%d", ctx.external_port, ctx.internal_port);
+
+  plum_destroy_mapping(ctx.mapping_id);
+  uvco_close((uv_handle_t*)&udp);
+
   return 0;
 }
 
 static const CliCmd disco_commands[] = {
-    {"local", disco_local},  //
+    {"local", disco_local},    //
+    {"plum", disco_plum},      //
+    {"giveip", disco_giveip},  //
     {0},
 };
 
