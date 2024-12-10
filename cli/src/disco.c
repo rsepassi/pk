@@ -12,6 +12,22 @@
 
 extern uv_loop_t* loop;
 
+static void log_local_interfaces() {
+  uv_interface_address_t* addrs;
+  int                     count;
+  CHECK0(uv_interface_addresses(&addrs, &count));
+  for (int i = 0; i < count; ++i) {
+    uv_interface_address_t* addr = &addrs[i];
+    if (addr->is_internal)
+      continue;
+    if (((struct sockaddr*)&addr->address)->sa_family != AF_INET)
+      continue;
+    IpStrStorage ip;
+    CHECK0(IpStr_read(&ip, (struct sockaddr*)&addr->address));
+    LOG("local interface %s=%" PRIIpStr, addr->name, IpStrPRI(ip));
+  }
+}
+
 static u16 udp_getsockport(uv_udp_t* udp) {
   struct sockaddr_storage me;
   int                     me_len = sizeof(me);
@@ -158,22 +174,7 @@ static int disco_local(int argc, char** argv) {
     randombytes_buf(&ctx.id, sizeof(ctx.id));
   }
 
-  // Log our local IPV4 interfaces
-  {
-    uv_interface_address_t* addrs;
-    int                     count;
-    CHECK0(uv_interface_addresses(&addrs, &count));
-    for (int i = 0; i < count; ++i) {
-      uv_interface_address_t* addr = &addrs[i];
-      if (addr->is_internal)
-        continue;
-      if (((struct sockaddr*)&addr->address)->sa_family != AF_INET)
-        continue;
-      IpStrStorage ip;
-      CHECK0(IpStr_read(&ip, (struct sockaddr*)&addr->address));
-      LOG("local interface %s=%" PRIIpStr, addr->name, IpStrPRI(ip));
-    }
-  }
+  log_local_interfaces();
 
   // Bind to know our own local port
   {
@@ -224,31 +225,29 @@ static int disco_local(int argc, char** argv) {
 }
 
 typedef struct {
-  u16         internal_port;
-  u16         external_port;
-  uv_async_t* async;
-  int         mapping_id;
+  u16            internal_port;
+  u16            external_port;
+  uv_async_t*    async;
+  int            mapping_id;
+  plum_mapping_t mapping;
 } PlumCtx;
 
 static void mapping_callback(int id, plum_state_t state,
                              const plum_mapping_t* mapping) {
   PlumCtx* ctx = mapping->user_ptr;
+  CHECK0(ctx->external_port);
   if (state == PLUM_STATE_SUCCESS)
     ctx->external_port = mapping->external_port;
   uv_async_send(ctx->async);
 }
 
 static void async_plumfn(uv_async_t* async, void* arg) {
-  PlumCtx* ctx         = arg;
-  ctx->async           = async;
-  plum_config_t config = {0};
-  config.log_level     = PLUM_LOG_LEVEL_WARN;
-  plum_init(&config);
-  plum_mapping_t mapping = {0};
-  mapping.protocol       = PLUM_IP_PROTOCOL_UDP;
-  mapping.internal_port  = ctx->internal_port;
-  mapping.user_ptr       = ctx;
-  ctx->mapping_id        = plum_create_mapping(&mapping, mapping_callback);
+  PlumCtx* ctx               = arg;
+  ctx->async                 = async;
+  ctx->mapping.protocol      = PLUM_IP_PROTOCOL_UDP;
+  ctx->mapping.internal_port = ctx->internal_port;
+  ctx->mapping.user_ptr      = ctx;
+  ctx->mapping_id = plum_create_mapping(&ctx->mapping, mapping_callback);
 }
 
 void handle_giveip(void* arg) {
@@ -292,6 +291,8 @@ static int disco_giveip(int argc, char** argv) {
     }
   }
 
+  log_local_interfaces();
+
   uv_udp_t udp;
   CHECK0(uv_udp_init(loop, &udp));
   struct sockaddr_storage me;
@@ -317,24 +318,64 @@ static int disco_giveip(int argc, char** argv) {
 }
 
 static int disco_plum(int argc, char** argv) {
+  struct optparse options;
+  optparse_init(&options, argv);
+  int                  option;
+  struct optparse_long longopts[] =  //
+      {
+          {"port", 'p', OPTPARSE_REQUIRED},  //
+          {0}                                //
+      };
+
+  u16 port = 0;
+
+  while ((option = optparse_long(&options, longopts, NULL)) != -1) {
+    switch (option) {
+      case 'p': {
+        int iport = atoi(options.optarg);
+        CHECK(iport <= UINT16_MAX);
+        port = (u16)iport;
+      } break;
+      case '?':
+        cli_usage("disco plum", 0, longopts);
+        return 1;
+    }
+  }
+
+  // UDP init
   uv_udp_t udp;
   CHECK0(uv_udp_init(loop, &udp));
 
+  // Plum init
+  plum_config_t config = {0};
+  config.log_level     = PLUM_LOG_LEVEL_WARN;
+  plum_init(&config);
+
   // Bind to know our own local port
-  u16 port;
-  {
     struct sockaddr_storage me;
-    CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, 0, (struct sockaddr_in*)&me));
-    CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&me, UV_UDP_REUSEADDR));
+    CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&me));
+    CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&me, 0));
     port = udp_getsockport(&udp);
     LOG("me=%s:%d", STDNET_IPV4_ANY, port);
-  }
 
   // Plum
   PlumCtx ctx       = {0};
   ctx.internal_port = port;
   CHECK0(uvco_arun(loop, async_plumfn, &ctx));
   LOG("port=%d->%d", ctx.external_port, ctx.internal_port);
+
+  // Listen
+  UvcoUdpRecv recv;
+  CHECK0(uvco_udp_recv_start(&recv, &udp));
+  while (1) {
+    CHECK(uvco_udp_recv_next(&recv) >= 0);
+
+    IpStrStorage sender;
+    CHECK0(IpStr_read(&sender, recv.addr));
+    LOG("sender=%" PRIIpStr, IpStrPRI(sender));
+    break;
+  }
+  uv_udp_recv_stop(&udp);
 
   plum_destroy_mapping(ctx.mapping_id);
   uvco_close((uv_handle_t*)&udp);
