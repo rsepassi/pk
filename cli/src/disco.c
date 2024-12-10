@@ -377,6 +377,7 @@ static int disco_plum(int argc, char** argv) {
   PlumCtx ctx       = {0};
   ctx.internal_port = port;
   CHECK0(uvco_arun(loop, async_plumfn, &ctx));
+  CHECK(ctx.external_port, "no external port acquired");
   LOG("port=%d->%d", ctx.external_port, ctx.internal_port);
 
   // Listen
