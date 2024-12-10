@@ -47,7 +47,7 @@ int IpStr_read(IpStrStorage* out, const struct sockaddr* sa) {
   if (inet_ntop(sa->sa_family, addr, out->ip_buf, sizeof(out->ip_buf)) == NULL)
     return 1;
   out->ip   = Str0(out->ip_buf);
-  out->port = sa_get_port(sa);
+  out->port = (uint16_t)sa_get_port(sa);
   return 0;
 }
 

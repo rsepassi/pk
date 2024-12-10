@@ -4,14 +4,14 @@
 #define STDNET_IPV6_ANY "::"
 
 #define STDNET_INET6_ADDRSTRLEN (45 + 1)
-#define STDNET_INET6_ADDRLEN    (15 + 1)
+#define STDNET_INET6_ADDRLEN    16
 
 struct sockaddr;
 
 typedef struct {
-  Str  ip;
-  int  port;
-  char ip_buf[STDNET_INET6_ADDRSTRLEN];
+  Str      ip;
+  uint16_t port;
+  char     ip_buf[STDNET_INET6_ADDRSTRLEN];
 } IpStrStorage;
 
 typedef struct {
@@ -31,7 +31,7 @@ typedef enum {
 // A stable IP and port representation suitable to put on the network
 typedef struct __attribute__((packed)) {
   uint8_t  ip_buf[STDNET_INET6_ADDRLEN];  // IPv4=4 bytes, IPv6=16 bytes
-  uint16_t port;                          // network byte order
+  uint16_t port;                          // little-endian
   uint8_t  ip_type;                       // IpType
   uint8_t  _pad;
 } IpMsg;
