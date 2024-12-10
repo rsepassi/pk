@@ -368,6 +368,12 @@ static inline i32 hashmap_hash_i64(i64 i) {
 static inline bool hashmap_hash_i64_eq(i64 a, i64 b) { return a == b; }
 DECLARE_Hashfn(i64, hashmap_hash_i64, hashmap_hash_i64_eq);
 
+static inline i32 hashmap_hash_u64(u64 i) {
+  return (i32)((i) >> 33 ^ (i) ^ (i) << 11);
+}
+static inline bool hashmap_hash_u64_eq(u64 a, u64 b) { return a == b; }
+DECLARE_Hashfn(u64, hashmap_hash_u64, hashmap_hash_u64_eq);
+
 static inline i32 hashmap_hash_cstr(char* s) {
   // X31 hash
   if (s == 0)
@@ -408,6 +414,8 @@ DECLARE_Hashfn(Bytes, hashmap_hash_bytes, hashmap_hash_bytes_eq);
   Hashmap_create(h, i32, V, hashmap_hash_i32, hashmap_hash_i32_eq, a)
 #define Hashmap_i64_create(h, V, a)                                            \
   Hashmap_create(h, i64, V, hashmap_hash_i64, hashmap_hash_i64_eq, a)
+#define Hashmap_u64_create(h, V, a)                                            \
+  Hashmap_create(h, u64, V, hashmap_hash_u64, hashmap_hash_u64_eq, a)
 #define Hashmap_cstr_create(h, V, a)                                           \
   Hashmap_create(h, char*, V, hashmap_hash_cstr, hashmap_hash_cstr_eq, a)
 #define Hashmap_bytes_create(h, V, a)                                          \
