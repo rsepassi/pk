@@ -18,9 +18,10 @@ LIBC := $(BDIR)/sysroot/usr/lib/libc.a
 STDC := $(BDIR)/sysroot/usr/include/stdint.h
 SRC := $(BDIR)/musl/README
 CRT := $(BDIR)/compiler-rt/lib/linux/clang_rt.crtend-aarch64.o
+PKGS := $(BDIR)/linux_alpine/.build
 
-$(BDIR)/.build: $(LIBC) $(STDC) $(CRT)
-	ln -s $(LIBC) $(BDIR)/sysroot/usr/lib/libssp_nonshared.a
+$(BDIR)/.build: $(LIBC) $(STDC) $(CRT) $(PKGS)
+	ln -sf $(LIBC) $(BDIR)/sysroot/usr/lib/libssp_nonshared.a
 	touch $(BDIR)/.build
 
 $(CRT): lib/clang_rt.crtend-aarch64.o
@@ -41,3 +42,16 @@ $(SRC): $(MUSL_SRC_TAR)
 
 $(MUSL_SRC_TAR):
 	fetch $(MUSL_SRC_URL) $(MUSL_SRC_HASH)
+
+$(PKGS): $(BCACHE)/linux_alpine/$(TARGET_ARCH)/.build
+	mkdir -p $(dir $@)/usr/include
+	mkdir -p $(dir $@)/compiler-rt/lib
+	cp -r $(dir $<)/usr/include/linux $(dir $@)/usr/include/
+	cp -r $(dir $<)/usr/include/asm $(dir $@)/usr/include/
+	cp -r $(dir $<)/usr/include/asm-generic $(dir $@)/usr/include/
+	cp -r $(dir $<)/usr/lib/llvm17/lib/clang/17/lib/linux $(dir $@)/compiler-rt/lib/
+	touch $@
+
+$(BCACHE)/linux_alpine/$(TARGET_ARCH)/.build: scripts/apk pkgs.txt
+	./scripts/apk `cat pkgs.txt`
+	touch $@

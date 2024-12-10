@@ -1,6 +1,8 @@
 Name: Linux musl libc
 Version: 1.2.5
 Description: Linux libc
-Cflags: --sysroot=${build_prefix}/sysroot -D_FORTIFY_SOURCE=3
+Cflags: --sysroot=${build_prefix}/sysroot -D_FORTIFY_SOURCE=3 \
+  -isystem ${build_prefix}/sysroot/usr/include \
+  -isystem ${build_prefix}/linux_alpine/usr/include
 Libs: --sysroot=${build_prefix}/sysroot \
-  -resource-dir=${build_prefix}/compiler-rt
+  -resource-dir=${build_prefix}/linux_alpine/compiler-rt

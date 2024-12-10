@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+
+set -e
+
+pkgs="$@"
+
+dldir=$BCACHE/linux_alpine/$TARGET_ARCH
+
+mkdir -p $dldir/etc/apk
+echo "nameserver 1.1.1.1" > $dldir/etc/resolv.conf
+echo "http://mirrors.ocf.berkeley.edu/alpine/v3.20/main" > $dldir/etc/apk/repositories
+
+apk add -p $dldir --initdb -U --arch $TARGET_ARCH --allow-untrusted $pkgs
