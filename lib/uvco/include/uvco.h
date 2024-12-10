@@ -1,30 +1,10 @@
 #pragma once
 
-#include "minicoro.h"
+#include "coco.h"
 #include "stdtypes.h"
 #include "uv.h"
 
-typedef struct {
-  mco_coro* co;
-  bool      done;
-} co_wait_t;
-
 #define UVCO_DEFAULT_FILE_MODE (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
-
-#define CO_WAIT_NEW() ((co_wait_t){mco_running(), 0})
-
-#define CO_AWAIT(wait)                                                         \
-  do {                                                                         \
-    while (!(wait)->done) {                                                    \
-      CHECK0(mco_yield(mco_running()));                                        \
-    }                                                                          \
-  } while (0)
-
-#define CO_DONE(wait)                                                          \
-  do {                                                                         \
-    (wait)->done = true;                                                       \
-    CHECK(mco_resume((wait)->co) == MCO_SUCCESS);                              \
-  } while (0)
 
 #define UvBuf(b)   uv_buf_init((char*)(b).buf, (unsigned int)(b).len)
 #define UvBytes(b) Bytes((b).base, (b).len)
@@ -35,6 +15,8 @@ void uvco_sleep(uv_loop_t* loop, u64 ms);
 // Thread
 typedef int (*uvco_trun_fn)(void*);
 int uvco_trun(uv_loop_t* loop, uvco_trun_fn work, void* arg);
+typedef void (*uvco_arun_fn)(uv_async_t*, void*);
+int uvco_arun(uv_loop_t* loop, uvco_arun_fn work, void* arg);
 
 // Filesystem
 ssize_t uvco_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path);
@@ -57,7 +39,10 @@ typedef struct {
   uv_buf_t               buf;
   const struct sockaddr* addr;
   ssize_t                nread;
-  co_wait_t              wait;
+  CocoWait               wait;
 } UvcoUdpRecv;
 int uvco_udp_recv_start(UvcoUdpRecv* recv, uv_udp_t* handle);
 int uvco_udp_recv_next(UvcoUdpRecv* recv);
+
+// Handle
+void uvco_close(uv_handle_t* h);

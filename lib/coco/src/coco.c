@@ -26,3 +26,107 @@ int coco_go(mco_coro** co, size_t stack_sz, CocoFn fn, void* arg) {
     return rc;
   return 0;
 }
+
+static void* stack_alloc(size_t size, void* udata) {
+  Allocator* al = udata;
+  Bytes      b;
+  if (allocator_u8(*al, &b, size))
+    return 0;
+  return b.buf;
+}
+
+static void stack_dealloc(void* ptr, size_t size, void* udata) {
+  Allocator* al = udata;
+  allocator_free(*al, Bytes(ptr, size));
+}
+
+static void pool_codone(CocoPoolItem* x) {
+  q_enq(&x->pool->free, &x->node);
+
+  Node* waiter;
+  if ((waiter = q_deq(&x->pool->waiters))) {
+    CocoWait* wait = CONTAINER_OF(waiter, CocoWait, node);
+    COCO_DONE(wait);
+  }
+}
+
+static void pool_comain(mco_coro* co) {
+  CocoPoolItem* x = co->user_data;
+
+  while (1) {
+    if (x->exit)
+      break;
+
+    if (x->work.fn == NULL) {
+      CHECK0(mco_yield(mco_running()));
+      continue;
+    }
+
+    x->work.fn(x->work.arg);
+    x->work = (CocoPoolWork){0};
+    pool_codone(x);
+  }
+}
+
+int CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al) {
+  ZERO(pool);
+
+  Bytes b;
+  int   rc;
+  if ((rc = Alloc_alloc(al, &b, CocoPoolItem, n)))
+    return rc;
+
+  pool->cos     = (void*)b.buf;
+  pool->cos_len = n;
+  pool->al      = al;
+
+  mco_desc desc       = mco_desc_init(pool_comain, stack_sz);
+  desc.allocator_data = &al;
+  desc.alloc_cb       = stack_alloc;
+  desc.dealloc_cb     = stack_dealloc;
+
+  for (usize i = 0; i < n; ++i) {
+    CocoPoolItem* x = &pool->cos[i];
+    ZERO(x);
+
+    x->pool        = pool;
+    desc.user_data = x;
+    q_enq(&pool->free, &x->node);
+    CHECK0(mco_create(&x->co, &desc));
+  }
+
+  return 0;
+}
+
+void CocoPool_deinit(CocoPool* pool) {
+  for (usize i = 0; i < pool->cos_len; ++i) {
+    CocoPoolItem* x = &pool->cos[i];
+    mco_destroy(x->co);
+  }
+  allocator_free(pool->al,
+                 Bytes(pool->cos, pool->cos_len * sizeof(CocoPoolItem)));
+}
+
+int CocoPool_go(CocoPool* pool, CocoFn fn, void* arg) {
+  (void)pool;
+  (void)fn;
+  (void)arg;
+
+  while (1) {
+    Node* n = q_deq(&pool->free);
+    if (n) {
+      CocoPoolItem* x = CONTAINER_OF(n, CocoPoolItem, node);
+      x->work.fn      = fn;
+      x->work.arg     = arg;
+      CHECK0(mco_resume(x->co));
+      break;
+    } else {
+      CocoWait wait;
+      q_enq(&pool->waiters, &wait.node);
+      COCO_AWAIT(&wait);
+      continue;
+    }
+  }
+
+  return 0;
+}

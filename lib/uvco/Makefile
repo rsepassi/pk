@@ -1,4 +1,4 @@
-DEPS := lib/cbase vendor/uv vendor/minicoro
+DEPS := lib/cbase lib/coco vendor/uv vendor/minicoro
 
 include $(ROOTDIR)/scripts/cc.mk
 include $(ROOTDIR)/scripts/deps.mk
