@@ -1,7 +1,9 @@
 #include "str.h"
 
-#define STDNET_IPV4_ANY "0.0.0.0"
-#define STDNET_IPV6_ANY "::"
+#define STDNET_IPV4_ANY       "0.0.0.0"
+#define STDNET_IPV6_ANY       "::"
+#define STDNET_IPV4_LOCALHOST "127.0.0.1"
+#define STDNET_IPV6_LOCALHOST "::1"
 
 #define STDNET_INET6_ADDRSTRLEN (45 + 1)
 #define STDNET_INET6_ADDRLEN    16
