@@ -1,4 +1,14 @@
 // Discovery
+//
+// TODO:
+// * Channel expiration
+// * Use siphash since requester chooses channel id?
+// * Authentication
+// * Authorization
+// * Encryption
+// * Anonymity
+// * Channel modifications (e.g. changing forwarding address)
+// * Relay header?
 
 #include "allocatormi.h"
 #include "cli.h"
@@ -388,12 +398,6 @@ static int disco_plum(int argc, char** argv) {
   return 0;
 }
 
-static int disco_relay_client(int argc, char** argv) {
-  (void)argc;
-  (void)argv;
-  return 0;
-}
-
 // Disco relay service
 // * Initialize channel
 // * Post message to channel
@@ -422,25 +426,19 @@ typedef struct __attribute__((packed)) {
 #define DISCO_MAX_MSG_SZ 1600
 
 typedef struct {
-  Hashmap channels;  // u64 -> DiscoChannel
+  uv_udp_t udp;
+  Hashmap  channels;  // u64 -> DiscoChannel
 } DiscoCtx;
 
 typedef struct {
-  u64 id;
+  u64                     id;
+  struct sockaddr_storage addr;
 } DiscoChannel;
 
 typedef struct {
   DiscoCtx*    ctx;
   UvcoUdpRecv* recv;
 } DiscoDispatchArg;
-
-// TODO:
-// * Channel expiration
-// * Use siphash since requester chooses channel id?
-// * Authentication
-// * Authorization
-// * Encryption
-// * Anonymity
 
 static void disco_relay_init(void* varg) {
   LOG("");
@@ -455,11 +453,30 @@ static void disco_relay_init(void* varg) {
 
   DiscoRelayMsgInit* init_msg = (void*)msg.buf;
 
-  if (hashmap_get(&arg.ctx->channels, &init_msg->channel_id) !=
-      hashmap_end(&arg.ctx->channels))
-    return;
-
   // New channel
+  HashmapStatus ret;
+  HashmapIter it = hashmap_put(&arg.ctx->channels, &init_msg->channel_id, &ret);
+  switch (ret) {
+    case HashmapStatus_Present:
+    case HashmapStatus_ERR:
+      return;
+    default:
+      break;
+  }
+
+  DiscoChannel* chan = hashmap_val(&arg.ctx->channels, it);
+  ZERO(chan);
+
+  chan->id   = init_msg->channel_id;
+  chan->addr = *(struct sockaddr_storage*)recv->addr;
+
+  IpStrStorage ipstr;
+  CHECK0(IpStr_read(&ipstr, (struct sockaddr*)&chan->addr));
+  LOG("new channel %" PRIu64 " %" PRIIpStr, chan->id, IpStrPRI(ipstr));
+
+  // Send back an ack
+  uv_buf_t ack = UvBuf(Str("\0"));
+  CHECK0(uvco_udp_send(&arg.ctx->udp, &ack, 1, (struct sockaddr*)&chan->addr));
 }
 
 static void disco_relay_post(void* varg) {
@@ -477,22 +494,28 @@ static void disco_relay_post(void* varg) {
   DiscoRelayMsgPost* post_msg = (void*)header.buf;
   if (post_msg->payload_len != msg.len)
     return;
+  if (msg.len > DISCO_MAX_MSG_SZ)
+    return;
 
   HashmapIter it = hashmap_get(&arg.ctx->channels, &post_msg->channel_id);
   if (it == hashmap_end(&arg.ctx->channels))
     return;
 
   DiscoChannel* chan = hashmap_val(&arg.ctx->channels, it);
-  (void)chan;
+
+  // Copy the message into our frame to keep it alive for sending
+  u8    out_buf[DISCO_MAX_MSG_SZ];
+  Bytes out = BytesArray(out_buf);
+  bytes_copy(&out, msg);
+
+  IpStrStorage ipstr;
+  CHECK0(IpStr_read(&ipstr, (struct sockaddr*)recv->addr));
+  LOG("channel post %" PRIu64 " from %" PRIIpStr, chan->id, IpStrPRI(ipstr));
 
   // Send message on channel
-
-  // Need:
-  // udp
-  // send address
-
-  // Should I send a header that has the original sender address?
-  // Or assume that the sender will include whatever it needs?
+  uv_buf_t outuv = UvBuf(out);
+  CHECK0(
+      uvco_udp_send(&arg.ctx->udp, &outuv, 1, (struct sockaddr*)&chan->addr));
 }
 
 static void disco_dispatch(CocoPool* pool, DiscoCtx* ctx, UvcoUdpRecv* recv) {
@@ -563,27 +586,103 @@ static int disco_relay(int argc, char** argv) {
 
   log_local_interfaces();
 
-  uv_udp_t udp;
-  CHECK0(uv_udp_init(loop, &udp));
+  CHECK0(uv_udp_init(loop, &ctx.udp));
   struct sockaddr_storage me;
   CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&me));
-  CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&me, UV_UDP_REUSEADDR));
-  port = udp_getsockport(&udp);
+  CHECK0(uv_udp_bind(&ctx.udp, (struct sockaddr*)&me, UV_UDP_REUSEADDR));
+  port = udp_getsockport(&ctx.udp);
   LOG("me=%s:%d", STDNET_IPV4_ANY, port);
 
   CocoPool pool;
   CHECK0(CocoPool_init(&pool, 64, 1024 * 4, al));
 
   UvcoUdpRecv recv;
-  CHECK0(uvco_udp_recv_start(&recv, &udp));
+  CHECK0(uvco_udp_recv_start(&recv, &ctx.udp));
   while (1) {
     CHECK(uvco_udp_recv_next(&recv) >= 0);
     disco_dispatch(&pool, &ctx, &recv);
   }
 
   hashmap_deinit(&ctx.channels);
-  uvco_close((uv_handle_t*)&udp);
+  uvco_close((uv_handle_t*)&ctx.udp);
   CocoPool_deinit(&pool);
+  return 0;
+}
+
+static int disco_relay_client(int argc, char** argv) {
+  (void)argc;
+
+  char* ip         = STDNET_IPV4_LOCALHOST;
+  u16   port       = 443;
+  u64   channel_id = 22;
+
+  struct optparse opts;
+  optparse_init(&opts, argv);
+  int option;
+  while ((option = optparse(&opts, "p:a:c:")) != -1) {
+    switch (option) {
+      case 'p':
+        port = parse_port(opts.optarg);
+        break;
+      case 'a':
+        ip = opts.optarg;
+        break;
+      case 'c':
+        channel_id = parse_port(opts.optarg);
+        break;
+      case '?':
+        LOGE("unrecognized option %c", option);
+        return 1;
+    }
+  }
+
+  struct sockaddr_storage relay;
+  CHECK0(uv_ip4_addr(ip, port, (struct sockaddr_in*)&relay));
+
+  uv_udp_t udp;
+  CHECK0(uv_udp_init(loop, &udp));
+
+  // Initiate a channel
+  {
+    DiscoRelayMsgInit init = {0};
+    init.type              = DiscoRelayMsg_INIT;
+    init.channel_id        = channel_id;
+    uv_buf_t buf           = UvBuf(BytesObj(init));
+    LOG("init channel");
+    CHECK0(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&relay));
+  }
+
+  // Listen for the ack
+  UvcoUdpRecv recv;
+  CHECK0(uvco_udp_recv_start(&recv, &udp));
+  CHECK(uvco_udp_recv_next(&recv) >= 0);
+  CHECK(recv.buf.len == 1);
+  CHECK(recv.buf.base[0] == 0);
+  LOG("acked");
+
+  // Post to the channel
+  {
+    u8                 msg_buf[sizeof(DiscoRelayMsgPost) + 1];
+    DiscoRelayMsgPost* post = (void*)msg_buf;
+    ZERO(post);
+    post->type                         = DiscoRelayMsg_POST;
+    post->channel_id                   = channel_id;
+    post->payload_len                  = 1;
+    msg_buf[sizeof(DiscoRelayMsgPost)] = 88;
+    uv_buf_t buf                       = UvBuf(BytesArray(msg_buf));
+    LOG("post to channel");
+    CHECK0(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&relay));
+  }
+
+  // Listen for the forward
+  CHECK(uvco_udp_recv_next(&recv) >= 0);
+  CHECK(recv.buf.len == 1);
+  CHECK(recv.buf.base[0] == 88);
+  LOG("forwarded");
+
+  uv_udp_recv_stop(&udp);
+  uvco_close((uv_handle_t*)&udp);
+
   return 0;
 }
 
