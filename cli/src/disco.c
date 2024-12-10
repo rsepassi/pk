@@ -4,6 +4,7 @@
 #include "cli.h"
 #include "coco.h"
 #include "crypto.h"
+#include "hashmap.h"
 #include "log.h"
 #include "plum/plum.h"
 #include "sodium.h"
@@ -11,6 +12,12 @@
 #include "uvco.h"
 
 extern uv_loop_t* loop;
+
+static u16 parse_port(char* port_str) {
+  int iport = atoi(port_str);
+  CHECK(iport <= UINT16_MAX);
+  return (u16)iport;
+}
 
 static void log_local_interfaces() {
   uv_interface_address_t* addrs;
@@ -332,9 +339,7 @@ static int disco_plum(int argc, char** argv) {
   while ((option = optparse_long(&options, longopts, NULL)) != -1) {
     switch (option) {
       case 'p': {
-        int iport = atoi(options.optarg);
-        CHECK(iport <= UINT16_MAX);
-        port = (u16)iport;
+        port = parse_port(options.optarg);
       } break;
       case '?':
         cli_usage("disco plum", 0, longopts);
@@ -352,11 +357,11 @@ static int disco_plum(int argc, char** argv) {
   plum_init(&config);
 
   // Bind to know our own local port
-    struct sockaddr_storage me;
-    CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&me));
-    CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&me, 0));
-    port = udp_getsockport(&udp);
-    LOG("me=%s:%d", STDNET_IPV4_ANY, port);
+  struct sockaddr_storage me;
+  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&me));
+  CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&me, 0));
+  port = udp_getsockport(&udp);
+  LOG("me=%s:%d", STDNET_IPV4_ANY, port);
 
   // Plum
   PlumCtx ctx       = {0};
@@ -383,10 +388,211 @@ static int disco_plum(int argc, char** argv) {
   return 0;
 }
 
+static int disco_relay_client(int argc, char** argv) {
+  (void)argc;
+  (void)argv;
+  return 0;
+}
+
+// Disco relay service
+// * Initialize channel
+// * Post message to channel
+
+typedef enum {
+  DiscoRelayMsg_INIT,
+  DiscoRelayMsg_POST,
+  DiscoRelayMsg_N,
+} DiscoRelayMsgType;
+
+typedef struct __attribute__((packed)) {
+  u8  type;
+  u8  reserved[3];
+  u64 channel_id;
+} DiscoRelayMsgInit;
+
+typedef struct __attribute__((packed)) {
+  u8  type;
+  u8  reserved[3];
+  u64 channel_id;
+  u16 payload_len;
+} DiscoRelayMsgPost;
+
+#define DISCO_MIN_MSG_SZ                                                       \
+  MIN(sizeof(DiscoRelayMsgInit), sizeof(DiscoRelayMsgPost))
+#define DISCO_MAX_MSG_SZ 1600
+
+typedef struct {
+  Hashmap channels;  // u64 -> DiscoChannel
+} DiscoCtx;
+
+typedef struct {
+  u64 id;
+} DiscoChannel;
+
+typedef struct {
+  DiscoCtx*    ctx;
+  UvcoUdpRecv* recv;
+} DiscoDispatchArg;
+
+// TODO:
+// * Channel expiration
+// * Use siphash since requester chooses channel id?
+// * Authentication
+// * Authorization
+// * Encryption
+// * Anonymity
+
+static void disco_relay_init(void* varg) {
+  LOG("");
+  DiscoDispatchArg* argp = varg;
+  DiscoDispatchArg  arg  = *argp;
+
+  UvcoUdpRecv* recv = arg.recv;
+  Bytes        msg  = UvBytes(recv->buf);
+
+  if (msg.len != sizeof(DiscoRelayMsgInit))
+    return;
+
+  DiscoRelayMsgInit* init_msg = (void*)msg.buf;
+
+  if (hashmap_get(&arg.ctx->channels, &init_msg->channel_id) !=
+      hashmap_end(&arg.ctx->channels))
+    return;
+
+  // New channel
+}
+
+static void disco_relay_post(void* varg) {
+  LOG("");
+  DiscoDispatchArg* argp = varg;
+  DiscoDispatchArg  arg  = *argp;
+
+  UvcoUdpRecv* recv = arg.recv;
+  Bytes        msg  = UvBytes(recv->buf);
+
+  if (msg.len < sizeof(DiscoRelayMsgPost))
+    return;
+  Bytes header = bytes_advance(&msg, sizeof(DiscoRelayMsgPost));
+
+  DiscoRelayMsgPost* post_msg = (void*)header.buf;
+  if (post_msg->payload_len != msg.len)
+    return;
+
+  HashmapIter it = hashmap_get(&arg.ctx->channels, &post_msg->channel_id);
+  if (it == hashmap_end(&arg.ctx->channels))
+    return;
+
+  DiscoChannel* chan = hashmap_val(&arg.ctx->channels, it);
+  (void)chan;
+
+  // Send message on channel
+
+  // Need:
+  // udp
+  // send address
+
+  // Should I send a header that has the original sender address?
+  // Or assume that the sender will include whatever it needs?
+}
+
+static void disco_dispatch(CocoPool* pool, DiscoCtx* ctx, UvcoUdpRecv* recv) {
+  Bytes msg = UvBytes(recv->buf);
+
+  if (msg.len < DISCO_MIN_MSG_SZ)
+    return;
+  if (msg.len > DISCO_MAX_MSG_SZ)
+    return;
+
+  if (msg.buf[0] >= DiscoRelayMsg_N)
+    return;
+  DiscoRelayMsgType type = msg.buf[0];
+
+  CocoFn handlers[DiscoRelayMsg_N] = {
+      disco_relay_init,
+      disco_relay_post,
+  };
+
+  // gonow because the recv buf is ephemeral. If there's no handler now,
+  // drop the request.
+  DiscoDispatchArg arg = {0};
+  arg.ctx              = ctx;
+  arg.recv             = recv;
+  CocoPool_gonow(pool, handlers[type], &arg);
+}
+
+static int disco_relay(int argc, char** argv) {
+  (void)argc;
+
+  u16 port = 0;
+
+  struct optparse opts;
+  optparse_init(&opts, argv);
+  int option;
+  while ((option = optparse(&opts, "p:")) != -1) {
+    switch (option) {
+      case 'p':
+        port = parse_port(opts.optarg);
+        break;
+      case '?':
+        LOGE("unrecognized option %c", option);
+        return 1;
+    }
+  }
+
+  // Disco relay and rendezvous
+
+  // Alice now asks the Disco server to aid in rendezvous with Bob
+  //
+  // Alice asks Disco to open a channel
+  //   Channel ID:
+  //     * Hash(Alice PK): allows others to find Alice
+  //     * KDF(DH(Alice, Bob)): allows mutual finding
+  //     * Pre-shared code
+  //
+  // Bob sends a message to the channel
+  // Disco forwards the message to Alice
+  // Alice now has Bob's IP+Port (+Key)
+  //
+  // Alice and Bob can try direct communication
+  // If that fails, they can continue to use the channel
+
+  Allocator al = allocatormi_allocator();
+
+  DiscoCtx ctx = {0};
+  CHECK0(Hashmap_u64_create(&ctx.channels, DiscoChannel, al));
+
+  log_local_interfaces();
+
+  uv_udp_t udp;
+  CHECK0(uv_udp_init(loop, &udp));
+  struct sockaddr_storage me;
+  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&me));
+  CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&me, UV_UDP_REUSEADDR));
+  port = udp_getsockport(&udp);
+  LOG("me=%s:%d", STDNET_IPV4_ANY, port);
+
+  CocoPool pool;
+  CHECK0(CocoPool_init(&pool, 64, 1024 * 4, al));
+
+  UvcoUdpRecv recv;
+  CHECK0(uvco_udp_recv_start(&recv, &udp));
+  while (1) {
+    CHECK(uvco_udp_recv_next(&recv) >= 0);
+    disco_dispatch(&pool, &ctx, &recv);
+  }
+
+  hashmap_deinit(&ctx.channels);
+  uvco_close((uv_handle_t*)&udp);
+  CocoPool_deinit(&pool);
+  return 0;
+}
+
 static const CliCmd disco_commands[] = {
-    {"local", disco_local},    //
-    {"plum", disco_plum},      //
-    {"giveip", disco_giveip},  //
+    {"local", disco_local},                //
+    {"plum", disco_plum},                  //
+    {"giveip", disco_giveip},              //
+    {"relay", disco_relay},                //
+    {"relay-client", disco_relay_client},  //
     {0},
 };
 
