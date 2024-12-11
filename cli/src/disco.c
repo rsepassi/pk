@@ -9,6 +9,7 @@
 // * Anonymity
 // * Channel modifications (e.g. changing forwarding address)
 // * Relay header?
+// * Throttling sends
 
 #include "allocatormi.h"
 #include "cli.h"
@@ -23,7 +24,13 @@
 
 extern uv_loop_t* loop;
 
-static u16 parse_port(char* port_str) {
+static void log_sockaddr(const char* tag, struct sockaddr* addr) {
+  IpStrStorage ips;
+  CHECK0(IpStr_read(&ips, (struct sockaddr*)addr));
+  LOG("%s=%" PRIIpStr, tag, IpStrPRI(ips));
+}
+
+static u16 parse_port(const char* port_str) {
   int iport = atoi(port_str);
   CHECK(iport <= UINT16_MAX);
   return (u16)iport;
@@ -70,9 +77,15 @@ typedef struct {
   u64                id;
 } DiscoLocalCtx;
 
-static void multicast_ipv4_addr_derive(struct sockaddr_in* addr, Bytes in) {
-  u8 h[5];
-  CHECK0(crypto_generichash_blake2b(h, sizeof(h), in.buf, in.len, 0, 0));
+static u64 disco_channel_derive(Bytes in) {
+  u64 out;
+  CHECK0(
+      crypto_generichash_blake2b((u8*)&out, sizeof(out), in.buf, in.len, 0, 0));
+  return out;
+}
+
+static void disco_multicast4_derive(struct sockaddr_in* addr, u64 channel) {
+  u8* h = (u8*)&channel;
 
   addr->sin_family = AF_INET;
 
@@ -82,7 +95,7 @@ static void multicast_ipv4_addr_derive(struct sockaddr_in* addr, Bytes in) {
   u16 port       = *(u16*)h;
   addr->sin_port = 49152 + (port % (60999 - 49152));
 
-  // Last 3 bytes are used for the IP
+  // Next 3 bytes are used for the IP
   u8* ip = (u8*)&addr->sin_addr;
   ip[0]  = 239;
   ip[1]  = h[2];
@@ -90,40 +103,42 @@ static void multicast_ipv4_addr_derive(struct sockaddr_in* addr, Bytes in) {
   ip[3]  = h[4];
 }
 
-static void multicast_ipv4_addr_all(struct sockaddr_in* addr) {
-  // 239.18.132.107:35544
-  multicast_ipv4_addr_derive(addr, Str("pk-multicast"));
+static u64 disco_channel_generic() {
+  return disco_channel_derive(Str("pk-disco-all"));
 }
 
-static void multicast_ipv4_addr_peer(struct sockaddr_in* addr,
-                                     const CryptoSignPK* pk) {
-  multicast_ipv4_addr_derive(addr, BytesObj(*pk));
+static u64 disco_channel_peer(const CryptoSignPK* pk) {
+  return disco_channel_derive(BytesObj(*pk));
 }
 
-static void multicast_ipv4_addr_channel(struct sockaddr_in* addr,
-                                        Str                 channel_id) {
-  multicast_ipv4_addr_derive(addr, channel_id);
-}
+static u64 disco_channel_code(Str code) { return disco_channel_derive(code); }
 
-static void multicast_ipv4_addr_peer_mutual(struct sockaddr_in*    addr,
-                                            const CryptoKxKeypair* me,
-                                            const CryptoKxPK*      bob) {
+static u64 disco_channel_mutual(const CryptoSignPK* me,
+                                const CryptoSignSK* me_sk,
+                                const CryptoSignPK* bob) {
+  CryptoKxPK mex;
+  CryptoKxSK me_skx;
+  CryptoKxPK bobx;
+  CHECK0(crypto_sign_ed25519_pk_to_curve25519((u8*)&mex, (u8*)me));
+  CHECK0(crypto_sign_ed25519_sk_to_curve25519((u8*)&me_skx, (u8*)me_sk));
+  CHECK0(crypto_sign_ed25519_pk_to_curve25519((u8*)&bobx, (u8*)bob));
+
   // memcmp OK: public key
   CryptoKxTx shared;
-  if (memcmp(&me->pk, bob, sizeof(*bob)) > 0) {
-    CHECK0(crypto_kx_server_session_keys((u8*)&shared, 0, (u8*)&me->pk,
-                                         (u8*)&me->sk, (u8*)bob));
+  if (memcmp(&mex, &bobx, sizeof(bobx)) > 0) {
+    CHECK0(crypto_kx_server_session_keys((u8*)&shared, 0, (u8*)&mex,
+                                         (u8*)&me_skx, (u8*)&bobx));
   } else {
-    CHECK0(crypto_kx_client_session_keys((u8*)&shared, 0, (u8*)&me->pk,
-                                         (u8*)&me->sk, (u8*)bob));
+    CHECK0(crypto_kx_client_session_keys((u8*)&shared, 0, (u8*)&mex,
+                                         (u8*)&me_skx, (u8*)&bobx));
   }
 
   u8 subkey[32];
   STATIC_CHECK(sizeof(shared) == crypto_kdf_blake2b_KEYBYTES);
   CHECK0(crypto_kdf_blake2b_derive_from_key(subkey, sizeof(subkey), 1,
-                                            "pk-multi", (u8*)&shared));
+                                            "pk-disco", (u8*)&shared));
 
-  multicast_ipv4_addr_derive(addr, BytesArray(subkey));
+  return disco_channel_derive(BytesArray(subkey));
 }
 
 static void advertco_fn(void* data) {
@@ -144,8 +159,8 @@ static void advertco_fn(void* data) {
 
 static int disco_local(int argc, char** argv) {
   LOG("");
-  (void)multicast_ipv4_addr_peer;
-  (void)multicast_ipv4_addr_peer_mutual;
+
+  (void)disco_channel_peer;
 
   struct optparse options;
   optparse_init(&options, argv);
@@ -177,11 +192,15 @@ static int disco_local(int argc, char** argv) {
   IpStrStorage  multicast_addrs;
   DiscoLocalCtx ctx = {0};
   {
+    u64 channel_id;
     // Determine our multicast address
     if (channel.len > 0)
-      multicast_ipv4_addr_channel(&ctx.multicast_addr, channel);
+      channel_id = disco_channel_code(channel);
     else
-      multicast_ipv4_addr_all(&ctx.multicast_addr);
+      channel_id = disco_channel_generic();
+
+    disco_multicast4_derive(&ctx.multicast_addr, channel_id);
+
     CHECK0(IpStr_read(&multicast_addrs, (struct sockaddr*)&ctx.multicast_addr));
     ctx.multicast_addrs = *(IpStr*)&multicast_addrs;
     LOG("multicast=%" PRIIpStr, IpStrPRI(multicast_addrs));
@@ -267,73 +286,6 @@ static void async_plumfn(uv_async_t* async, void* arg) {
   ctx->mapping_id = plum_create_mapping(&ctx->mapping, mapping_callback);
 }
 
-void handle_giveip(void* arg) {
-  UvcoUdpRecv* recv = arg;
-  IpMsg        msg;
-  CHECK0(IpMsg_read(&msg, recv->addr));
-
-  IpStrStorage sender;
-  CHECK0(IpStr_read(&sender, recv->addr));
-  LOG("sender=%" PRIIpStr, IpStrPRI(sender));
-
-  struct sockaddr addr = *recv->addr;
-  uv_buf_t        buf  = UvBuf(BytesObj(msg));
-  CHECK0(uvco_udp_send(recv->udp, &buf, 1, &addr));
-}
-
-static int disco_giveip(int argc, char** argv) {
-  LOG("");
-
-  struct optparse options;
-  optparse_init(&options, argv);
-  int                  option;
-  struct optparse_long longopts[] =  //
-      {
-          {"port", 'p', OPTPARSE_REQUIRED},  //
-          {0}                                //
-      };
-
-  u16 port = 0;
-
-  while ((option = optparse_long(&options, longopts, NULL)) != -1) {
-    switch (option) {
-      case 'p': {
-        int iport = atoi(options.optarg);
-        CHECK(iport <= UINT16_MAX);
-        port = (u16)iport;
-      } break;
-      case '?':
-        cli_usage("disco giveip", 0, longopts);
-        return 1;
-    }
-  }
-
-  log_local_interfaces();
-
-  uv_udp_t udp;
-  CHECK0(uv_udp_init(loop, &udp));
-  struct sockaddr_storage me;
-  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&me));
-  CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&me, UV_UDP_REUSEADDR));
-  port = udp_getsockport(&udp);
-  LOG("me=%s:%d", STDNET_IPV4_ANY, port);
-
-  Allocator al = allocatormi_allocator();
-
-  CocoPool pool;
-  CHECK0(CocoPool_init(&pool, 64, 1024 * 4, al));
-
-  UvcoUdpRecv recv;
-  CHECK0(uvco_udp_recv_start(&recv, &udp));
-  while (1) {
-    CHECK(uvco_udp_recv_next(&recv) >= 0);
-    CHECK0(CocoPool_go(&pool, handle_giveip, &recv));
-  }
-
-  uvco_close((uv_handle_t*)&udp);
-  CocoPool_deinit(&pool);
-}
-
 static int disco_plum(int argc, char** argv) {
   struct optparse options;
   optparse_init(&options, argv);
@@ -404,10 +356,16 @@ static int disco_plum(int argc, char** argv) {
 // * Post message to channel
 
 typedef enum {
+  DiscoRelayMsg_IP,
   DiscoRelayMsg_INIT,
   DiscoRelayMsg_POST,
   DiscoRelayMsg_N,
 } DiscoRelayMsgType;
+
+typedef struct __attribute__((packed)) {
+  u8 type;
+  u8 reserved[3];
+} DiscoRelayMsgIp;
 
 typedef struct __attribute__((packed)) {
   u8  type;
@@ -423,7 +381,8 @@ typedef struct __attribute__((packed)) {
 } DiscoRelayMsgPost;
 
 #define DISCO_MIN_MSG_SZ                                                       \
-  MIN(sizeof(DiscoRelayMsgInit), sizeof(DiscoRelayMsgPost))
+  MIN(sizeof(DiscoRelayMsgIp),                                                 \
+      MIN(sizeof(DiscoRelayMsgInit), sizeof(DiscoRelayMsgPost)))
 #define DISCO_MAX_MSG_SZ 1600
 
 typedef struct {
@@ -440,6 +399,19 @@ typedef struct {
   DiscoCtx*    ctx;
   UvcoUdpRecv* recv;
 } DiscoDispatchArg;
+
+static void disco_giveip(void* varg) {
+  LOG("");
+  DiscoDispatchArg* argp = varg;
+  DiscoDispatchArg  arg  = *argp;
+
+  UvcoUdpRecv* recv = arg.recv;
+  IpMsg        msg;
+  CHECK0(IpMsg_read(&msg, recv->addr));
+  struct sockaddr addr = *recv->addr;
+  uv_buf_t        buf  = UvBuf(BytesObj(msg));
+  CHECK0(uvco_udp_send(recv->udp, &buf, 1, &addr));
+}
 
 static void disco_relay_init(void* varg) {
   LOG("");
@@ -520,6 +492,7 @@ static void disco_relay_post(void* varg) {
 }
 
 static void disco_dispatch(CocoPool* pool, DiscoCtx* ctx, UvcoUdpRecv* recv) {
+  LOG("");
   Bytes msg = UvBytes(recv->buf);
 
   if (msg.len < DISCO_MIN_MSG_SZ)
@@ -532,6 +505,7 @@ static void disco_dispatch(CocoPool* pool, DiscoCtx* ctx, UvcoUdpRecv* recv) {
   DiscoRelayMsgType type = msg.buf[0];
 
   CocoFn handlers[DiscoRelayMsg_N] = {
+      disco_giveip,
       disco_relay_init,
       disco_relay_post,
   };
@@ -544,7 +518,7 @@ static void disco_dispatch(CocoPool* pool, DiscoCtx* ctx, UvcoUdpRecv* recv) {
   CocoPool_gonow(pool, handlers[type], &arg);
 }
 
-static int disco_relay(int argc, char** argv) {
+static int disco_server(int argc, char** argv) {
   (void)argc;
 
   u16 port = 0;
@@ -591,8 +565,9 @@ static int disco_relay(int argc, char** argv) {
   struct sockaddr_storage me;
   CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&me));
   CHECK0(uv_udp_bind(&ctx.udp, (struct sockaddr*)&me, UV_UDP_REUSEADDR));
-  port = udp_getsockport(&ctx.udp);
-  LOG("me=%s:%d", STDNET_IPV4_ANY, port);
+  port                                 = udp_getsockport(&ctx.udp);
+  ((struct sockaddr_in*)&me)->sin_port = htons(port);
+  log_sockaddr("me", (struct sockaddr*)&me);
 
   CocoPool pool;
   CHECK0(CocoPool_init(&pool, 64, 1024 * 4, al));
@@ -629,7 +604,7 @@ static int disco_relay_client(int argc, char** argv) {
         ip = opts.optarg;
         break;
       case 'c':
-        channel_id = parse_port(opts.optarg);
+        channel_id = atoi(opts.optarg);
         break;
       case '?':
         LOGE("unrecognized option %c", option);
@@ -687,17 +662,222 @@ static int disco_relay_client(int argc, char** argv) {
   return 0;
 }
 
+static int parse_ipport(IpStr* out, const char* s) {
+  char* colon = strrchr(s, ':');
+  if (colon == NULL) {
+    out->port = parse_port(s);
+    out->ip   = Str(STDNET_IPV4_LOCALHOST);
+  } else {
+    out->port = parse_port(colon + 1);
+    out->ip   = Bytes(s, colon - s);
+  }
+  return 0;
+}
+
+static void parse_pk(CryptoSignPK* key, const char* s) {
+  usize binlen;
+  CHECK0(sodium_hex2bin((u8*)key, sizeof(*key), s, strlen(s), 0, &binlen, 0));
+  CHECK(binlen == sizeof(*key));
+}
+
+static void parse_sk(CryptoSignSK* key, const char* s) {
+  usize binlen;
+  CHECK0(sodium_hex2bin((u8*)key, sizeof(*key), s, strlen(s), 0, &binlen, 0));
+  CHECK(binlen == sizeof(*key));
+}
+
+static void addr_read(struct sockaddr* addr, IpStr ip) {
+  addr->sa_family = AF_INET;
+  char ip_buf[STDNET_INET6_ADDRSTRLEN];
+  memcpy(ip_buf, ip.ip.buf, ip.ip.len);
+  ip_buf[ip.ip.len] = 0;
+  CHECK0(uv_ip4_addr(ip_buf, ip.port, (struct sockaddr_in*)addr));
+}
+
+static int disco_p2p(int argc, char** argv) {
+  LOG("");
+  // Alice wants to allow Bob to connect to her
+
+  u16          port         = 0;
+  Str          channel_code = {0};
+  IpStr        disco        = {0};
+  CryptoSignPK alice        = {0};
+  CryptoSignPK bob          = {0};
+  CryptoSignSK sk           = {0};
+  bool         initiator    = false;
+
+  struct optparse opts;
+  optparse_init(&opts, argv);
+  int option;
+  while ((option = optparse(&opts, "ip:c:d:b:a:s:")) != -1) {
+    switch (option) {
+      case 'i':
+        // Initiator
+        initiator = true;
+        break;
+      case 'p':
+        // Port
+        port = parse_port(opts.optarg);
+        break;
+      case 'c':
+        // Channel
+        channel_code = Str0(opts.optarg);
+        break;
+      case 'd':
+        // Disco
+        CHECK0(parse_ipport(&disco, opts.optarg));
+        break;
+      case 'b':
+        // Bob
+        parse_pk(&bob, opts.optarg);
+        break;
+      case 'a':
+        // Alice
+        parse_pk(&alice, opts.optarg);
+        break;
+      case 's':
+        // SK
+        parse_sk(&sk, opts.optarg);
+        break;
+      case '?':
+        LOGE("unrecognized option %c", option);
+        return 1;
+    }
+  }
+
+  struct sockaddr_storage disco_addr;
+  addr_read((struct sockaddr*)&disco_addr, disco);
+  log_sockaddr("disco", (struct sockaddr*)&disco_addr);
+
+  Allocator al = allocatormi_allocator();
+  CocoPool pool;
+  CHECK0(CocoPool_init(&pool, 8, 1024 * 4, al));
+
+  // This is the port that we ultimately want to have connect to Bob
+  uv_udp_t udp;
+  CHECK0(uv_udp_init(loop, &udp));
+
+  // Bind to the passed port
+  struct sockaddr_storage me;
+  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&me));
+  CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&me, 0));
+  port                                 = udp_getsockport(&udp);
+  ((struct sockaddr_in*)&me)->sin_port = htons(port);
+  log_sockaddr("me", (struct sockaddr*)&me);
+
+  // Start listening
+  UvcoUdpRecv recv;
+  CHECK0(uvco_udp_recv_start(&recv, &udp));
+
+  // Contact Disco to get our public IP+port
+  IpMsg public_ip;
+  {
+    LOG("query disco for public ip");
+    DiscoRelayMsgIp msgip = {0};
+    msgip.type            = DiscoRelayMsg_IP;
+    uv_buf_t buf          = UvBuf(BytesObj(msgip));
+    CHECK0(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&disco_addr));
+    CHECK0(uvco_udp_recv_next(&recv));
+    CHECK(recv.buf.len == sizeof(IpMsg));
+    public_ip = *(IpMsg*)recv.buf.base;
+
+    IpStrStorage ips;
+    CHECK0(IpStr_frommsg(&ips, &public_ip));
+    LOG("publicip=%" PRIIpStr, IpStrPRI(ips));
+  }
+
+  // If we're the initiator (Alice), create 3 channels on Disco
+  // * A code channel
+  // * An Alice-specific channel
+  // * An Alice+Bob-specific channel
+  u64 chan_peer   = disco_channel_peer(&alice);
+  u64 chan_mutual = disco_channel_mutual(&alice, &sk, &bob);
+  u64 chan_code   = disco_channel_code(channel_code);
+  if (initiator) {
+    u64               channels[3] = {chan_peer, chan_mutual, chan_code};
+    DiscoRelayMsgInit inits[3]    = {0};
+    uv_buf_t          bufs[3];
+
+    LOG("init channels");
+    for (int i = 0; i < 3; ++i) {
+      LOG("channel %" PRIu64, channels[i]);
+      inits[i].type       = DiscoRelayMsg_INIT;
+      inits[i].channel_id = channels[i];
+      bufs[i]             = UvBuf(BytesObj(inits[i]));
+      uvco_sleep(loop, 20);
+      CHECK0(uvco_udp_send(&udp, &bufs[i], 1, (struct sockaddr*)&disco_addr));
+      // TODO: not checking for acks
+      // TODO: keepalives
+    }
+  }
+
+  // Try to open an external port
+  // Plum init
+  u16 upnp_port = 0;
+  {
+    plum_config_t config = {0};
+    config.log_level     = PLUM_LOG_LEVEL_WARN;
+    plum_init(&config);
+    PlumCtx ctx       = {0};
+    ctx.internal_port = port;
+    CHECK0(uvco_arun(loop, async_plumfn, &ctx));
+    upnp_port = ctx.external_port;
+    if (upnp_port)
+      LOG("upnp port=%d", ctx.external_port);
+    // TODO: destroy plum mapping
+  }
+
+  // Initiate local discovery
+  // Alice listens on the local network
+  // * The generic channel
+  // * An alphanum channel
+  // * An Alice-specific channel
+  // * An Alice+Bob-specific channel
+
+  // At this point
+  // Alice has:
+  // * Retrieved her public IP+port
+  // * Tried opening an external port
+  // * Created and is listening on 3 channels on Disco
+  // * Is listening on 4 channels locally
+  // * Shared the relevant information out-of-band with Bob
+  // Bob has:
+
+
+
+  // What does Alice share with Bob?
+  // Public IP+port
+  // External port, if one was opened
+  // Channel code
+  // Keys:
+  //   Identity key
+  //   Short-term key
+  //   Ephemeral key
+
+  // Alice waits for Bob's IP+port on the channel
+  // Alice tries Bob on his IP+port
+  // Alice tries Bob on IP + random ports
+
+  // Possible outcomes:
+  // * Direct connection established
+  // * Relay connection established
+  // * Error
+
+  return 0;
+}
+
 static const CliCmd disco_commands[] = {
     {"local", disco_local},                //
     {"plum", disco_plum},                  //
-    {"giveip", disco_giveip},              //
-    {"relay", disco_relay},                //
+    {"disco", disco_server},               //
     {"relay-client", disco_relay_client},  //
+    {"p2p", disco_p2p},                    //
     {0},
 };
 
 int demo_disco(int argc, char** argv) {
   LOG("");
+
   if (argc < 2) {
     fprintf(stderr, "missing subcommand\n");
     cli_usage("disco", disco_commands, 0);
