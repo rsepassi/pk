@@ -11,8 +11,9 @@ test-clean:
 	rm -rf $(BDIR)/test
 
 # execute a test
+# the binary disappears (??!!) so we also copy it to $<.testbin
 $(BDIR)/test/%.ok: $(BDIR)/test/%$(EXE)
-	cp $< $<.testbin  # the binary disappears (??!!) so copy it here
+	cp $< $<.testbin
 	$(EXEC_PREFIX) $< && touch $@
 
 # compile a test executable

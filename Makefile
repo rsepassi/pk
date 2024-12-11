@@ -29,17 +29,22 @@ export CFLAGS += \
 	-Wall -Werror -Wextra \
 	-Wconversion -Wno-sign-conversion \
 	-Wno-unused-command-line-argument \
-	-fPIE \
-	-fstack-protector-strong -fstack-clash-protection
+	-fPIE
 export LDFLAGS += -O$(OPT)
 
 ifeq ($(USE_CLANG), 1)
 export CFLAGS += --rtlib=compiler-rt
 export LDFLAGS += --rtlib=compiler-rt -fuse-ld=lld
-ifneq ($(OPT), 0)
-export CFLAGS += -flto
-export LDFLAGS += -flto
 endif
+
+ifeq ($(OPT), 0)
+export CFLAGS += \
+	-fsanitize=address
+else
+export CFLAGS += \
+	-flto \
+	-fstack-protector-strong -fstack-clash-protection
+export LDFLAGS += -flto
 endif
 
 TEST_DIRS := $(wildcard lib/*) vendor/base58 vendor/qrcodegen
