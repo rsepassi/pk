@@ -2003,6 +2003,7 @@ typedef struct {
   int       argc;
   char**    argv;
   Allocator allocator;
+  int status;
 } MainCoroCtx;
 
 static const CliCmd commands[] = {
@@ -2026,8 +2027,6 @@ static const CliCmd commands[] = {
     {0},
 };
 
-static void coro_exit(int code) { mco_push(mco_running(), &code, 1); }
-
 static void main_coro(mco_coro* co) {
   MainCoroCtx* ctx = (MainCoroCtx*)mco_get_user_data(co);
 
@@ -2035,13 +2034,16 @@ static void main_coro(mco_coro* co) {
   char** argv = ctx->argv;
 
   for (usize i = 0; i < (ARRAY_LEN(commands) - 1) && argc > 1; ++i) {
-    if (!strcmp(commands[i].cmd, argv[1]))
-      return coro_exit(commands[i].fn(argc - 1, argv + 1));
+    if (!strcmp(commands[i].cmd, argv[1])) {
+      int rc = commands[i].fn(argc - 1, argv + 1);
+      ctx->status = rc;
+      return;
+    }
   }
 
   fprintf(stderr, "unrecognized cmd\n");
   cli_usage("cli", commands, 0);
-  return coro_exit(1);
+  ctx->status = 1;
 }
 
 #define MAIN_STACK_SIZE 1 << 22  // 4MiB
@@ -2073,7 +2075,7 @@ int main(int argc, char** argv) {
   uv_loop_init(loop);
 
   // coro init
-  MainCoroCtx ctx     = {argc, argv, al};
+  MainCoroCtx ctx     = {argc, argv, al, 0};
   mco_desc    desc    = mco_desc_init(main_coro, MAIN_STACK_SIZE);
   desc.allocator_data = &ctx;
   desc.alloc_cb       = mco_alloc;
@@ -2089,10 +2091,6 @@ int main(int argc, char** argv) {
     LOG("uv loop exit");
   }
 
-  int rc = 0;
-  if (mco_get_storage_size(co) > 0)
-    mco_pop(co, &rc, 1);
-
   // coro deinit
   CHECK(mco_status(co) == MCO_DEAD);
   CHECK(mco_destroy(co) == MCO_SUCCESS);
@@ -2101,6 +2099,7 @@ int main(int argc, char** argv) {
   uv_loop_close(loop);
   Alloc_destroy(al, loop);
 
+  int rc = ctx.status;
   if (rc == 0)
     LOG("ok");
   else

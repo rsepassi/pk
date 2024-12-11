@@ -3,4 +3,4 @@ Version: 0.0.1
 Description: <none>
 Libs: -L${build_prefix} -lcoco
 Cflags: -I${src_prefix}/include
-Requirez: lib/cbase
+Requirez: lib/cbase vendor/minicoro

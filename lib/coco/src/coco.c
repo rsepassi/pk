@@ -81,7 +81,7 @@ int CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al) {
   pool->al      = al;
 
   mco_desc desc       = mco_desc_init(pool_comain, stack_sz);
-  desc.allocator_data = &al;
+  desc.allocator_data = &pool->al;
   desc.alloc_cb       = stack_alloc;
   desc.dealloc_cb     = stack_dealloc;
 
@@ -98,7 +98,29 @@ int CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al) {
   return 0;
 }
 
+static bool CocoPool_allexited(CocoPool* pool) {
+  for (usize i = 0; i < pool->cos_len; ++i) {
+    CocoPoolItem* x = &pool->cos[i];
+    if (mco_status(x->co) != MCO_DEAD)
+      return false;
+  }
+  return true;
+}
+
+static void CocoPool_exitall(CocoPool* pool) {
+  for (usize i = 0; i < pool->cos_len; ++i) {
+    CocoPoolItem* x = &pool->cos[i];
+    x->exit = true;
+    CHECK0(mco_resume(x->co));
+  }
+
+  if (mco_running())
+    while (!CocoPool_allexited(pool))
+      CHECK0(mco_yield(mco_running()));
+}
+
 void CocoPool_deinit(CocoPool* pool) {
+  CocoPool_exitall(pool);
   for (usize i = 0; i < pool->cos_len; ++i) {
     CocoPoolItem* x = &pool->cos[i];
     mco_destroy(x->co);
