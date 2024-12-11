@@ -7,6 +7,7 @@ export BROOT_ALL := $(ROOTDIR)/build
 export BROOT := $(BROOT_ALL)/$(TARGET)
 export BCACHE := $(ROOTDIR)/.build-cache
 export PATH := $(CURDIR)/scripts:$(PATH)
+export ROOTTIME := $(shell date +%s)
 
 USE_CLANG ?= 1
 ifeq ($(USE_CLANG), 1)
@@ -39,6 +40,8 @@ endif
 
 ifeq ($(OPT), 0)
 export CFLAGS += \
+	-fsanitize=address
+export LDFLAGS += \
 	-fsanitize=address
 else
 export CFLAGS += \
@@ -86,9 +89,8 @@ $(ALL_LIBS): platform
 	rm -f $(BROOT_ALL)/out
 	ln -s $(BROOT)/$@ $(BROOT_ALL)/out
 
-$(ALL_TESTS): platform vendor/unity scripts/test.mk
+$(ALL_TESTS): platform
 	$(MAKE) -C $(@:%/test=%) deps
-	$(MAKE) -C $(@:%/test=%) test-deps 2>/dev/null || :
 	$(MAKE) -C $(@:%/test=%)
 	$(MAKE) -C $(@:%/test=%) test
 

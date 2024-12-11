@@ -32,5 +32,5 @@ endif
 CLEAN_EXTRAS := src/prim/*.o src/prim/*.obj
 
 include $(ROOTDIR)/scripts/cc.mk
-include $(ROOTDIR)/scripts/nodeps.mk
+include $(ROOTDIR)/scripts/deps.mk
 include $(ROOTDIR)/scripts/clean.mk

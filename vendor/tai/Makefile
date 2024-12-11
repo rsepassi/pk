@@ -7,5 +7,5 @@ LOCAL_CFLAGS += -std=c89 \
 								-D_GNU_SOURCE
 
 include $(ROOTDIR)/scripts/cc.mk
-include $(ROOTDIR)/scripts/nodeps.mk
+include $(ROOTDIR)/scripts/deps.mk
 include $(ROOTDIR)/scripts/clean.mk

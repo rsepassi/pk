@@ -1,23 +1,19 @@
-include $(ROOTDIR)/scripts/bdir.mk
+.PHONY: deps
+ifdef DEPS
+DEPS_OK := $(BDIR)/.deps.ok
+deps:
+	$(MAKE) -f $(ROOTDIR)/scripts/deps2.mk DEPS_ARG="$(DEPS)"
+else
+deps:
+	@:
+endif
 
-DEPS_TARGET ?= deps
-
-DEPS_OK := $(BDIR)/.$(DEPS_TARGET).ok
-DEPS_BUILDS := $(addprefix $(BROOT)/, $(addsuffix /.build, $(DEPS)))
-$(DEPS_OK): $(DEPS_BUILDS)
-	mkdir -p $(dir $(DEPS_OK))
-	touch $(DEPS_OK)
-
-.PHONY: $(DEPS_TARGET) $(DEPS)
-$(DEPS_TARGET): $(DEPS)
-$(DEPS):
-	$(MAKE) -C $(ROOTDIR)/$@ deps
-	mkdir -p $(BROOT)/$@
-	touch $(BROOT)/$@/.lock
-	flock $(BROOT)/$@/.lock -c "$(MAKE) -C $(ROOTDIR)/$@"
-
-DEPS_CLEAN := $(addsuffix -clean, $(DEPS))
-.PHONY: clean-$(DEPS_TARGET) $(DEPS_CLEAN)
-clean-$(DEPS_TARGET): $(DEPS_CLEAN) $(CLEAN_ALL_EXTRAS)
-$(DEPS_CLEAN):
-	$(MAKE) -C $(@:-clean=) clean
+.PHONY: test-deps
+ifdef TEST_DEPS
+TEST_DEPS_OK := $(BDIR)/.testdeps.ok
+test-deps:
+	$(MAKE) -f $(ROOTDIR)/scripts/deps2.mk DEPS_ARG="$(TEST_DEPS) vendor/unity"
+else
+test-deps:
+	@:
+endif

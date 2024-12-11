@@ -128,5 +128,5 @@ else ifeq ($(TARGET_ARCH), aarch64)
 endif
 
 include $(ROOTDIR)/scripts/cc.mk
-include $(ROOTDIR)/scripts/nodeps.mk
+include $(ROOTDIR)/scripts/deps.mk
 include $(ROOTDIR)/scripts/clean.mk
