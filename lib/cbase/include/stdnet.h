@@ -39,4 +39,6 @@ typedef struct __attribute__((packed)) {
 } IpMsg;
 
 int IpStr_read(IpStrStorage* out, const struct sockaddr* sa);
+int IpStr_frommsg(IpStrStorage* out, const IpMsg* in);
 int IpMsg_read(IpMsg* out, const struct sockaddr* sa);
+int IpMsg_dump(struct sockaddr* out, const IpMsg* in);

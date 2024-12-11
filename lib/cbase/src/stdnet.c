@@ -51,6 +51,15 @@ int IpStr_read(IpStrStorage* out, const struct sockaddr* sa) {
   return 0;
 }
 
+int IpStr_frommsg(IpStrStorage* out, const IpMsg* in) {
+  if (inet_ntop(in->ip_type == IpType_IPv4 ? AF_INET : AF_INET6, in->ip_buf,
+                out->ip_buf, sizeof(out->ip_buf)) == NULL)
+    return 1;
+  out->ip   = Str0(out->ip_buf);
+  out->port = ntohs(in->port);
+  return 0;
+}
+
 int IpMsg_read(IpMsg* out, const struct sockaddr* sa) {
   STATIC_CHECK(sizeof(IpMsg) == STDNET_INET6_ADDRLEN + 4);
   switch (sa->sa_family) {
@@ -69,5 +78,29 @@ int IpMsg_read(IpMsg* out, const struct sockaddr* sa) {
     default:
       return 1;
   }
+  return 0;
+}
+
+int IpMsg_dump(struct sockaddr* out, const IpMsg* in) {
+  if (in->ip_type >= IpType_MAX)
+    return 1;
+  IpType type = in->ip_type;
+  switch (type) {
+    case IpType_IPv4:
+      out->sa_family            = AF_INET;
+      struct sockaddr_in* sa_in = (void*)out;
+      memcpy(&sa_in->sin_addr, in->ip_buf, 4);
+      sa_in->sin_port = in->port;
+      break;
+    case IpType_IPv6:
+      out->sa_family              = AF_INET6;
+      struct sockaddr_in6* sa_in6 = (void*)out;
+      memcpy(&sa_in6->sin6_addr, in->ip_buf, 16);
+      sa_in6->sin6_port = in->port;
+      break;
+    default:
+      return 1;
+  }
+
   return 0;
 }

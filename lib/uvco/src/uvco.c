@@ -207,9 +207,10 @@ int uvco_udp_recv_next(UvcoUdpRecv* recv) {
   COCO_AWAIT(&recv->wait);
 
   recv->wait = (CocoWait){0};
-  if (recv->nread >= 0)
-    return 0;
-  return (int)recv->nread;
+  if (recv->nread < 0)
+    return (int)recv->nread;
+
+  return 0;
 }
 
 typedef struct {
