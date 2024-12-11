@@ -19,10 +19,10 @@ export CCLD := zig cc
 export AR := zig ar
 endif
 
-export OPT := -O0
+export OPT := 0
 
 export CFLAGS += \
-	$(OPT) \
+	-O$(OPT) \
 	-std=c11 \
 	-g3 \
 	-fno-omit-frame-pointer \
@@ -31,11 +31,15 @@ export CFLAGS += \
 	-Wno-unused-command-line-argument \
 	-fPIE \
 	-fstack-protector-strong -fstack-clash-protection
-export LDFLAGS += $(OPT)
+export LDFLAGS += -O$(OPT)
 
 ifeq ($(USE_CLANG), 1)
-export CFLAGS += --rtlib=compiler-rt -flto
-export LDFLAGS += --rtlib=compiler-rt -flto -fuse-ld=lld
+export CFLAGS += --rtlib=compiler-rt
+export LDFLAGS += --rtlib=compiler-rt -fuse-ld=lld
+ifneq ($(OPT), 0)
+export CFLAGS += -flto
+export LDFLAGS += -flto
+endif
 endif
 
 TEST_DIRS := $(wildcard lib/*) vendor/base58 vendor/qrcodegen
@@ -74,7 +78,8 @@ test-clean:
 $(ALL_LIBS): platform
 	$(MAKE) -C $@ deps
 	$(MAKE) -C $@ $(T)
-	ln -sf $(BROOT)/$@ $(BROOT_ALL)/out
+	rm -f $(BROOT_ALL)/out
+	ln -s $(BROOT)/$@ $(BROOT_ALL)/out
 
 $(ALL_TESTS): platform vendor/unity scripts/test.mk
 	$(MAKE) -C $(@:%/test=%) deps
