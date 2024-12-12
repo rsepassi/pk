@@ -2003,7 +2003,7 @@ typedef struct {
   int       argc;
   char**    argv;
   Allocator allocator;
-  int status;
+  int       status;
 } MainCoroCtx;
 
 static const CliCmd commands[] = {
@@ -2035,7 +2035,7 @@ static void main_coro(mco_coro* co) {
 
   for (usize i = 0; i < (ARRAY_LEN(commands) - 1) && argc > 1; ++i) {
     if (!strcmp(commands[i].cmd, argv[1])) {
-      int rc = commands[i].fn(argc - 1, argv + 1);
+      int rc      = commands[i].fn(argc - 1, argv + 1);
       ctx->status = rc;
       return;
     }

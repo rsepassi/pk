@@ -750,7 +750,7 @@ static int disco_p2p(int argc, char** argv) {
   log_sockaddr("disco", (struct sockaddr*)&disco_addr);
 
   Allocator al = allocatormi_allocator();
-  CocoPool pool;
+  CocoPool  pool;
   CHECK0(CocoPool_init(&pool, 8, 1024 * 4, al));
 
   // This is the port that we ultimately want to have connect to Bob
@@ -842,8 +842,6 @@ static int disco_p2p(int argc, char** argv) {
   // * Is listening on 4 channels locally
   // * Shared the relevant information out-of-band with Bob
   // Bob has:
-
-
 
   // What does Alice share with Bob?
   // Public IP+port

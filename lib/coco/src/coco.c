@@ -110,7 +110,7 @@ static bool CocoPool_allexited(CocoPool* pool) {
 static void CocoPool_exitall(CocoPool* pool) {
   for (usize i = 0; i < pool->cos_len; ++i) {
     CocoPoolItem* x = &pool->cos[i];
-    x->exit = true;
+    x->exit         = true;
     CHECK0(mco_resume(x->co));
   }
 
