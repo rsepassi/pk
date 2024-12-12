@@ -1,2 +1,3 @@
 linux-headers
 compiler-rt
+llvm-libunwind-static

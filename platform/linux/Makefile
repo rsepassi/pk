@@ -4,9 +4,8 @@ MUSL_SRC_URL := https://musl.libc.org/releases/musl-1.2.5.tar.gz
 MUSL_SRC_HASH := a9a118bbe84d8764da0ea0d28b3ab3fae8477fc7e4085d90102b8596fc7c75e4
 MUSL_SRC_TAR := $(BCACHE)/content/$(MUSL_SRC_HASH)
 
-# crt files extracted from Alpine 3.20 docker container
-# apk add compiler-rt
-# /usr/lib/llvm17/lib/clang/17/lib/linux/*
+.PHONY: build apks
+build: $(BDIR)/.build
 
 MK_ARGS := \
 	prefix=$(BDIR)/sysroot/usr \
@@ -20,8 +19,12 @@ SRC := $(BDIR)/musl/README
 CRT := $(BDIR)/compiler-rt/lib/linux/clang_rt.crtend-aarch64.o
 PKGS := $(BDIR)/linux_alpine/.build
 
-$(BDIR)/.build: $(LIBC) $(STDC) $(CRT) $(PKGS)
+$(BDIR)/.build: $(LIBC) $(STDC) $(CRT) $(PKGS) Makefile
 	ln -sf $(LIBC) $(BDIR)/sysroot/usr/lib/libssp_nonshared.a
+	ln -sf $(LIBC) $(BDIR)/sysroot/usr/lib/libpthread.a
+	ln -sf $(LIBC) $(BDIR)/sysroot/usr/lib/librt.a
+	ln -sf $(LIBC) $(BDIR)/sysroot/usr/lib/libm.a
+	ln -sf $(LIBC) $(BDIR)/sysroot/usr/lib/libdl.a
 	touch $(BDIR)/.build
 
 $(CRT): lib/clang_rt.crtend-aarch64.o
@@ -43,15 +46,30 @@ $(SRC): $(MUSL_SRC_TAR)
 $(MUSL_SRC_TAR):
 	fetch $(MUSL_SRC_URL) $(MUSL_SRC_HASH)
 
-$(PKGS): $(BCACHE)/linux_alpine/$(TARGET_ARCH)/.build
-	mkdir -p $(dir $@)/usr/include
-	mkdir -p $(dir $@)/compiler-rt/lib
+$(PKGS): $(BCACHE)/linux_alpine/$(TARGET_ARCH)/.build Makefile
+	mkdir -p $(dir $@)/usr/include $(dir $@)/usr/lib $(dir $@)/compiler-rt/lib
 	cp -r $(dir $<)/usr/include/linux $(dir $@)/usr/include/
 	cp -r $(dir $<)/usr/include/asm $(dir $@)/usr/include/
 	cp -r $(dir $<)/usr/include/asm-generic $(dir $@)/usr/include/
 	cp -r $(dir $<)/usr/lib/llvm17/lib/clang/17/lib/linux $(dir $@)/compiler-rt/lib/
+	cp -r $(dir $<)/usr/lib/libunwind.a $(dir $@)/usr/lib
 	touch $@
+
+apks: $(BCACHE)/linux_alpine/$(TARGET_ARCH)/.build
+
+ifeq ($(HOST_OS), macos)
+
+$(BCACHE)/linux_alpine/$(TARGET_ARCH)/.build: xdeps pkgs.txt
+
+.PHONY: xdeps
+xdeps:
+	podman build -f $(ROOTDIR)/scripts/build.containerfile -t pkbuild
+	podman run -it -v $(ROOTDIR):/root/pk pkbuild make platform T=apks
+
+else
 
 $(BCACHE)/linux_alpine/$(TARGET_ARCH)/.build: scripts/apk pkgs.txt
 	./scripts/apk `cat pkgs.txt`
 	touch $@
+
+endif

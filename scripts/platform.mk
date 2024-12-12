@@ -17,6 +17,16 @@ export EXEC_PREFIX := valgrind -s --leak-check=full --show-leak-kinds=all \
 export CFLAGS += `need --cflags platform/valgrind`
 endif
 
+# asan
+ifdef ASAN
+export CFLAGS += -fsanitize=address
+export LDFLAGS += -fsanitize=address
+
+ifeq ($(TARGET_OS), linux)
+	export LDFLAGS += -lunwind
+endif
+endif
+
 # coverage
 ifdef COVERAGE
 export CFLAGS += -fprofile-instr-generate -fcoverage-mapping
@@ -42,11 +52,10 @@ platform:
 else ifeq ($(TARGET_OS), linux)
 
 export CFLAGS += -target $(TARGET) `need --cflags platform/linux`
-export PLATFORM_LDFLAGS += -target $(TARGET) `need --libs platform/linux` \
-	-static-pie -z relro -z now -z noexecstack
+export PLATFORM_LDFLAGS += -target $(TARGET) `need --libs platform/linux`
 
 platform:
-	$(MAKE) -C platform/linux
+	$(MAKE) -C platform/linux $(T)
 
 else ifeq ($(TARGET_OS), freebsd)
 
@@ -59,7 +68,7 @@ export CFLAGS += -target $(BSDTARGET) `need --cflags platform/freebsd`
 export PLATFORM_LDFLAGS += -target $(BSDTARGET) `need --libs platform/freebsd`
 
 platform:
-	$(MAKE) -C platform/freebsd
+	$(MAKE) -C platform/freebsd $(T)
 
 else ifeq ($(TARGET_OS), windows)
 
@@ -72,7 +81,7 @@ export CFLAGS += -target $(WINTARGET) `need --cflags platform/windows`
 export PLATFORM_LDFLAGS += -target $(WINTARGET) `need --libs platform/windows`
 
 platform:
-	$(MAKE) -C platform/windows
+	$(MAKE) -C platform/windows $(T)
 
 else
 

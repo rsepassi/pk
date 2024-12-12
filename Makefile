@@ -2,6 +2,7 @@
 # VARIABLES
 # ==============================================================================
 include scripts/target.mk
+
 export ROOTDIR := $(CURDIR)
 export BROOT_ALL := $(ROOTDIR)/build
 export BROOT := $(BROOT_ALL)/$(TARGET)
@@ -11,8 +12,8 @@ export ROOTTIME := $(shell date +%s)
 
 USE_CLANG ?= 1
 ifeq ($(USE_CLANG), 1)
-export CC := clang-17
-export CCLD := clang-17
+export CC := clang-19
+export CCLD := clang-19
 export AR := llvm-ar
 else
 export CC := zig cc
@@ -38,12 +39,7 @@ export CFLAGS += --rtlib=compiler-rt
 export LDFLAGS += --rtlib=compiler-rt -fuse-ld=lld
 endif
 
-ifeq ($(OPT), 0)
-export CFLAGS += \
-	-fsanitize=address
-export LDFLAGS += \
-	-fsanitize=address
-else
+ifneq ($(OPT), 0)
 export CFLAGS += \
 	-flto \
 	-fstack-protector-strong -fstack-clash-protection

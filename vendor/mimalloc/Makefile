@@ -25,6 +25,10 @@ LOCAL_CFLAGS += \
 	-Wno-conversion \
 	-Wno-unknown-pragmas
 
+ifdef ASAN
+LOCAL_CFLAGS += -DMI_TRACK_ASAN=ON
+endif
+
 ifdef VALGRIND
 LOCAL_CFLAGS += -DMI_STAT=2 -DMI_SECURE=4 -DMI_TRACK_VALGRIND=1
 endif

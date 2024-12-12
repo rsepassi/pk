@@ -6,4 +6,7 @@ Cflags: --sysroot=${build_prefix}/sysroot \
   -isystem ${build_prefix}/linux_alpine/usr/include \
   -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3
 Libs: --sysroot=${build_prefix}/sysroot \
-  -resource-dir=${build_prefix}/linux_alpine/compiler-rt
+  -L${build_prefix}/sysroot/usr/lib \
+  -L${build_prefix}/linux_alpine/usr/lib \
+  -resource-dir=${build_prefix}/linux_alpine/compiler-rt \
+  -static-pie -z relro -z now -z noexecstack
