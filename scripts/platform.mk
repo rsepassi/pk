@@ -55,7 +55,7 @@ export CFLAGS += -target $(MACTARGET) `need --cflags platform/macos`
 export PLATFORM_LDFLAGS += -target $(MACTARGET)
 
 platform:
-	:
+	@:
 
 else ifeq ($(TARGET_OS), linux)
 

@@ -48,6 +48,7 @@ endif
 
 TEST_DIRS := $(wildcard lib/*) vendor/base58 vendor/qrcodegen
 ALL_LIBS := cli $(wildcard lib/*) $(wildcard vendor/*)
+ALL_LIBS_NOLINK := $(addsuffix .nolink, $(ALL_LIBS))
 ALL_TESTS := $(addsuffix /test, $(TEST_DIRS))
 ALL_PLATFORMS := $(wildcard platform/*)
 
@@ -56,7 +57,7 @@ ALL_PLATFORMS := $(wildcard platform/*)
 # ==============================================================================
 
 .PHONY: default clean fmt clangd coverage test test-clean site service \
-	$(ALL_LIBS) $(ALL_TESTS) $(ALL_PLATFORMS)
+	$(ALL_LIBS) $(ALL_LIBS_NOLINK) $(ALL_TESTS) $(ALL_PLATFORMS)
 
 default: cli
 
@@ -84,6 +85,10 @@ $(ALL_LIBS): platform
 	$(MAKE) -C $@ $(T)
 	rm -f $(BROOT_ALL)/out
 	ln -s $(BROOT)/$@ $(BROOT_ALL)/out
+
+$(ALL_LIBS_NOLINK): platform
+	$(MAKE) -C $(@:%.nolink=%) deps
+	$(MAKE) -C $(@:%.nolink=%) $(T)
 
 $(ALL_TESTS): platform
 	$(MAKE) -C $(@:%/test=%) deps
