@@ -3,8 +3,12 @@
 #include "stdtypes.h"
 #include "str.h"
 
+#include <stddef.h>
+
 typedef int AllocStatus;
 #define Alloc_OK 0
+
+#define Alloc_DefaultAlign(a) (((a) == 0) ? _Alignof(max_align_t) : (a))
 
 typedef AllocStatus (*AllocFn)(void* ctx, Bytes* buf, usize sz, usize align);
 typedef void (*AllocDeinitFn)(void* ctx);
@@ -25,36 +29,36 @@ typedef struct {
 
 static inline AllocStatus allocator_u8(Allocator a, Bytes* b, usize sz) {
   b->len = 0;
-  return a.alloc(a.ctx, b, sz, 8);
+  return a.alloc(a.ctx, b, sz, Alloc_DefaultAlign(0));
 }
 
 static inline AllocStatus allocator_alloc(Allocator a, Bytes* b, usize sz,
                                           usize align) {
   b->len = 0;
-  return a.alloc(a.ctx, b, sz, align);
+  return a.alloc(a.ctx, b, sz, Alloc_DefaultAlign(align));
 }
 
 static inline AllocStatus allocator_realloc(Allocator a, Bytes* b, usize sz,
                                             usize align) {
-  return a.alloc(a.ctx, b, sz, align);
+  return a.alloc(a.ctx, b, sz, Alloc_DefaultAlign(align));
 }
 
 static inline AllocStatus allocator_create(Allocator a, void** p, usize sz,
                                            usize align) {
   Bytes       b;
-  AllocStatus rc = allocator_alloc(a, &b, sz, align);
+  AllocStatus rc = allocator_alloc(a, &b, sz, Alloc_DefaultAlign(align));
   memset(b.buf, 0, b.len);
   *p = b.buf;
   return rc;
 }
 
-static inline AllocStatus allocator_free(Allocator a, Bytes b) {
-  return a.alloc(a.ctx, &b, 0, 0);
+static inline void allocator_free(Allocator a, Bytes b) {
+  a.alloc(a.ctx, &b, 0, 0);
 }
 
-static inline AllocStatus allocator_destroy(Allocator a, void* p, usize sz) {
+static inline void allocator_destroy(Allocator a, void* p, usize sz) {
   Bytes b = {sz, p};
-  return a.alloc(a.ctx, &b, 0, 0);
+  a.alloc(a.ctx, &b, 0, 0);
 }
 
 static inline void allocator_deinit(Allocator a) {

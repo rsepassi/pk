@@ -6,10 +6,11 @@
 #include <time.h>
 
 static i64 utc_offset_secs(void) {
-  time_t     t  = stdtime_now_secs();
-  struct tm* tm = gmtime(&t);
-  tm->tm_isdst  = -1;
-  time_t t2     = mktime(tm);
+  time_t    t  = stdtime_now_secs();
+  struct tm tm = {0};
+  gmtime_r(&t, &tm);
+  tm.tm_isdst = -1;
+  time_t t2   = mktime(&tm);
   return t - t2;
 }
 
@@ -22,8 +23,9 @@ i64 stdtime_now_secs(void) {
 void stdtime_rfc3339_utc_format(Bytes ts, i64 epoch_secs) {
   CHECK(ts.len == STDTIME_RFC3339_UTC_TIMESTAMP_LEN);
   const time_t sec = epoch_secs;
-  struct tm*   tm  = gmtime(&sec);
-  strftime((char*)ts.buf, ts.len, "%Y-%m-%dT%H:%M:%SZ", tm);
+  struct tm    tm  = {0};
+  gmtime_r(&sec, &tm);
+  strftime((char*)ts.buf, ts.len, "%Y-%m-%dT%H:%M:%SZ", &tm);
 }
 
 void stdtime_rfc3339_utc_now(Bytes ts) {
