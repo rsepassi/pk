@@ -63,8 +63,8 @@ $(BCACHE)/linux_alpine/$(TARGET_ARCH)/.build: xdeps pkgs.txt
 
 .PHONY: xdeps
 xdeps:
-	podman build -f $(ROOTDIR)/scripts/build.containerfile -t pkbuild
-	podman run -it -v $(ROOTDIR):/root/pk pkbuild make platform T=apks
+	podman build -q -f $(ROOTDIR)/scripts/build.containerfile -t pkbuild > /dev/null
+	podman run -v $(ROOTDIR):/root/pk pkbuild make --silent platform T=apks
 
 else
 

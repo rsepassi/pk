@@ -19,11 +19,19 @@ endif
 
 # asan
 ifdef ASAN
-export CFLAGS += -fsanitize=address
+export CFLAGS += -fsanitize=address -fno-common
 export LDFLAGS += -fsanitize=address
 
 ifeq ($(TARGET_OS), linux)
 	export LDFLAGS += -lunwind
+endif
+endif
+
+# msan
+ifdef MSAN
+ifeq ($(TARGET_OS), linux)
+export CFLAGS += -fsanitize=memory -fsanitize-memory-track-origins
+export LDFLAGS += -fsanitize=memory -fsanitize-memory-track-origins -lunwind
 endif
 endif
 
