@@ -3,27 +3,33 @@
 # ==============================================================================
 include scripts/target.mk
 
-export ROOTDIR := $(CURDIR)
-export BROOT_ALL := $(ROOTDIR)/build
-export BROOT := $(BROOT_ALL)/$(TARGET)
-export BCACHE := $(ROOTDIR)/.build-cache
-export PATH := $(CURDIR)/scripts:$(PATH)
-export ROOTTIME := $(shell date +%s)
+export \
+	TARGET TARGET_OS TARGET_ARCH HOST HOST_OS HOST_ARCH \
+	ROOTDIR BROOT_ALL BROOT BCACHE PATH ROOTTIME \
+	CC CCLD AR CFLAGS LDFLAGS OPT \
+	O EXE VALGRIND ASAN MSAN EXEC_PREFIX PLATFORM_LDFLAGS
 
-USE_CLANG ?= 1
+ROOTDIR := $(CURDIR)
+BROOT_ALL := $(ROOTDIR)/build
+BROOT := $(BROOT_ALL)/$(TARGET)
+BCACHE := $(ROOTDIR)/.build-cache
+PATH := $(CURDIR)/scripts:$(PATH)
+ROOTTIME := $(shell date +%s)
+
+USE_CLANG := 1
 ifeq ($(USE_CLANG), 1)
-export CC := clang-19
-export CCLD := clang-19
-export AR := llvm-ar
+CC := clang-19
+CCLD := clang-19
+AR := llvm-ar
 else
-export CC := zig cc
-export CCLD := zig cc
-export AR := zig ar
+CC := zig cc
+CCLD := zig cc
+AR := zig ar
 endif
 
-export OPT := 0
+OPT := 0
 
-export CFLAGS += \
+CFLAGS += \
 	-O$(OPT) \
 	-std=c11 \
 	-g3 \
@@ -32,18 +38,18 @@ export CFLAGS += \
 	-Wconversion -Wno-sign-conversion \
 	-Wno-unused-command-line-argument \
 	-fPIE
-export LDFLAGS += -O$(OPT)
+LDFLAGS += -O$(OPT) -fuse-ld=lld
 
 ifeq ($(USE_CLANG), 1)
-export CFLAGS += --rtlib=compiler-rt
-export LDFLAGS += --rtlib=compiler-rt -fuse-ld=lld
+CFLAGS += --rtlib=compiler-rt
+LDFLAGS += --rtlib=compiler-rt
 endif
 
 ifneq ($(OPT), 0)
-export CFLAGS += \
+CFLAGS += \
 	-flto \
 	-fstack-protector-strong -fstack-clash-protection
-export LDFLAGS += -flto
+LDFLAGS += -flto
 endif
 
 TEST_DIRS := $(wildcard lib/*) vendor/base58 vendor/qrcodegen
