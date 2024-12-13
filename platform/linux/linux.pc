@@ -4,7 +4,7 @@ Description: Linux libc
 Cflags: --sysroot=${build_prefix}/sysroot \
   -isystem ${build_prefix}/sysroot/usr/include \
   -isystem ${build_prefix}/linux_alpine/usr/include \
-  -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3
+  -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -D_POSIX_C_SOURCE=200809L
 Libs: --sysroot=${build_prefix}/sysroot \
   -L${build_prefix}/sysroot/usr/lib \
   -L${build_prefix}/linux_alpine/usr/lib \

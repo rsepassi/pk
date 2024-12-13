@@ -37,7 +37,7 @@ $(LIBC): $(SRC) $(STDC)
 $(STDC): $(SRC)
 	$(MAKE) -C $(BDIR)/musl $(MK_ARGS) install-headers
 
-$(SRC): $(MUSL_SRC_TAR)
+$(SRC): $(MUSL_SRC_TAR) etc/Makefile etc/config.mak
 	mkdir -p $(BDIR)/musl
 	tar mxf $(MUSL_SRC_TAR) -C $(BDIR)/musl --strip-components=1
 	cp etc/config.mak $(BDIR)/musl/
