@@ -1,6 +1,7 @@
 #include "uvco.h"
 
 #include "log.h"
+#include "stdtime.h"
 
 #include <stdbool.h>
 
@@ -10,8 +11,6 @@ static void fs_cb(uv_fs_t* req) {
   CocoWait* wait = req->data;
   COCO_DONE(wait);
 }
-
-static void del_handle_cb(uv_handle_t* req) { free(req); }
 
 static void timer_cb(uv_timer_t* handle) { COCO_DONE((CocoWait*)handle->data); }
 
@@ -37,14 +36,13 @@ int uvco_fs_mkdir(uv_loop_t* loop, const char* path, int mode) {
 }
 
 void uvco_sleep(uv_loop_t* loop, u64 ms) {
-  CocoWait    wait  = CocoWait();
-  uv_timer_t* timer = malloc(sizeof(uv_timer_t));
-  uv_timer_init(loop, timer);
-  timer->data = &wait;
-  int rc      = uv_timer_start(timer, timer_cb, ms, 0);
-  CHECK0(rc);
+  CocoWait   wait = CocoWait();
+  uv_timer_t timer;
+  uv_timer_init(loop, &timer);
+  timer.data = &wait;
+  UVCHECK(uv_timer_start(&timer, timer_cb, ms, 0));
   COCO_AWAIT(&wait);
-  uv_close((uv_handle_t*)timer, del_handle_cb);
+  uvco_close((uv_handle_t*)&timer);
 }
 
 typedef struct {
@@ -169,14 +167,14 @@ static void udp_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
                         const struct sockaddr* addr, unsigned flags) {
   (void)flags;
 
-  UvcoUdpRecv* ctx = handle->data;
-
   // End of message, nothing needs to be done
   if (nread == 0 && addr == NULL)
     return;
 
+  UvcoUdpRecv* ctx = handle->data;
+
   // nobody's waiting...
-  if (ctx->wait.co == NULL) {
+  if (ctx == NULL || ctx->wait.co == NULL) {
     LOG("message dropped, no waiter");
     return;
   }
@@ -206,11 +204,61 @@ int uvco_udp_recv_next(UvcoUdpRecv* recv) {
 
   COCO_AWAIT(&recv->wait);
 
-  recv->wait = (CocoWait){0};
+  recv->udp->data = 0;
+  recv->wait      = (CocoWait){0};
+
   if (recv->nread < 0)
     return (int)recv->nread;
 
   return 0;
+}
+
+typedef struct {
+  uv_timer_t timer;
+  CocoWait   wait;
+} UvcoTimer;
+
+int uvco_timer_start(UvcoTimer* t, uv_loop_t* loop, usize ms) {
+  ZERO(t);
+  t->wait = CocoWait();
+  uv_timer_init(loop, &t->timer);
+  t->timer.data = &t->wait;
+  UVCHECK(uv_timer_start(&t->timer, timer_cb, ms, 0));
+  return 0;
+}
+
+int uvco_udp_recv_next2(UvcoUdpRecv* recv, usize timeout_ms) {
+  // Start timer
+  UvcoTimer t;
+  UVCHECK(uvco_timer_start(&t, recv->udp->loop, timeout_ms));
+
+  // Register as waiting on the udp socket
+  recv->udp->data = recv;
+  recv->wait      = CocoWait();
+
+  // Suspend
+  COCO_SUSPEND();
+
+  // We're back
+  int rc = 0;
+  if (t.wait.done) {
+    // Timer expired
+    rc = UV_ETIMEDOUT;
+  } else {
+    // Message arrived
+    if (recv->nread < 0)
+      rc = (int)recv->nread;
+
+    // Cancel the timer
+    UVCHECK(uv_timer_stop(&t.timer));
+  }
+
+  // Cleanup
+  recv->udp->data = 0;
+  recv->wait      = CocoWait();
+  uvco_close((uv_handle_t*)&t.timer);
+
+  return rc;
 }
 
 typedef struct {

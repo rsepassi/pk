@@ -9,6 +9,12 @@
 #define UvBuf(b)   uv_buf_init((char*)(b).buf, (unsigned int)(b).len)
 #define UvBytes(b) Bytes((b).base, (b).len)
 
+#define UVCHECK(x)                                                             \
+  do {                                                                         \
+    int __rc = (x);                                                            \
+    CHECK(__rc == 0, "%s", uv_strerror(__rc));                                 \
+  } while (0)
+
 // Time
 void uvco_sleep(uv_loop_t* loop, u64 ms);
 
@@ -43,6 +49,7 @@ typedef struct {
 } UvcoUdpRecv;
 int uvco_udp_recv_start(UvcoUdpRecv* recv, uv_udp_t* handle);
 int uvco_udp_recv_next(UvcoUdpRecv* recv);
+int uvco_udp_recv_next2(UvcoUdpRecv* recv, usize timeout_ms);
 
 // Handle
 void uvco_close(uv_handle_t* h);
