@@ -8,9 +8,12 @@ typedef struct {
   mco_coro* co;
   bool      done;
   Node      node;
+  void*     data;
 } CocoWait;
 
-#define CocoWait() ((CocoWait){mco_running(), 0, {0}})
+#define CocoWait() ((CocoWait){mco_running(), 0, {0}, 0})
+
+#define COCO_SUSPEND() CHECK0(mco_yield(mco_running()))
 
 #define COCO_AWAIT(wait)                                                       \
   do {                                                                         \
