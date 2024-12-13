@@ -9,6 +9,35 @@
 #include <netinet/in.h>
 #endif
 
+#define LOCALHOST_STR "localhost"
+
+int IpStr_fromstr(IpStrStorage* out, const char* ip) {
+  size_t ip_len = strlen(ip);
+
+  char* colon = strrchr(ip, ':');
+  if (colon != NULL) {
+    ip_len    = colon - ip;
+    int iport = atoi(colon + 1);
+    if (iport > UINT16_MAX)
+      return 1;
+    out->port = (uint16_t)iport;
+  }
+
+  if (ip_len == 0 || memcmp(ip, LOCALHOST_STR, STRLEN(LOCALHOST_STR)) == 0) {
+    ip     = STDNET_IPV4_LOCALHOST;
+    ip_len = STRLEN(STDNET_IPV4_LOCALHOST);
+  }
+
+  if (ip_len >= sizeof(out->ip_buf))
+    return 1;
+
+  memcpy(out->ip_buf, ip, ip_len);
+  out->ip_buf[ip_len] = 0;
+
+  out->ip = Bytes(out->ip_buf, ip_len);
+  return 0;
+}
+
 const void* sa_get_in_addr(const struct sockaddr* sa) {
   switch (sa->sa_family) {
     case AF_INET: {
@@ -37,6 +66,13 @@ static int sa_get_port(const struct sockaddr* sa) {
     default:
       return 0;
   }
+}
+
+uint16_t stdnet_getport(const struct sockaddr* in) {
+  int port = sa_get_port(in);
+  if (port > UINT16_MAX)
+    return 0;
+  return (uint16_t)port;
 }
 
 int IpStr_read(IpStrStorage* out, const struct sockaddr* sa) {

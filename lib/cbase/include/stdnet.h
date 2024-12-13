@@ -17,8 +17,8 @@ typedef struct {
 } IpStrStorage;
 
 typedef struct {
-  Str ip;
-  int port;
+  Str      ip;
+  uint16_t port;
 } IpStr;
 
 #define PRIIpStr    ".*s:%d"
@@ -40,5 +40,9 @@ typedef struct __attribute__((packed)) {
 
 int IpStr_read(IpStrStorage* out, const struct sockaddr* sa);
 int IpStr_frommsg(IpStrStorage* out, const IpMsg* in);
+int IpStr_fromstr(IpStrStorage* out, const char* ip);
+
 int IpMsg_read(IpMsg* out, const struct sockaddr* sa);
 int IpMsg_dump(struct sockaddr* out, const IpMsg* in);
+
+uint16_t stdnet_getport(const struct sockaddr* in);
