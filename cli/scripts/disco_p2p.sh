@@ -1,6 +1,7 @@
 #!/usr/bin/env yash
 
-ROOTDIR=${ROOTDIR:-$PWD}
+: ${ROOTDIR:=$PWD}
+
 . $ROOTDIR/scripts/stdsh.sh
 stdsh_init
 
@@ -18,7 +19,7 @@ make --silent -j
 stdsh_go D ./build/out/bin/cli demo-disco disco -p${disco}
 sleep 2  # let Disco come up before spawning A+B
 
-# Alice, our initiator
+# Alice
 stdsh_go A ./build/out/bin/cli demo-disco p2p -i \
   -p20000 -c${chan} -d${disco} -b${bobpk} -a${alicepk} -s${alicesk}
 

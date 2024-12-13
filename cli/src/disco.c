@@ -20,6 +20,7 @@
 #include "plum/plum.h"
 #include "sodium.h"
 #include "stdnet.h"
+#include "stdtime.h"
 #include "uvco.h"
 
 extern uv_loop_t* loop;
@@ -93,14 +94,21 @@ static void disco_multicast4_derive(struct sockaddr_in* addr, u64 channel) {
   // Windows, Mac use >=49152
   // Linux uses <=60999
   u16 port       = *(u16*)h;
-  addr->sin_port = 49152 + (port % (60999 - 49152));
+  addr->sin_port = htons(49152 + (port % (60999 - 49152)));
 
   // Next 3 bytes are used for the IP
+  // Multicast administratively scoped is 239/8
   u8* ip = (u8*)&addr->sin_addr;
   ip[0]  = 239;
   ip[1]  = h[2];
   ip[2]  = h[3];
   ip[3]  = h[4];
+
+  // Leave 239.0.0.0 and 239.255.255.255 alone
+  if (ip[1] == 0 && ip[2] == 0 && ip[3] == 0)
+    ip[3] = 1;
+  if (ip[1] == 255 && ip[2] == 255 && ip[3] == 255)
+    ip[3] = 254;
 }
 
 static u64 disco_channel_generic() {
@@ -662,18 +670,6 @@ static int disco_relay_client(int argc, char** argv) {
   return 0;
 }
 
-static int parse_ipport(IpStr* out, const char* s) {
-  char* colon = strrchr(s, ':');
-  if (colon == NULL) {
-    out->port = parse_port(s);
-    out->ip   = Str(STDNET_IPV4_LOCALHOST);
-  } else {
-    out->port = parse_port(colon + 1);
-    out->ip   = Bytes(s, colon - s);
-  }
-  return 0;
-}
-
 static void parse_pk(CryptoSignPK* key, const char* s) {
   usize binlen;
   CHECK0(sodium_hex2bin((u8*)key, sizeof(*key), s, strlen(s), 0, &binlen, 0));
@@ -686,25 +682,224 @@ static void parse_sk(CryptoSignSK* key, const char* s) {
   CHECK(binlen == sizeof(*key));
 }
 
-static void addr_read(struct sockaddr* addr, IpStr ip) {
-  addr->sa_family = AF_INET;
-  char ip_buf[STDNET_INET6_ADDRSTRLEN];
-  memcpy(ip_buf, ip.ip.buf, ip.ip.len);
-  ip_buf[ip.ip.len] = 0;
-  CHECK0(uv_ip4_addr(ip_buf, ip.port, (struct sockaddr_in*)addr));
+typedef struct {
+  Allocator  al;
+  uv_loop_t* loop;
+  u16        port;
+  Str        code;
+  IpStr      disco;
+} P2PCtxOptions;
+
+typedef enum {
+  P2PMsgIp,
+  P2PMsg_MAX,
+} P2PMsgType;
+
+typedef struct {
+  Allocator               al;
+  CocoPool                pool;
+  uv_loop_t*              loop;
+  uv_udp_t                udp;
+  Str                     code;
+  struct sockaddr_storage me_storage;
+  struct sockaddr*        me;
+  struct sockaddr_storage disco_storage;
+  struct sockaddr*        disco;
+  bool                    me_public_present;
+  struct sockaddr_storage me_public_storage;
+  struct sockaddr*        me_public;
+  bool                    upnp_port_present;
+  u16                     upnp_port;
+  Queue waiters[P2PMsg_MAX];  // CocoWait, queue of waiters per message type
+} P2PCtx;
+
+void P2PCtx_bind(P2PCtx* ctx, u16 port) {
+  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)ctx->me));
+  CHECK0(uv_udp_bind(&ctx->udp, ctx->me, 0));
+
+  int me_len = sizeof(ctx->me_storage);
+  CHECK0(uv_udp_getsockname(&ctx->udp, ctx->me, &me_len));
+
+  IpStrStorage s;
+  CHECK0(IpStr_read(&s, ctx->me));
+  LOG("bound to %" PRIIpStr, IpStrPRI(s));
 }
 
+void P2PCtx_add_disco(P2PCtx* ctx, IpStr ip) {
+  LOG("adding disco server %" PRIIpStr, IpStrPRI(ip));
+  ctx->disco->sa_family = AF_INET;
+  CHECK0(
+      uv_ip4_addr((char*)ip.ip.buf, ip.port, (struct sockaddr_in*)ctx->disco));
+}
+
+void P2PCtx_init(P2PCtx* ctx, const P2PCtxOptions* opts) {
+  ZERO(ctx);
+
+  ctx->al        = opts->al;
+  ctx->code      = opts->code;
+  ctx->me        = (void*)&ctx->me_storage;
+  ctx->disco     = (void*)&ctx->disco_storage;
+  ctx->me_public = (void*)&ctx->me_public_storage;
+  ctx->loop      = opts->loop;
+
+  CHECK0(CocoPool_init(&ctx->pool, 8, 1024 * 4, ctx->al));
+  CHECK0(uv_udp_init(opts->loop, &ctx->udp));
+  P2PCtx_bind(ctx, opts->port);
+
+  P2PCtx_add_disco(ctx, opts->disco);
+
+  plum_config_t config = {0};
+  config.log_level     = PLUM_LOG_LEVEL_WARN;
+  plum_init(&config);
+}
+
+void P2PCtx_deinit(P2PCtx* ctx) {
+  // TODO: destroy plum mapping
+  CHECK(false, "unimpl");
+}
+
+void P2PCtx_listener(void* arg) {
+  P2PCtx* ctx = arg;
+
+  UvcoUdpRecv recv;
+  CHECK0(uvco_udp_recv_start(&recv, &ctx->udp));
+  while (1) {
+    CHECK0(uvco_udp_recv_next(&recv));
+
+    CHECK(false, "unimpl");
+    // What kind of message is it?
+    // Who's waiting for it?
+    // How are we disambiguating?
+
+    // Notify all waiters, or just next one?
+
+    // Maybe all messages need a sort of connection id
+    // That's included in all related messages
+  }
+}
+
+UvcoUdpRecv* P2PCtx_await(P2PCtx* ctx, P2PMsgType mtype) {
+  CocoWait wait = CocoWait();
+  q_enq(&ctx->waiters[mtype], &wait.node);
+  COCO_AWAIT(&wait);
+  return wait.data;
+}
+
+void P2PCtx_start_listener(P2PCtx* ctx) {
+  CHECK0(CocoPool_go(&ctx->pool, P2PCtx_listener, ctx));
+}
+
+void P2PCtx_disco_getip(P2PCtx* ctx) {
+  // Send request to Disco
+  DiscoRelayMsgIp msgip = {0};
+  msgip.type            = DiscoRelayMsg_IP;
+  uv_buf_t buf          = UvBuf(BytesObj(msgip));
+  CHECK0(uvco_udp_send(&ctx->udp, &buf, 1, ctx->disco));
+
+  // Wait for reply
+  UvcoUdpRecv* recv = P2PCtx_await(ctx, P2PMsgIp);
+  CHECK(recv->buf.len == sizeof(IpMsg));
+
+  // Fill me_public
+  IpMsg* public_ip = (IpMsg*)recv->buf.base;
+  CHECK0(IpMsg_dump(ctx->me_public, public_ip));
+  ctx->me_public_present = true;
+}
+
+void P2PCtx_pingpong(P2PCtx* ctx) { CHECK(false, "unimpl"); }
+
+void P2PCtx_pingpong_relay(P2PCtx* ctx) { CHECK(false, "unimpl"); }
+
+void P2PCtx_disco_channel(P2PCtx* ctx) { CHECK(false, "unimpl"); }
+
+void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
+  CHECK(false, "unimpl");
+}
+
+void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
+  (void)disco_channel_mutual;
+
+  *connected = false;
+  CHECK(timeout_secs > 0);
+  i64 expiry = stdtime_now_monotonic_ms() + (timeout_secs * 1000);
+
+  // Determine our channel code
+  u64 channel = disco_channel_code(ctx->code);
+
+  struct sockaddr_in multicast_addr;
+  disco_multicast4_derive(&multicast_addr, channel);
+  log_sockaddr("multicast channel", (struct sockaddr*)&multicast_addr);
+
+  struct sockaddr_in me;
+  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY,
+                     stdnet_getport((struct sockaddr*)&multicast_addr), &me));
+  log_sockaddr("multicast bind", (struct sockaddr*)&me);
+
+  // Bind to the multicast port
+  uv_udp_t udp;
+  CHECK0(uv_udp_init(ctx->loop, &udp));
+  UVCHECK(uv_udp_bind(&udp, (struct sockaddr*)&me, UV_UDP_REUSEADDR));
+
+  // Join the multicast group
+  IpStrStorage mstr;
+  CHECK0(IpStr_read(&mstr, (struct sockaddr*)&multicast_addr));
+  UVCHECK(uv_udp_set_membership(&udp, (char*)mstr.ip.buf, NULL, UV_JOIN_GROUP));
+
+  UvcoUdpRecv recv;
+  UVCHECK(uvco_udp_recv_start(&recv, &udp));
+  i64 now = stdtime_now_monotonic_ms();
+  while (now < expiry) {
+    LOG("local tick");
+    // Advertise on multicast address...
+    DiscoLocalAdvert advert = {0};
+    advert.id               = channel;
+    uv_buf_t buf            = UvBuf(BytesObj(advert));
+    UVCHECK(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&multicast_addr));
+
+    // Listen...
+    CHECK0(uvco_udp_recv_next2(&recv, 1000));  // our own message
+
+    int rc = uvco_udp_recv_next2(&recv, 1000);
+    if (rc == 0) {
+      // ok
+    } else if (rc == UV_ETIMEDOUT) {
+      // timed out
+    } else {
+      UVCHECK(rc);
+    }
+
+    // Throttle
+    i64 tick_threshold = now + 995;
+    i64 tick           = now + 1000;
+    now                = stdtime_now_monotonic_ms();
+    if (now < tick_threshold) {
+      LOG("sleep %d", (int)(tick - now));
+      uvco_sleep(ctx->loop, tick - now);
+    }
+  }
+}
+
+void P2PCtx_upnp(P2PCtx* ctx) {
+  PlumCtx pctx       = {0};
+  pctx.internal_port = stdnet_getport(ctx->me);
+  CHECK0(uvco_arun(ctx->loop, async_plumfn, &pctx));
+  ctx->upnp_port = pctx.external_port;
+  if (ctx->upnp_port)
+    ctx->upnp_port_present = true;
+}
+
+// cli demo-disco p2p -i -p20000 -ca1b2c3 -d:30000
 static int disco_p2p(int argc, char** argv) {
   LOG("");
-  // Alice wants to allow Bob to connect to her
+  // Alice and Bob want to connect
 
   u16          port         = 0;
   Str          channel_code = {0};
-  IpStr        disco        = {0};
+  IpStrStorage disco_str    = {0};
   CryptoSignPK alice        = {0};
   CryptoSignPK bob          = {0};
   CryptoSignSK sk           = {0};
-  bool         initiator    = false;
+  bool         is_alice     = false;
 
   struct optparse opts;
   optparse_init(&opts, argv);
@@ -713,7 +908,7 @@ static int disco_p2p(int argc, char** argv) {
     switch (option) {
       case 'i':
         // Initiator
-        initiator = true;
+        is_alice = true;
         break;
       case 'p':
         // Port
@@ -722,10 +917,11 @@ static int disco_p2p(int argc, char** argv) {
       case 'c':
         // Channel
         channel_code = Str0(opts.optarg);
+        CHECK(channel_code.len >= 6);
         break;
       case 'd':
         // Disco
-        CHECK0(parse_ipport(&disco, opts.optarg));
+        CHECK0(IpStr_fromstr(&disco_str, opts.optarg));
         break;
       case 'b':
         // Bob
@@ -745,122 +941,43 @@ static int disco_p2p(int argc, char** argv) {
     }
   }
 
-  struct sockaddr_storage disco_addr;
-  addr_read((struct sockaddr*)&disco_addr, disco);
-  log_sockaddr("disco", (struct sockaddr*)&disco_addr);
+  (void)is_alice;
 
-  Allocator al = allocatormi_allocator();
-  CocoPool  pool;
-  CHECK0(CocoPool_init(&pool, 8, 1024 * 4, al));
+  P2PCtxOptions p2p_opts = {
+      .loop  = loop,
+      .port  = port,
+      .al    = allocatormi_allocator(),
+      .code  = channel_code,
+      .disco = *(IpStr*)&disco_str,
+  };
 
-  // This is the port that we ultimately want to have connect to Bob
-  uv_udp_t udp;
-  CHECK0(uv_udp_init(loop, &udp));
+  P2PCtx ctx;
+  P2PCtx_init(&ctx, &p2p_opts);
 
-  // Bind to the passed port
-  struct sockaddr_storage me;
-  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&me));
-  CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&me, 0));
-  port                                 = udp_getsockport(&udp);
-  ((struct sockaddr_in*)&me)->sin_port = htons(port);
-  log_sockaddr("me", (struct sockaddr*)&me);
+  P2PCtx_start_listener(&ctx);
 
-  // Start listening
-  UvcoUdpRecv recv;
-  CHECK0(uvco_udp_recv_start(&recv, &udp));
+  bool connected = false;
+  P2PCtx_disco_local(&ctx, 30, &connected);
 
-  // Contact Disco to get our public IP+port
-  IpMsg public_ip;
-  {
-    LOG("query disco for public ip");
-    DiscoRelayMsgIp msgip = {0};
-    msgip.type            = DiscoRelayMsg_IP;
-    uv_buf_t buf          = UvBuf(BytesObj(msgip));
-    CHECK0(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&disco_addr));
-    CHECK0(uvco_udp_recv_next(&recv));
-    CHECK(recv.buf.len == sizeof(IpMsg));
-    public_ip = *(IpMsg*)recv.buf.base;
-
-    IpStrStorage ips;
-    CHECK0(IpStr_frommsg(&ips, &public_ip));
-    LOG("publicip=%" PRIIpStr, IpStrPRI(ips));
+  if (connected) {
+    P2PCtx_pingpong(&ctx);
+    return 0;
   }
 
-  // If we're the initiator (Alice), create 3 channels on Disco
-  // * A code channel
-  // * An Alice-specific channel
-  // * An Alice+Bob-specific channel
-  u64 chan_peer   = disco_channel_peer(&alice);
-  u64 chan_mutual = disco_channel_mutual(&alice, &sk, &bob);
-  u64 chan_code   = disco_channel_code(channel_code);
-  if (initiator) {
-    u64               channels[3] = {chan_peer, chan_mutual, chan_code};
-    DiscoRelayMsgInit inits[3]    = {0};
-    uv_buf_t          bufs[3];
+  P2PCtx_disco_getip(&ctx);
+  P2PCtx_upnp(&ctx);
+  P2PCtx_disco_channel(&ctx);
 
-    LOG("init channels");
-    for (int i = 0; i < 3; ++i) {
-      LOG("channel %" PRIu64, channels[i]);
-      inits[i].type       = DiscoRelayMsg_INIT;
-      inits[i].channel_id = channels[i];
-      bufs[i]             = UvBuf(BytesObj(inits[i]));
-      uvco_sleep(loop, 20);
-      CHECK0(uvco_udp_send(&udp, &bufs[i], 1, (struct sockaddr*)&disco_addr));
-      // TODO: not checking for acks
-      // TODO: keepalives
-    }
+  P2PCtx_disco_dance(&ctx, 30, &connected);
+
+  if (connected) {
+    P2PCtx_pingpong(&ctx);
+    return 0;
   }
 
-  // Try to open an external port
-  // Plum init
-  u16 upnp_port = 0;
-  {
-    plum_config_t config = {0};
-    config.log_level     = PLUM_LOG_LEVEL_WARN;
-    plum_init(&config);
-    PlumCtx ctx       = {0};
-    ctx.internal_port = port;
-    CHECK0(uvco_arun(loop, async_plumfn, &ctx));
-    upnp_port = ctx.external_port;
-    if (upnp_port)
-      LOG("upnp port=%d", ctx.external_port);
-    // TODO: destroy plum mapping
-  }
+  P2PCtx_pingpong_relay(&ctx);
 
-  // Initiate local discovery
-  // Alice listens on the local network
-  // * The generic channel
-  // * An alphanum channel
-  // * An Alice-specific channel
-  // * An Alice+Bob-specific channel
-
-  // At this point
-  // Alice has:
-  // * Retrieved her public IP+port
-  // * Tried opening an external port
-  // * Created and is listening on 3 channels on Disco
-  // * Is listening on 4 channels locally
-  // * Shared the relevant information out-of-band with Bob
-  // Bob has:
-
-  // What does Alice share with Bob?
-  // Public IP+port
-  // External port, if one was opened
-  // Channel code
-  // Keys:
-  //   Identity key
-  //   Short-term key
-  //   Ephemeral key
-
-  // Alice waits for Bob's IP+port on the channel
-  // Alice tries Bob on his IP+port
-  // Alice tries Bob on IP + random ports
-
-  // Possible outcomes:
-  // * Direct connection established
-  // * Relay connection established
-  // * Error
-
+  P2PCtx_deinit(&ctx);
   return 0;
 }
 
