@@ -1,7 +1,7 @@
 STDSH_DIR=${STDSH_DIR:-$(mktemp -d -t stdsh)}
 
 stdsh_init() {
-  set -ex --pipe-fail
+  set -e --pipe-fail
   trap stdsh_cleanup__ INT TERM EXIT
   echo 3 > $STDSH_DIR/nextfd
 }
@@ -9,10 +9,7 @@ stdsh_init() {
 stdsh_done() {
   wait
 
-  for pipe in $(ls $STDSH_DIR/*.pipe)
-  do
-    stdsh_cleanup_pipe__ $pipe
-  done
+  stdsh_cleanup_pipes__
   rm $STDSH_DIR/nextfd
 
   trap - INT TERM EXIT
@@ -72,13 +69,19 @@ stdsh_cleanup__() {
   kill $(jobs -p) 2>/dev/null
   wait
 
-  for pipe in $(ls $STDSH_DIR/*.pipe)
-  do
-    stdsh_cleanup_pipe__ $pipe
-  done
+  stdsh_cleanup_pipes__
   rm $STDSH_DIR/nextfd
 
   exit
+}
+
+stdsh_cleanup_pipes__() {
+  pipes=$(ls $STDSH_DIR/*.pipe 2>/dev/null)
+  if [ -z "$pipes" ]; then return; fi
+  for pipe in $pipes
+  do
+    stdsh_cleanup_pipe__ $pipe
+  done
 }
 
 stdsh_cleanup_pipe__() {
