@@ -5,6 +5,9 @@
 
 #include <time.h>
 
+#define MS_PER_S  1000
+#define NS_PER_MS 1000000
+
 static i64 utc_offset_secs(void) {
   time_t    t  = stdtime_now_secs();
   struct tm tm = {0};
@@ -18,6 +21,24 @@ i64 stdtime_now_secs(void) {
   uv_timespec64_t time;
   uv_clock_gettime(UV_CLOCK_REALTIME, &time);
   return time.tv_sec;
+}
+
+i64 stdtime_now_ms(void) {
+  uv_timespec64_t time;
+  uv_clock_gettime(UV_CLOCK_MONOTONIC, &time);
+  return time.tv_sec * MS_PER_S + time.tv_nsec / NS_PER_MS;
+}
+
+i64 stdtime_now_monotonic_secs(void) {
+  uv_timespec64_t time;
+  uv_clock_gettime(UV_CLOCK_MONOTONIC, &time);
+  return time.tv_sec;
+}
+
+i64 stdtime_now_monotonic_ms(void) {
+  uv_timespec64_t time;
+  uv_clock_gettime(UV_CLOCK_MONOTONIC, &time);
+  return time.tv_sec * MS_PER_S + time.tv_nsec / NS_PER_MS;
 }
 
 void stdtime_rfc3339_utc_format(Bytes ts, i64 epoch_secs) {
