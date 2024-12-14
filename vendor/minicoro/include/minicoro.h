@@ -328,6 +328,7 @@ MCO_API mco_result mco_create(mco_coro** out_co, mco_desc* desc);               
 MCO_API mco_result mco_destroy(mco_coro* co);                                   /* Uninitialize and deallocate the coroutine, may fail if it's not dead or suspended. */
 MCO_API mco_result mco_resume(mco_coro* co);                                    /* Starts or continues the execution of the coroutine. */
 MCO_API mco_result mco_yield(mco_coro* co);                                     /* Suspends the execution of a coroutine. */
+MCO_API mco_result mco_yieldto(mco_coro* from, mco_coro* to);                   /* Suspends the execution of a coroutine, and starts or continues the execution of another. */
 MCO_API mco_state mco_status(mco_coro* co);                                     /* Returns the status of the coroutine. */
 MCO_API void* mco_get_user_data(mco_coro* co);                                  /* Get coroutine user data supplied on coroutine creation. */
 
@@ -589,11 +590,18 @@ static MCO_FORCE_INLINE void _mco_prepare_jumpin(mco_coro* co) {
 #endif
 }
 
-static MCO_FORCE_INLINE void _mco_prepare_jumpout(mco_coro* co) {
-  /* Switch back to the previous running coroutine. */
+static MCO_FORCE_INLINE void _mco_prepare_jumpoutto(mco_coro* co, mco_coro* to) {
   /* MCO_ASSERT(mco_running() == co); */
-  mco_coro* prev_co = co->prev_co;
+  mco_coro* prev_co;
+  if (to == NULL) {
+    /* Switch back to the previous running coroutine. */
+    prev_co = co->prev_co;
+  } else {
+    /* Switch to the target coroutine. */
+    prev_co = to;
+  }
   co->prev_co = NULL;
+
   if(prev_co) {
     /* MCO_ASSERT(prev_co->state == MCO_NORMAL); */
     prev_co->state = MCO_RUNNING;
@@ -615,8 +623,13 @@ static MCO_FORCE_INLINE void _mco_prepare_jumpout(mco_coro* co) {
 #endif
 }
 
+static MCO_FORCE_INLINE void _mco_prepare_jumpout(mco_coro* co) {
+  _mco_prepare_jumpoutto(co, 0);
+}
+
 static void _mco_jumpin(mco_coro* co);
 static void _mco_jumpout(mco_coro* co);
+static void _mco_jumpoutto(mco_coro* co, mco_coro* to);
 
 static MCO_NO_INLINE void _mco_main(mco_coro* co) {
   co->func(co); /* Run the coroutine function. */
@@ -1319,10 +1332,14 @@ static void _mco_jumpin(mco_coro* co) {
   _mco_switch(&context->back_ctx, &context->ctx); /* Do the context switch. */
 }
 
-static void _mco_jumpout(mco_coro* co) {
+static void _mco_jumpoutto(mco_coro* co, mco_coro* to) {
   _mco_context* context = (_mco_context*)co->context;
-  _mco_prepare_jumpout(co);
+  _mco_prepare_jumpoutto(co, to);
   _mco_switch(&context->ctx, &context->back_ctx); /* Do the context switch. */
+}
+
+static void _mco_jumpout(mco_coro* co) {
+  _mco_jumpoutto(co, 0);
 }
 
 static mco_result _mco_create_context(mco_coro* co, mco_desc* desc) {
@@ -1404,13 +1421,24 @@ static void CALLBACK _mco_wrap_main(void* co) {
   _mco_main((mco_coro*)co);
 }
 
-static void _mco_jumpout(mco_coro* co) {
+static void _mco_jumpoutto(mco_coro* co, mco_coro* to) {
   _mco_context* context = (_mco_context*)co->context;
-  void* back_fib = context->back_fib;
-  MCO_ASSERT(back_fib != NULL);
+  void* back_fib;
+  if (to == NULL) {
+    back_fib = context->back_fib;
+  } else {
+    _mco_context* tocontext = (_mco_context*)to->context;
+    back_fib = &tocontext->fib;
+  }
   context->back_fib = NULL;
-  _mco_prepare_jumpout(co);
+  MCO_ASSERT(back_fib != NULL);
+
+  _mco_prepare_jumpoutto(co, to);
   SwitchToFiber(back_fib);
+}
+
+static void _mco_jumpout(mco_coro* co) {
+  _mco_jumpoutto(co, 0);
 }
 
 /* Reverse engineered Fiber struct, used to get stack base. */
@@ -1811,6 +1839,10 @@ mco_result mco_resume(mco_coro* co) {
 }
 
 mco_result mco_yield(mco_coro* co) {
+  return mco_yieldto(co, 0);
+}
+
+mco_result mco_yieldto(mco_coro* co, mco_coro* to) {
   if(!co) {
     MCO_LOG("attempt to yield an invalid coroutine");
     return MCO_INVALID_COROUTINE;
@@ -1833,7 +1865,7 @@ mco_result mco_yield(mco_coro* co) {
     return MCO_NOT_RUNNING;
   }
   co->state = MCO_SUSPENDED; /* The coroutine is now suspended. */
-  _mco_jumpout(co);
+  _mco_jumpoutto(co, to);
   return MCO_SUCCESS;
 }
 
