@@ -697,12 +697,15 @@ typedef enum {
   P2PMsgIp,
   P2PMsgPing,
   P2PMsgPong,
+  P2PMsgDone,
   P2PMsg_MAX,
 } P2PMsgType;
 
 const char* P2PMsgType_strs[P2PMsg_MAX] = {
     "IP",
     "PING",
+    "PONG",
+    "DONE",
 };
 
 #define PRIP2PMsgType    "s"
@@ -710,9 +713,36 @@ const char* P2PMsgType_strs[P2PMsg_MAX] = {
 
 typedef struct __attribute__((packed)) {
   P2PMsg_FIELDS;
+  u16   request;
+  IpMsg ip;
+} DiscoIp;
+
+typedef struct __attribute__((packed)) {
+  P2PMsg_FIELDS;
   u64 channel;
   u64 sender;
 } DiscoPing;
+
+typedef struct __attribute__((packed)) {
+  P2PMsg_FIELDS;
+  u64 channel;
+  u64 sender;
+  u64 receiver;
+} DiscoPong;
+
+typedef struct __attribute__((packed)) {
+  P2PMsg_FIELDS;
+  u64 channel;
+  u64 sender;
+  u64 receiver;
+} DiscoDone;
+
+size_t P2PMsg_SZ[P2PMsg_MAX] = {
+    sizeof(DiscoIp),
+    sizeof(DiscoPing),
+    sizeof(DiscoPong),
+    sizeof(DiscoDone),
+};
 
 typedef struct {
   u64                     id;
@@ -730,7 +760,7 @@ typedef struct {
   struct sockaddr*        me_public;
   bool                    upnp_port_present;
   u16                     upnp_port;
-  Queue waiters[P2PMsg_MAX];  // CocoWait, queue of waiters per message type
+  Queue2 waiters[P2PMsg_MAX];  // CocoWait, queue of waiters per message type
 } P2PCtx;
 
 void P2PCtx_bind(P2PCtx* ctx, u16 port) {
@@ -752,19 +782,59 @@ void P2PCtx_add_disco(P2PCtx* ctx, IpStr ip) {
       uv_ip4_addr((char*)ip.ip.buf, ip.port, (struct sockaddr_in*)ctx->disco));
 }
 
-UvcoUdpRecv* P2PCtx_await(P2PCtx* ctx, P2PMsgType mtype) {
+int P2PCtx_await(P2PCtx* ctx, P2PMsgType mtype, UvcoUdpRecv** recv,
+                 usize timeout_ms) {
   CocoWait wait = CocoWait();
-  q_enq(&ctx->waiters[mtype], &wait.node);
-  COCO_AWAIT(&wait);
-  return wait.data;
+  q2_enq(&ctx->waiters[mtype], &wait.node);
+
+  int rc = uvco_await_timeout(ctx->loop, &wait, timeout_ms);
+  if (rc == 0) {
+    *recv = wait.data;
+    return 0;
+  } else {
+    q2_del(&ctx->waiters[mtype], &wait.node);
+  }
+  return rc;
 }
 
 void P2PCtx_ping_listener(void* arg) {
   P2PCtx* ctx = arg;
 
+  UvcoUdpRecv* recv;
   while (1) {
-    UvcoUdpRecv* recv = P2PCtx_await(ctx, P2PMsgPing);
-    LOG("recv PING %p", recv);
+    int rc = P2PCtx_await(ctx, P2PMsgPing, &recv, 1000);
+    if (rc == UV_ETIMEDOUT)
+      continue;
+    CHECK0(rc);
+
+    if (!(recv->buf.len == sizeof(DiscoPing) &&
+          recv->buf.base[0] == P2PMsgPing))
+      continue;
+
+    DiscoPing* ping = (void*)recv->buf.base;
+    log_sockaddr("PING from", recv->addr);
+    LOG("PING channel=%" PRIu64 " sender=%" PRIu64, ping->channel,
+        ping->sender);
+
+    // Send back a pong
+    DiscoPong pong = {0};
+    pong.type      = P2PMsgPong;
+    pong.channel   = ping->channel;
+    pong.sender    = ctx->id;
+    pong.receiver  = ping->sender;
+
+    uv_buf_t buf = UvBuf(BytesObj(pong));
+    CHECK0(uvco_udp_send(&ctx->udp, &buf, 1, recv->addr));
+
+    rc = P2PCtx_await(ctx, P2PMsgDone, &recv, 1000);
+    if (rc == UV_ETIMEDOUT)
+      continue;
+    CHECK0(rc);
+
+    LOG("DONE: connected!");
+
+    // Connected!
+    CHECK(false, "unimpl");
   }
 }
 
@@ -779,6 +849,7 @@ void P2PCtx_init(P2PCtx* ctx, const P2PCtxOptions* opts) {
   ctx->loop      = opts->loop;
 
   randombytes_buf(&ctx->id, sizeof(ctx->id));
+  LOG("id=%" PRIu64, ctx->id);
 
   CHECK0(CocoPool_init(&ctx->pool, 16, 1024 * 16, ctx->al));
   CHECK0(uv_udp_init(opts->loop, &ctx->udp));
@@ -790,7 +861,7 @@ void P2PCtx_init(P2PCtx* ctx, const P2PCtxOptions* opts) {
   config.log_level     = PLUM_LOG_LEVEL_WARN;
   plum_init(&config);
 
-  // CHECK0(CocoPool_gonow(&ctx->pool, P2PCtx_ping_listener, ctx));
+  CHECK0(CocoPool_gonow(&ctx->pool, P2PCtx_ping_listener, ctx));
 }
 
 void P2PCtx_deinit(P2PCtx* ctx) {
@@ -812,40 +883,46 @@ void P2PCtx_listener(void* arg) {
       continue;
 
     P2PMsgType type = recv.buf.base[0];
+    if (recv.buf.len != P2PMsg_SZ[type])
+      continue;
 
     LOG("incoming p2p msg type=%" PRIP2PMsgType, P2PMsgTypePRI(type));
-    Node* n;
-    q_drain(&ctx->waiters[type], n, {
+    Node2* n;
+    q2_drain(&ctx->waiters[type], n, {
       CocoWait* wait = CONTAINER_OF(n, CocoWait, node);
       wait->data     = &recv;
       COCO_DONE(wait);
     });
-
-    CHECK(false, "unimpl");
-    // What kind of message is it?
-    // Who's waiting for it?
-    // How are we disambiguating?
-
-    // Notify all waiters, or just next one?
-
-    // Maybe all messages need a sort of connection id
-    // That's included in all related messages
   }
 }
 
 void P2PCtx_start_listener(P2PCtx* ctx) {
-  CHECK0(CocoPool_go(&ctx->pool, P2PCtx_listener, ctx));
+  CHECK0(CocoPool_gonow(&ctx->pool, P2PCtx_listener, ctx));
 }
 
 void P2PCtx_disco_getip(P2PCtx* ctx) {
-  // Send request to Disco
   DiscoRelayMsgIp msgip = {0};
   msgip.type            = DiscoRelayMsg_IP;
-  uv_buf_t buf          = UvBuf(BytesObj(msgip));
-  CHECK0(uvco_udp_send(&ctx->udp, &buf, 1, ctx->disco));
 
-  // Wait for reply
-  UvcoUdpRecv* recv = P2PCtx_await(ctx, P2PMsgIp);
+  int          i  = 0;
+  int          rc = UV_ETIMEDOUT;
+  UvcoUdpRecv* recv;
+  while (i < 3) {
+    // Send request to Disco
+    uv_buf_t buf = UvBuf(BytesObj(msgip));
+    CHECK0(uvco_udp_send(&ctx->udp, &buf, 1, ctx->disco));
+
+    // Wait for reply
+    rc = P2PCtx_await(ctx, P2PMsgIp, &recv, 1000);
+    if (rc == UV_ETIMEDOUT)
+      continue;
+    else
+      break;
+
+    i += 1;
+  }
+
+  CHECK0(rc);
   CHECK(recv->buf.len == sizeof(IpMsg));
 
   // Fill me_public
@@ -883,11 +960,33 @@ void P2PCtx_local_validate(P2PCtx* ctx, u64 channel, UvcoUdpRecv* recv,
   ping.channel   = channel;
   ping.sender    = ctx->id;
 
-  uv_buf_t buf = UvBuf(BytesObj(ping));
+  int i = 0;
+  int rc;
+  while (i < 3) {
+    uv_buf_t buf = UvBuf(BytesObj(ping));
+    UVCHECK(uvco_udp_send(&ctx->udp, &buf, 1, recv->addr));
+    rc = P2PCtx_await(ctx, P2PMsgPong, &recv, 1000);
+    if (rc == 0)
+      break;
+    CHECK(rc == UV_ETIMEDOUT);
+    ++i;
+  }
+
+  CHECK0(rc);
+
+  DiscoPong* pong = (void*)recv->buf.base;
+
+  DiscoDone done = {0};
+  done.type      = P2PMsgDone;
+  done.channel   = channel;
+  done.sender    = ctx->id;
+  done.receiver  = pong->sender;
+
+  uv_buf_t buf = UvBuf(BytesObj(done));
   UVCHECK(uvco_udp_send(&ctx->udp, &buf, 1, recv->addr));
 
-  // TODO: timeout
-  P2PCtx_await(ctx, P2PMsgPong);
+  LOG("PONG: connected!");
+  *connected = true;
 }
 
 void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
