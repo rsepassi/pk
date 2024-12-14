@@ -17,6 +17,7 @@
 #include "crypto.h"
 #include "hashmap.h"
 #include "log.h"
+#include "p2p_msg.h"
 #include "plum/plum.h"
 #include "sodium.h"
 #include "stdnet.h"
@@ -65,17 +66,9 @@ static u16 udp_getsockport(uv_udp_t* udp) {
   return me_str.port;
 }
 
-#define P2PMsg_FIELDS                                                          \
-  u8 type;                                                                     \
-  u8 reserved[3]
-
 typedef struct __attribute__((packed)) {
   P2PMsg_FIELDS;
 } DiscoRelayMsgIp;
-
-typedef struct __attribute__((packed)) {
-  u64 id;
-} DiscoLocalAdvert;
 
 typedef struct {
   IpStr              multicast_addrs;
@@ -509,57 +502,6 @@ typedef struct {
   IpStr      disco;
 } P2PCtxOptions;
 
-typedef enum {
-  P2PMsgIp,
-  P2PMsgPing,
-  P2PMsgPong,
-  P2PMsgDone,
-  P2PMsg_MAX,
-} P2PMsgType;
-
-const char* P2PMsgType_strs[P2PMsg_MAX] = {
-    "IP",
-    "PING",
-    "PONG",
-    "DONE",
-};
-
-#define PRIP2PMsgType    "s"
-#define P2PMsgTypePRI(t) (P2PMsgType_strs[(t)])
-
-typedef struct __attribute__((packed)) {
-  P2PMsg_FIELDS;
-  u16   request;
-  IpMsg ip;
-} DiscoIp;
-
-typedef struct __attribute__((packed)) {
-  P2PMsg_FIELDS;
-  u64 channel;
-  u64 sender;
-} DiscoPing;
-
-typedef struct __attribute__((packed)) {
-  P2PMsg_FIELDS;
-  u64 channel;
-  u64 sender;
-  u64 receiver;
-} DiscoPong;
-
-typedef struct __attribute__((packed)) {
-  P2PMsg_FIELDS;
-  u64 channel;
-  u64 sender;
-  u64 receiver;
-} DiscoDone;
-
-size_t P2PMsg_SZ[P2PMsg_MAX] = {
-    sizeof(DiscoIp),
-    sizeof(DiscoPing),
-    sizeof(DiscoPong),
-    sizeof(DiscoDone),
-};
-
 typedef struct {
   u64                     id;
   Allocator               al;
@@ -576,7 +518,7 @@ typedef struct {
   struct sockaddr*        me_public;
   bool                    upnp_port_present;
   u16                     upnp_port;
-  Queue2 waiters[P2PMsg_MAX];  // CocoWait, queue of waiters per message type
+  Queue2 waiters[P2PMsg_COUNT];  // CocoWait, queue of waiters per message type
 } P2PCtx;
 
 void P2PCtx_bind(P2PCtx* ctx, u16 port) {
@@ -695,14 +637,14 @@ void P2PCtx_listener(void* arg) {
 
     if (recv.buf.len < 1)
       continue;
-    if (recv.buf.base[0] >= P2PMsg_MAX)
+    if (recv.buf.base[0] >= P2PMsg_COUNT)
       continue;
 
     P2PMsgType type = recv.buf.base[0];
     if (recv.buf.len != P2PMsg_SZ[type])
       continue;
 
-    LOG("incoming p2p msg type=%" PRIP2PMsgType, P2PMsgTypePRI(type));
+    LOG("incoming p2p msg type=%s", P2PMsgType_str(type));
     Node2* n;
     q2_drain(&ctx->waiters[type], n, {
       CocoWait* wait = CONTAINER_OF(n, CocoWait, node);
@@ -760,11 +702,8 @@ void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
 void P2PCtx_local_validate(P2PCtx* ctx, u64 channel, UvcoUdpRecv* recv,
                            bool* connected) {
   {
-    Bytes msg = UvBytes(recv->buf);
-    if (msg.len != sizeof(DiscoLocalAdvert))
-      return;
-    DiscoLocalAdvert* advert = (void*)msg.buf;
-    if (advert->id != channel)
+    DiscoLocalAdvert* advert = (void*)recv->buf.base;
+    if (advert->channel != channel)
       return;
   }
 
@@ -788,7 +727,8 @@ void P2PCtx_local_validate(P2PCtx* ctx, u64 channel, UvcoUdpRecv* recv,
     ++i;
   }
 
-  CHECK0(rc);
+  if (rc != 0)
+    return;
 
   DiscoPong* pong = (void*)recv->buf.base;
 
@@ -852,8 +792,9 @@ void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
     // Advertise on multicast address...
     {
       DiscoLocalAdvert advert = {0};
-      advert.id               = channel;
-      uv_buf_t buf            = UvBuf(BytesObj(advert));
+      advert.channel          = channel;
+
+      uv_buf_t buf = UvBuf(BytesObj(advert));
       UVCHECK(
           uvco_udp_send(&ctx->udp, &buf, 1, (struct sockaddr*)&multicast_addr));
     }
