@@ -1,3 +1,5 @@
+#pragma once
+
 #include "str.h"
 
 #define STDNET_IPV4_ANY       "0.0.0.0"
@@ -7,6 +9,8 @@
 
 #define STDNET_INET6_ADDRSTRLEN (45 + 1)
 #define STDNET_INET6_ADDRLEN    16
+#define STDNET_INET4_ADDRSTRLEN (15 + 1)
+#define STDNET_INET4_ADDRLEN    4
 
 struct sockaddr;
 
