@@ -157,125 +157,6 @@ static u64 disco_channel_mutual(const CryptoSignPK* me,
   return disco_channel_derive(BytesArray(subkey));
 }
 
-static void advertco_fn(void* data) {
-  DiscoLocalCtx* ctx = data;
-
-  DiscoLocalAdvert advert = {0};
-  advert.id               = ctx->id;
-
-  while (1) {
-    uv_buf_t buf = UvBuf(BytesObj(advert));
-    int      rc  = uvco_udp_send(&ctx->udp, &buf, 1,
-                                 (struct sockaddr*)&ctx->multicast_addr);
-    if (rc != 0)
-      LOG("err=%s", uv_strerror(rc));
-    uvco_sleep(loop, 1000);
-  }
-}
-
-static int disco_local(int argc, char** argv) {
-  LOG("");
-
-  (void)disco_channel_peer;
-
-  struct optparse options;
-  optparse_init(&options, argv);
-  int                  option;
-  struct optparse_long longopts[] =  //
-      {
-          {"advertise", 'a', OPTPARSE_NONE},    //
-          {"channel", 'c', OPTPARSE_REQUIRED},  //
-          {0}                                   //
-      };
-
-  bool advertise = false;
-  Str  channel   = {0};
-
-  while ((option = optparse_long(&options, longopts, NULL)) != -1) {
-    switch (option) {
-      case 'a':
-        advertise = true;
-        break;
-      case 'c':
-        channel = Str0(options.optarg);
-        break;
-      case '?':
-        cli_usage("disco local", 0, longopts);
-        return 1;
-    }
-  }
-
-  IpStrStorage  multicast_addrs;
-  DiscoLocalCtx ctx = {0};
-  {
-    u64 channel_id;
-    // Determine our multicast address
-    if (channel.len > 0)
-      channel_id = disco_channel_code(channel);
-    else
-      channel_id = disco_channel_generic();
-
-    disco_multicast4_derive(&ctx.multicast_addr, channel_id);
-
-    CHECK0(IpStr_read(&multicast_addrs, (struct sockaddr*)&ctx.multicast_addr));
-    ctx.multicast_addrs = *(IpStr*)&multicast_addrs;
-    LOG("multicast=%" PRIIpStr, IpStrPRI(multicast_addrs));
-    // Initialize UDP handles
-    CHECK0(uv_udp_init(loop, &ctx.multicast_udp));
-    CHECK0(uv_udp_init(loop, &ctx.udp));
-    randombytes_buf(&ctx.id, sizeof(ctx.id));
-  }
-
-  log_local_interfaces();
-
-  // Bind to know our own local port
-  {
-    struct sockaddr_storage me;
-    CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, 0, (struct sockaddr_in*)&me));
-    CHECK0(uv_udp_bind(&ctx.udp, (struct sockaddr*)&me, UV_UDP_REUSEADDR));
-    ctx.port = udp_getsockport(&ctx.udp);
-    LOG("me=%s:%d", STDNET_IPV4_ANY, ctx.port);
-  }
-
-  // Advertise on the multicast group if requested
-  mco_coro* advertco = 0;
-  if (advertise)
-    CHECK0(coco_go(&advertco, 0, advertco_fn, &ctx));
-
-  // Listen on the multicast group
-  struct sockaddr_storage multicast_me;
-  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, ctx.multicast_addrs.port,
-                     (struct sockaddr_in*)&multicast_me));
-  CHECK0(uv_udp_bind(&ctx.multicast_udp, (struct sockaddr*)&multicast_me,
-                     UV_UDP_REUSEADDR));
-  CHECK0(uv_udp_set_membership(&ctx.multicast_udp,
-                               (char*)ctx.multicast_addrs.ip.buf, NULL,
-                               UV_JOIN_GROUP));
-  UvcoUdpRecv recv;
-  CHECK0(uvco_udp_recv_start(&recv, &ctx.multicast_udp));
-  while (1) {
-    CHECK(uvco_udp_recv_next(&recv) >= 0);
-    if (recv.buf.len != sizeof(DiscoLocalAdvert)) {
-      LOG("malformed advert");
-      continue;
-    }
-    DiscoLocalAdvert* advert = (void*)recv.buf.base;
-
-    if (advert->id == ctx.id)
-      continue;
-
-    IpStrStorage sender;
-    CHECK0(IpStr_read(&sender, recv.addr));
-    LOG("sender=%" PRIIpStr, IpStrPRI(sender));
-    LOG("id=%" PRIu64, advert->id);
-  }
-
-  uvco_close((uv_handle_t*)&ctx.udp);
-  uvco_close((uv_handle_t*)&ctx.multicast_udp);
-
-  return 0;
-}
-
 typedef struct {
   u16            internal_port;
   u16            external_port;
@@ -300,71 +181,6 @@ static void async_plumfn(uv_async_t* async, void* arg) {
   ctx->mapping.internal_port = ctx->internal_port;
   ctx->mapping.user_ptr      = ctx;
   ctx->mapping_id = plum_create_mapping(&ctx->mapping, mapping_callback);
-}
-
-static int disco_plum(int argc, char** argv) {
-  struct optparse options;
-  optparse_init(&options, argv);
-  int                  option;
-  struct optparse_long longopts[] =  //
-      {
-          {"port", 'p', OPTPARSE_REQUIRED},  //
-          {0}                                //
-      };
-
-  u16 port = 0;
-
-  while ((option = optparse_long(&options, longopts, NULL)) != -1) {
-    switch (option) {
-      case 'p': {
-        port = parse_port(options.optarg);
-      } break;
-      case '?':
-        cli_usage("disco plum", 0, longopts);
-        return 1;
-    }
-  }
-
-  // UDP init
-  uv_udp_t udp;
-  CHECK0(uv_udp_init(loop, &udp));
-
-  // Plum init
-  plum_config_t config = {0};
-  config.log_level     = PLUM_LOG_LEVEL_WARN;
-  plum_init(&config);
-
-  // Bind to know our own local port
-  struct sockaddr_storage me;
-  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&me));
-  CHECK0(uv_udp_bind(&udp, (struct sockaddr*)&me, 0));
-  port = udp_getsockport(&udp);
-  LOG("me=%s:%d", STDNET_IPV4_ANY, port);
-
-  // Plum
-  PlumCtx ctx       = {0};
-  ctx.internal_port = port;
-  CHECK0(uvco_arun(loop, async_plumfn, &ctx));
-  CHECK(ctx.external_port, "no external port acquired");
-  LOG("port=%d->%d", ctx.external_port, ctx.internal_port);
-
-  // Listen
-  UvcoUdpRecv recv;
-  CHECK0(uvco_udp_recv_start(&recv, &udp));
-  while (1) {
-    CHECK(uvco_udp_recv_next(&recv) >= 0);
-
-    IpStrStorage sender;
-    CHECK0(IpStr_read(&sender, recv.addr));
-    LOG("sender=%" PRIIpStr, IpStrPRI(sender));
-    break;
-  }
-  uv_udp_recv_stop(&udp);
-
-  plum_destroy_mapping(ctx.mapping_id);
-  uvco_close((uv_handle_t*)&udp);
-
-  return 0;
 }
 
 // Disco relay service
@@ -991,6 +807,8 @@ void P2PCtx_local_validate(P2PCtx* ctx, u64 channel, UvcoUdpRecv* recv,
 
 void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
   (void)disco_channel_mutual;
+  (void)disco_channel_peer;
+  (void)disco_channel_generic;
 
   *connected = false;
   CHECK(timeout_secs > 0);
@@ -1169,8 +987,6 @@ static int disco_p2p(int argc, char** argv) {
 }
 
 static const CliCmd disco_commands[] = {
-    {"local", disco_local},                //
-    {"plum", disco_plum},                  //
     {"disco", disco_server},               //
     {"relay-client", disco_relay_client},  //
     {"p2p", disco_p2p},                    //
