@@ -17,9 +17,7 @@ stdsh_done() {
 }
 
 stdsh_go() {
-  tag=$1
-  shift
-  $@ 1>&2 2>$STDSH_DIR/$tag.log &
+  stdsh_go__ $@ &
 }
 
 stdsh_pipe() {
@@ -63,6 +61,16 @@ stdsh_arri() {
 stdsh_tail_logs() {
   sleep 1  # let the log files be created before tailing
   tail -f -n +1 $STDSH_DIR/*.log
+}
+
+stdsh_go__() {
+  set +e
+  tag=$1
+  shift
+  $@ 1>&2 2>$STDSH_DIR/$tag.log
+  code=$?
+  echo "$tag exited $code" >> $STDSH_DIR/$tag.log
+  set -e
 }
 
 stdsh_cleanup__() {

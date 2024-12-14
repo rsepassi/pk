@@ -16,8 +16,7 @@ disco=":8899"
 make --silent -j
 
 # Disco, our support server
-# stdsh_go D ./build/out/bin/cli demo-disco disco -p${disco}
-# sleep 2  # let Disco come up before spawning A+B
+stdsh_go D ./build/out/bin/cli demo-disco disco -p${disco}
 
 # Alice
 stdsh_go A ./build/out/bin/cli demo-disco p2p -i \
