@@ -155,6 +155,33 @@ static inline void stdnet_sockaddr6_cp(struct sockaddr_in6*       out,
   out->sin6_port = in->sin6_port;
 }
 
+bool stdnet_sockaddr4_eq(const struct sockaddr_in* a,
+                         const struct sockaddr_in* b) {
+  if (a->sin_port != b->sin_port)
+    return false;
+  return memcmp(&a->sin_addr, &b->sin_addr, IPv4_SZ) == 0;
+}
+
+bool stdnet_sockaddr6_eq(const struct sockaddr_in6* a,
+                         const struct sockaddr_in6* b) {
+  if (a->sin6_port != b->sin6_port)
+    return false;
+  return memcmp(&a->sin6_addr, &b->sin6_addr, IPv6_SZ) == 0;
+}
+
+bool stdnet_sockaddr_eq(const struct sockaddr* a, const struct sockaddr* b) {
+  if (a->sa_family != b->sa_family)
+    return false;
+  switch (a->sa_family) {
+    case AF_INET:
+      return stdnet_sockaddr4_eq((void*)a, (void*)b);
+    case AF_INET6:
+      return stdnet_sockaddr6_eq((void*)a, (void*)b);
+    default:
+      return false;
+  }
+}
+
 int stdnet_sockaddr_cp(struct sockaddr* out, const struct sockaddr* in) {
   out->sa_family = in->sa_family;
   switch (in->sa_family) {

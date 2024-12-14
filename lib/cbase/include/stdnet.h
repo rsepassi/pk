@@ -51,3 +51,4 @@ int IpMsg_dump(struct sockaddr* out, const IpMsg* in);
 
 uint16_t stdnet_getport(const struct sockaddr* in);
 int      stdnet_sockaddr_cp(struct sockaddr* out, const struct sockaddr* in);
+bool     stdnet_sockaddr_eq(const struct sockaddr* a, const struct sockaddr* b);
