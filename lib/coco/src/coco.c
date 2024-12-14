@@ -43,20 +43,20 @@ static void stack_dealloc(void* ptr, size_t size, void* udata) {
 static void pool_codone(CocoPoolItem* x) {
   q_enq(&x->pool->free, &x->node);
 
-  Node* waiter;
-  if ((waiter = q_deq(&x->pool->waiters))) {
-    CocoWait* wait = CONTAINER_OF(waiter, CocoWait, node);
-    COCO_DONE(wait);
-  }
+  Node* waiter = q_deq(&x->pool->waiters);
+  if (waiter == NULL)
+    return;
+
+  CocoWait* wait = CONTAINER_OF(waiter, CocoWait, node);
+  COCO_DONE(wait);
+  wait->done = true;
+  CHECK0(mco_yieldto(mco_running(), wait->co));
 }
 
 static void pool_comain(mco_coro* co) {
   CocoPoolItem* x = co->user_data;
 
-  while (1) {
-    if (x->exit)
-      break;
-
+  while (!x->exit) {
     if (x->work.fn == NULL) {
       CHECK0(mco_yield(mco_running()));
       continue;
@@ -94,6 +94,8 @@ int CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al) {
     q_enq(&pool->free, &x->node);
     CHECK0(mco_create(&x->co, &desc));
   }
+
+  CHECK(q_len(&pool->free) == n);
 
   return 0;
 }
@@ -137,7 +139,7 @@ int CocoPool_go(CocoPool* pool, CocoFn fn, void* arg) {
 
     if (rc == 1) {
       CocoWait wait;
-      q_enq(&pool->waiters, &wait.node);
+      q_enq(&pool->waiters, (Node*)&wait.node);
       COCO_AWAIT(&wait);
       continue;
     }

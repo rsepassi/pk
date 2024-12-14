@@ -54,3 +54,6 @@ int uvco_udp_recv_next2(UvcoUdpRecv* recv, usize timeout_ms);
 
 // Handle
 void uvco_close(uv_handle_t* h);
+
+// Wait with timeout
+int uvco_await_timeout(uv_loop_t* loop, CocoWait* wait, usize timeout_ms);

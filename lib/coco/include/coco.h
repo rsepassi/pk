@@ -7,7 +7,7 @@
 typedef struct {
   mco_coro* co;
   bool      done;
-  Node      node;
+  Node2     node;
   void*     data;
 } CocoWait;
 
@@ -18,7 +18,7 @@ typedef struct {
 #define COCO_AWAIT(wait)                                                       \
   do {                                                                         \
     while (!(wait)->done) {                                                    \
-      CHECK0(mco_yield(mco_running()));                                        \
+      COCO_SUSPEND();                                                          \
     }                                                                          \
   } while (0)
 

@@ -237,17 +237,14 @@ int uvco_timer_start(UvcoTimer* t, uv_loop_t* loop, usize ms) {
   return 0;
 }
 
-int uvco_udp_recv_next2(UvcoUdpRecv* recv, usize timeout_ms) {
+int uvco_await_timeout(uv_loop_t* loop, CocoWait* wait, usize timeout_ms) {
   // Start timer
   UvcoTimer t;
-  UVCHECK(uvco_timer_start(&t, recv->udp->loop, timeout_ms));
-
-  // Register as waiting on the udp socket
-  recv->udp->data = recv;
-  recv->wait      = CocoWait();
+  UVCHECK(uvco_timer_start(&t, loop, timeout_ms));
 
   // Suspend
-  COCO_SUSPEND();
+  while (!t.wait.done && !wait->done)
+    COCO_SUSPEND();
 
   // We're back
   int rc = 0;
@@ -255,19 +252,30 @@ int uvco_udp_recv_next2(UvcoUdpRecv* recv, usize timeout_ms) {
     // Timer expired
     rc = UV_ETIMEDOUT;
   } else {
-    // Message arrived
-    if (recv->nread < 0)
-      rc = (int)recv->nread;
-
     // Cancel the timer
     UVCHECK(uv_timer_stop(&t.timer));
   }
 
   // Cleanup
-  recv->udp->data = 0;
+  uvco_close((uv_handle_t*)&t.timer);
+
+  return rc;
+}
+
+int uvco_udp_recv_next2(UvcoUdpRecv* recv, usize timeout_ms) {
+  // Register as waiting on the udp socket
+  recv->udp->data = recv;
   recv->wait      = CocoWait();
 
-  uvco_close((uv_handle_t*)&t.timer);
+  int rc = uvco_await_timeout(recv->udp->loop, &recv->wait, timeout_ms);
+  if (rc == 0) {
+    // Message arrived
+    if (recv->nread < 0)
+      rc = (int)recv->nread;
+  }
+
+  // Cleanup
+  recv->udp->data = 0;
 
   return rc;
 }
