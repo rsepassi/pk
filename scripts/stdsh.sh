@@ -1,4 +1,4 @@
-STDSH_DIR=${STDSH_DIR:-$(mktemp -d -t stdsh)}
+STDSH_DIR=${STDSH_DIR:-$(mktemp -d -t stdsh_XXXXXX)}
 
 stdsh_init() {
   set -e --pipe-fail
@@ -62,7 +62,7 @@ stdsh_arri() {
 
 stdsh_tail_logs() {
   sleep 1  # let the log files be created before tailing
-  tail -f $STDSH_DIR/*.log
+  tail -f -n +1 $STDSH_DIR/*.log
 }
 
 stdsh_cleanup__() {
