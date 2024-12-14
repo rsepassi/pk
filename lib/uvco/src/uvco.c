@@ -1,11 +1,13 @@
 #include "uvco.h"
 
 #include "log.h"
+#include "stdnet.h"
 #include "stdtime.h"
 
 #include <stdbool.h>
 
 #define UV_BUFLEN_T __typeof__(((uv_buf_t*)0)->len)
+#define UDP_MAXSZ   1600
 
 static void fs_cb(uv_fs_t* req) {
   CocoWait* wait = req->data;
@@ -153,14 +155,19 @@ end:
   return rc;
 }
 
-#define UDP_MAXSZ 1600
+// Ensure that the UDP buffer is suitably aligned
+typedef union {
+  u8          buf[UDP_MAXSZ];
+  max_align_t _;
+} UdpBuf;
 
 static void udp_alloc_cb(uv_handle_t* handle, size_t suggested_size,
                          uv_buf_t* buf) {
   (void)handle;
   (void)suggested_size;
-  static u8 static_buf[UDP_MAXSZ] = {0};
-  *buf                            = uv_buf_init((void*)static_buf, UDP_MAXSZ);
+  static UdpBuf static_buf = {0};
+
+  *buf = uv_buf_init((void*)static_buf.buf, UDP_MAXSZ);
 }
 
 static void udp_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
@@ -179,8 +186,11 @@ static void udp_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
     return;
   }
 
-  ctx->nread   = nread;
-  ctx->addr    = addr;
+  ctx->nread = nread;
+  // copy the address so that it stays in UdpRecvBuf even after a even loop
+  // tick (e.g. for uvco_close).
+  CHECK0(stdnet_sockaddr_cp((struct sockaddr*)&ctx->addr_storage, addr));
+  ctx->addr    = (struct sockaddr*)&ctx->addr_storage;
   ctx->buf     = *buf;
   ctx->buf.len = nread >= 0 ? (UV_BUFLEN_T)nread : 0;
 
@@ -256,6 +266,7 @@ int uvco_udp_recv_next2(UvcoUdpRecv* recv, usize timeout_ms) {
   // Cleanup
   recv->udp->data = 0;
   recv->wait      = CocoWait();
+
   uvco_close((uv_handle_t*)&t.timer);
 
   return rc;

@@ -130,10 +130,6 @@ void CocoPool_deinit(CocoPool* pool) {
 }
 
 int CocoPool_go(CocoPool* pool, CocoFn fn, void* arg) {
-  (void)pool;
-  (void)fn;
-  (void)arg;
-
   while (1) {
     int rc = CocoPool_gonow(pool, fn, arg);
     if (rc == 0)
