@@ -25,7 +25,7 @@
 
 extern uv_loop_t* loop;
 
-static void log_sockaddr(const char* tag, struct sockaddr* addr) {
+static void log_sockaddr(const char* tag, const struct sockaddr* addr) {
   IpStrStorage ips;
   CHECK0(IpStr_read(&ips, (struct sockaddr*)addr));
   LOG("%s=%" PRIIpStr, tag, IpStrPRI(ips));
@@ -64,6 +64,14 @@ static u16 udp_getsockport(uv_udp_t* udp) {
   CHECK0(IpStr_read(&me_str, (struct sockaddr*)&me));
   return me_str.port;
 }
+
+#define P2PMsg_FIELDS                                                          \
+  u8 type;                                                                     \
+  u8 reserved[3]
+
+typedef struct __attribute__((packed)) {
+  P2PMsg_FIELDS;
+} DiscoRelayMsgIp;
 
 typedef struct __attribute__((packed)) {
   u64 id;
@@ -369,11 +377,6 @@ typedef enum {
   DiscoRelayMsg_POST,
   DiscoRelayMsg_N,
 } DiscoRelayMsgType;
-
-typedef struct __attribute__((packed)) {
-  u8 type;
-  u8 reserved[3];
-} DiscoRelayMsgIp;
 
 typedef struct __attribute__((packed)) {
   u8  type;
@@ -692,10 +695,27 @@ typedef struct {
 
 typedef enum {
   P2PMsgIp,
+  P2PMsgPing,
+  P2PMsgPong,
   P2PMsg_MAX,
 } P2PMsgType;
 
+const char* P2PMsgType_strs[P2PMsg_MAX] = {
+    "IP",
+    "PING",
+};
+
+#define PRIP2PMsgType    "s"
+#define P2PMsgTypePRI(t) (P2PMsgType_strs[(t)])
+
+typedef struct __attribute__((packed)) {
+  P2PMsg_FIELDS;
+  u64 channel;
+  u64 sender;
+} DiscoPing;
+
 typedef struct {
+  u64                     id;
   Allocator               al;
   CocoPool                pool;
   uv_loop_t*              loop;
@@ -732,6 +752,22 @@ void P2PCtx_add_disco(P2PCtx* ctx, IpStr ip) {
       uv_ip4_addr((char*)ip.ip.buf, ip.port, (struct sockaddr_in*)ctx->disco));
 }
 
+UvcoUdpRecv* P2PCtx_await(P2PCtx* ctx, P2PMsgType mtype) {
+  CocoWait wait = CocoWait();
+  q_enq(&ctx->waiters[mtype], &wait.node);
+  COCO_AWAIT(&wait);
+  return wait.data;
+}
+
+void P2PCtx_ping_listener(void* arg) {
+  P2PCtx* ctx = arg;
+
+  while (1) {
+    UvcoUdpRecv* recv = P2PCtx_await(ctx, P2PMsgPing);
+    LOG("recv PING %p", recv);
+  }
+}
+
 void P2PCtx_init(P2PCtx* ctx, const P2PCtxOptions* opts) {
   ZERO(ctx);
 
@@ -742,7 +778,9 @@ void P2PCtx_init(P2PCtx* ctx, const P2PCtxOptions* opts) {
   ctx->me_public = (void*)&ctx->me_public_storage;
   ctx->loop      = opts->loop;
 
-  CHECK0(CocoPool_init(&ctx->pool, 8, 1024 * 4, ctx->al));
+  randombytes_buf(&ctx->id, sizeof(ctx->id));
+
+  CHECK0(CocoPool_init(&ctx->pool, 16, 1024 * 16, ctx->al));
   CHECK0(uv_udp_init(opts->loop, &ctx->udp));
   P2PCtx_bind(ctx, opts->port);
 
@@ -751,6 +789,8 @@ void P2PCtx_init(P2PCtx* ctx, const P2PCtxOptions* opts) {
   plum_config_t config = {0};
   config.log_level     = PLUM_LOG_LEVEL_WARN;
   plum_init(&config);
+
+  // CHECK0(CocoPool_gonow(&ctx->pool, P2PCtx_ping_listener, ctx));
 }
 
 void P2PCtx_deinit(P2PCtx* ctx) {
@@ -766,6 +806,21 @@ void P2PCtx_listener(void* arg) {
   while (1) {
     CHECK0(uvco_udp_recv_next(&recv));
 
+    if (recv.buf.len < 1)
+      continue;
+    if (recv.buf.base[0] >= P2PMsg_MAX)
+      continue;
+
+    P2PMsgType type = recv.buf.base[0];
+
+    LOG("incoming p2p msg type=%" PRIP2PMsgType, P2PMsgTypePRI(type));
+    Node* n;
+    q_drain(&ctx->waiters[type], n, {
+      CocoWait* wait = CONTAINER_OF(n, CocoWait, node);
+      wait->data     = &recv;
+      COCO_DONE(wait);
+    });
+
     CHECK(false, "unimpl");
     // What kind of message is it?
     // Who's waiting for it?
@@ -776,13 +831,6 @@ void P2PCtx_listener(void* arg) {
     // Maybe all messages need a sort of connection id
     // That's included in all related messages
   }
-}
-
-UvcoUdpRecv* P2PCtx_await(P2PCtx* ctx, P2PMsgType mtype) {
-  CocoWait wait = CocoWait();
-  q_enq(&ctx->waiters[mtype], &wait.node);
-  COCO_AWAIT(&wait);
-  return wait.data;
 }
 
 void P2PCtx_start_listener(P2PCtx* ctx) {
@@ -814,6 +862,32 @@ void P2PCtx_disco_channel(P2PCtx* ctx) { CHECK(false, "unimpl"); }
 
 void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
   CHECK(false, "unimpl");
+}
+
+void P2PCtx_local_validate(P2PCtx* ctx, u64 channel, UvcoUdpRecv* recv,
+                           bool* connected) {
+  {
+    Bytes msg = UvBytes(recv->buf);
+    if (msg.len != sizeof(DiscoLocalAdvert))
+      return;
+    DiscoLocalAdvert* advert = (void*)msg.buf;
+    if (advert->id != channel)
+      return;
+  }
+
+  // Match, validate route
+  log_sockaddr("match from", recv->addr);
+
+  DiscoPing ping = {0};
+  ping.type      = P2PMsgPing;
+  ping.channel   = channel;
+  ping.sender    = ctx->id;
+
+  uv_buf_t buf = UvBuf(BytesObj(ping));
+  UVCHECK(uvco_udp_send(&ctx->udp, &buf, 1, recv->addr));
+
+  // TODO: timeout
+  P2PCtx_await(ctx, P2PMsgPong);
 }
 
 void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
@@ -848,20 +922,35 @@ void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
   UvcoUdpRecv recv;
   UVCHECK(uvco_udp_recv_start(&recv, &udp));
   i64 now = stdtime_now_monotonic_ms();
+
+  // Jitter
+  {
+    u8 jitter;
+    randombytes_buf(&jitter, 1);
+    uvco_sleep(ctx->loop, jitter);
+  }
+
   while (now < expiry) {
     LOG("local tick");
     // Advertise on multicast address...
-    DiscoLocalAdvert advert = {0};
-    advert.id               = channel;
-    uv_buf_t buf            = UvBuf(BytesObj(advert));
-    UVCHECK(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&multicast_addr));
+    {
+      DiscoLocalAdvert advert = {0};
+      advert.id               = channel;
+      uv_buf_t buf            = UvBuf(BytesObj(advert));
+      UVCHECK(
+          uvco_udp_send(&ctx->udp, &buf, 1, (struct sockaddr*)&multicast_addr));
+    }
 
-    // Listen...
-    CHECK0(uvco_udp_recv_next2(&recv, 1000));  // our own message
+    // Skip our own message, which we expect to come through ~instantly
+    CHECK0(uvco_udp_recv_next2(&recv, 1));
 
+    // Listen for 1s...
     int rc = uvco_udp_recv_next2(&recv, 1000);
     if (rc == 0) {
       // ok
+      P2PCtx_local_validate(ctx, channel, &recv, connected);
+      if (*connected)
+        break;
     } else if (rc == UV_ETIMEDOUT) {
       // timed out
     } else {
@@ -869,10 +958,9 @@ void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
     }
 
     // Throttle
-    i64 tick_threshold = now + 995;
-    i64 tick           = now + 1000;
-    now                = stdtime_now_monotonic_ms();
-    if (now < tick_threshold) {
+    i64 tick = now + 1000;
+    now      = stdtime_now_monotonic_ms();
+    if (now < tick) {
       LOG("sleep %d", (int)(tick - now));
       uvco_sleep(ctx->loop, tick - now);
     }

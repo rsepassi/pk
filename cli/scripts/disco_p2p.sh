@@ -10,14 +10,14 @@ alicesk=1AA6521724241D74F5892B69AA085114CCC1242E8CD756FCD8341974919A1A5DDDF431F7
 bobpk=5E656899DF2EB7ED7672044D667D7265CED3C8E9CE75E6F0294096BC9FF65370
 bobsk=14BA2E68C3BD427628F998A235551FC50ABCB0B5B9AA0034C7A1C95093E394F05E656899DF2EB7ED7672044D667D7265CED3C8E9CE75E6F0294096BC9FF65370
 
-chan=n6jf2a
-disco=8899
+chan=a1b2c3
+disco=":8899"
 
 make --silent -j
 
 # Disco, our support server
-stdsh_go D ./build/out/bin/cli demo-disco disco -p${disco}
-sleep 2  # let Disco come up before spawning A+B
+# stdsh_go D ./build/out/bin/cli demo-disco disco -p${disco}
+# sleep 2  # let Disco come up before spawning A+B
 
 # Alice
 stdsh_go A ./build/out/bin/cli demo-disco p2p -i \
