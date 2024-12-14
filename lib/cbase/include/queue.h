@@ -42,3 +42,15 @@ static inline Node* q_deq(Queue* q) {
   q->head = x->next;
   return x;
 }
+
+// Drain the queue, running code for each node.
+// code can re-enqueue, the drain will only run through the original tail.
+#define q_drain(q, nvar, code)                                                 \
+  do {                                                                         \
+    Node* __tail = (q)->tail;                                                  \
+    while (((nvar) = q_deq((q)))) {                                            \
+      code;                                                                    \
+      if ((nvar) == __tail)                                                    \
+        break;                                                                 \
+    }                                                                          \
+  } while (0)
