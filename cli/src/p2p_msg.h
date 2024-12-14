@@ -1,4 +1,4 @@
-#include "stdnet.h"
+#include "stdnet.h"  // for IpMsg
 #include "stdtypes.h"
 
 #define P2PMsg_FIELDS                                                          \
@@ -58,6 +58,7 @@ P2PMsg_DEF(       //
 );
 
 typedef enum {
+  P2PMsg_UNKNOWN,
   P2PMsgIpRequest,
   P2PMsgIp,
   P2PMsgPing,
@@ -71,6 +72,7 @@ typedef enum {
 } P2PMsgType;
 
 const char* P2PMsgType_strs[P2PMsg_COUNT] = {
+    "UNKNOWN",    //
     "IPREQ",      //
     "IP",         //
     "PING",       //
@@ -81,11 +83,8 @@ const char* P2PMsgType_strs[P2PMsg_COUNT] = {
     "RELAY",      //
 };
 
-static inline const char* P2PMsgType_str(P2PMsgType t) {
-  return P2PMsgType_strs[t];
-}
-
 size_t P2PMsg_SZ[P2PMsg_COUNT] = {
+    0,
     sizeof(DiscoIpRequest),    //
     sizeof(DiscoIp),           //
     sizeof(DiscoPing),         //
@@ -95,3 +94,7 @@ size_t P2PMsg_SZ[P2PMsg_COUNT] = {
     sizeof(DiscoRelayInit),    //
     sizeof(DiscoRelayPost),    //
 };
+
+static inline const char* P2PMsgType_str(P2PMsgType t) {
+  return P2PMsgType_strs[t];
+}
