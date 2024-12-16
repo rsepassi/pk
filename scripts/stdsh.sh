@@ -13,10 +13,11 @@ stdsh_init() {
 }
 
 stdsh_done() {
+  set +e
   wait
 
   stdsh_cleanup_pipes__
-  rm $STDSH_DIR/nextfd
+  rm $STDSH_DIR/nextfd 2>/dev/null
 
   trap - INT TERM EXIT
   exit 0
@@ -80,11 +81,12 @@ stdsh_go__() {
 }
 
 stdsh_cleanup__() {
+  set +e
   kill $(jobs -p) 2>/dev/null
   wait
 
   stdsh_cleanup_pipes__
-  rm $STDSH_DIR/nextfd
+  rm $STDSH_DIR/nextfd 2>/dev/null
 
   exit
 }
