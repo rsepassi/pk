@@ -4,6 +4,12 @@ stdsh_init() {
   set -e --pipe-fail
   trap stdsh_cleanup__ INT TERM EXIT
   echo 3 > $STDSH_DIR/nextfd
+  if [ -n "$ROOTDIR" ]
+  then
+    rm -f $ROOTDIR/build/log
+    mkdir -p $ROOTDIR/build
+    ln -s $STDSH_DIR $ROOTDIR/build/log
+  fi
 }
 
 stdsh_done() {
