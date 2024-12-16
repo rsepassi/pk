@@ -627,6 +627,7 @@ void P2PCtx_ping_listener(void* arg) {
     LOG_SOCK("PING from", recv->addr);
     LOG("PING channel=%" PRIu64 " sender=%" PRIu64, ping->channel,
         ping->sender);
+    CHECK0(stdnet_sockaddr_cp(ctx->bob, recv->addr));
 
     // Send back a pong
     P2PMsg_decl(pong, Pong);
@@ -644,7 +645,6 @@ void P2PCtx_ping_listener(void* arg) {
     CHECK0(rc);
 
     CHECK(!ctx->bob_present);
-    CHECK0(stdnet_sockaddr_cp(ctx->bob, recv->addr));
     ctx->bob_id      = pong.receiver;
     ctx->bob_present = true;
     LOG("DONE: connected!");
@@ -812,6 +812,7 @@ void P2PCtx_local_validate(P2PCtx* ctx, UvcoUdpRecv* recv, bool* connected) {
 
   // Match, validate route
   LOG_SOCK("match from", recv->addr);
+  CHECK0(stdnet_sockaddr_cp(ctx->bob, recv->addr));
 
   DiscoPing ping = {0};
   ping.type      = P2PMsgPing;
@@ -823,7 +824,7 @@ void P2PCtx_local_validate(P2PCtx* ctx, UvcoUdpRecv* recv, bool* connected) {
   while (i < 3) {
     LOG("sending PING");
     uv_buf_t buf = UvBuf(BytesObj(ping));
-    UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, recv->addr));
+    UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, ctx->bob));
     rc = P2PCtx_await(ctx, P2PMsgPong, &recv, 1000);
     if (rc == 0)
       break;
@@ -843,12 +844,11 @@ void P2PCtx_local_validate(P2PCtx* ctx, UvcoUdpRecv* recv, bool* connected) {
   done.receiver  = pong->sender;
 
   uv_buf_t buf = UvBuf(BytesObj(done));
-  UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, recv->addr));
+  UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, ctx->bob));
 
   *connected = true;
   CHECK(!ctx->bob_present);
   ctx->bob_id = done.receiver;
-  CHECK0(stdnet_sockaddr_cp(ctx->bob, recv->addr));
   ctx->bob_present = true;
   LOG("PONG: connected!");
 }
