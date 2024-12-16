@@ -2,6 +2,12 @@
 
 #include "log.h"
 
+#if COCO_VLOG == 1
+#define LVLOG(...) LOG(__VA_ARGS__)
+#else
+#define LVLOG(...)
+#endif
+
 typedef struct {
   CocoFn fn;
   void*  arg;
@@ -66,6 +72,7 @@ static void pool_comain(mco_coro* co) {
     x->work = (CocoPoolWork){0};
     pool_codone(x);
   }
+  LVLOG("exiting %s", x->debug_name);
 }
 
 static int set_name(CocoPoolItem* item, Str name, int i) {
@@ -85,7 +92,8 @@ static int set_name(CocoPoolItem* item, Str name, int i) {
   return 0;
 }
 
-int CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al, Str name) {
+int CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al,
+                  Str name) {
   ZERO(pool);
 
   Bytes b;
@@ -112,8 +120,8 @@ int CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al, Str nam
 
     CHECK0(set_name(x, name, (int)i));
 
-    x->pool        = pool;
-    desc.user_data = x;
+    x->pool         = pool;
+    desc.user_data  = x;
     desc.debug_name = x->debug_name;
     q_enq(&pool->free, &x->node);
     CHECK0(mco_create(&x->co, &desc));
@@ -125,24 +133,40 @@ int CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al, Str nam
 }
 
 static bool CocoPool_allexited(CocoPool* pool) {
+  bool done = true;
   for (usize i = 0; i < pool->cos_len; ++i) {
     CocoPoolItem* x = &pool->cos[i];
-    if (mco_status(x->co) != MCO_DEAD)
-      return false;
+    if (mco_status(x->co) != MCO_DEAD) {
+      LVLOG("live coro %s(%p)", x->debug_name, x->co);
+      done = false;
+    }
   }
-  return true;
+  return done;
 }
 
 static void CocoPool_exitall(CocoPool* pool) {
+  LVLOG("exiting");
   for (usize i = 0; i < pool->cos_len; ++i) {
     CocoPoolItem* x = &pool->cos[i];
     x->exit         = true;
-    CHECK0(mco_resume(x->co));
   }
 
+  // Wake the free coroutines so that they exit
+  Node* n = pool->free.head;
+  while (n) {
+    CocoPoolItem* x = CONTAINER_OF(n, CocoPoolItem, node);
+    CHECK0(mco_resume(x->co));
+    n = n->next;
+  }
+
+  LVLOG("signaled exit");
+
   if (mco_running())
-    while (!CocoPool_allexited(pool))
+    while (!CocoPool_allexited(pool)) {
+      LVLOG("waiting...");
       CHECK0(mco_yield(mco_running()));
+    }
+  LVLOG("exited");
 }
 
 void CocoPool_deinit(CocoPool* pool) {
