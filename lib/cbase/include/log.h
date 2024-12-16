@@ -40,8 +40,9 @@
 
 #define CHECK0_(x, fmt, ...)                                                   \
   do {                                                                         \
-    if ((x) != 0) {                                                            \
-      LOG("check failed: (%s), expected 0, got %d " fmt, #x, (int)(x),         \
+    long __rc = (long)(x);                                                     \
+    if (__rc != 0) {                                                           \
+      LOG("check failed: (%s), expected 0, got %ld " fmt, #x, __rc,            \
           ##__VA_ARGS__);                                                      \
       exit(1);                                                                 \
     }                                                                          \
