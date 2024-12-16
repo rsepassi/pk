@@ -21,6 +21,8 @@ typedef struct {
 
 #define Alloc_alloc(a, b, T, n)                                                \
   allocator_alloc(a, b, sizeof(T) * n, _Alignof(T))
+#define Alloc_freen(a, p, n)                                                   \
+  allocator_free(a, Bytes((p), (n) * sizeof(__typeof__(*p))))
 #define Alloc_create(a, pptr)                                                  \
   allocator_create(a, (void**)pptr, sizeof(__typeof__(**pptr)),                \
                    _Alignof(__typeof__(**pptr)))

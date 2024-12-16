@@ -36,8 +36,17 @@
       exit(1);                                                                 \
     }                                                                          \
   } while (0)
-#define CHECK(x, ...)  CHECK_(x, "" __VA_ARGS__)
-#define CHECK0(x, ...) CHECK(((x) == 0), ##__VA_ARGS__)
+#define CHECK(x, ...) CHECK_(x, "" __VA_ARGS__)
+
+#define CHECK0_(x, fmt, ...)                                                   \
+  do {                                                                         \
+    if ((x) != 0) {                                                            \
+      LOG("check failed: (%s), expected 0, got %d " fmt, #x, (int)(x),         \
+          ##__VA_ARGS__);                                                      \
+      exit(1);                                                                 \
+    }                                                                          \
+  } while (0)
+#define CHECK0(x, ...) CHECK0_(x, "" __VA_ARGS__)
 
 #ifdef DEBUG
 #define DCHECK(x, ...) CHECK(x, ##__VA_ARGS__)
