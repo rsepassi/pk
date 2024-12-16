@@ -21,11 +21,16 @@
 
 #define LOG(fmt, ...)  LOG_(I, stderr, fmt, ##__VA_ARGS__)
 #define LOGE(fmt, ...) LOG_(E, stderr, fmt, ##__VA_ARGS__)
-#define LOGS(s)        LOG("%s=%.*s", #s, (int)(s).len, (s).buf)
+#define LOGS(s)                                                                \
+  do {                                                                         \
+    Str __s = (s);                                                             \
+    LOG("%s=%.*s", #s, (int)__s.len, __s.buf);                                 \
+  } while (0)
 #define LOGB(b)                                                                \
   do {                                                                         \
+    Bytes __b = (b);                                                           \
     LOG_PREFIX_(I, stderr);                                                    \
-    fprinthex(stderr, #b, (b).buf, (b).len);                                   \
+    fprinthex(stderr, #b, __b.buf, __b.len);                                   \
     fprintf(stderr, "\n");                                                     \
   } while (0)
 
