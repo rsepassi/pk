@@ -414,7 +414,7 @@ extern "C" {
 #ifndef MCO_LOG
   #ifdef MCO_DEBUG
     #include <stdio.h>
-    #define MCO_LOG(s) puts(s)
+    #define MCO_LOG(s) fprintf(stderr, "%s\n", s)
   #else
     #define MCO_LOG(s)
   #endif
@@ -422,8 +422,11 @@ extern "C" {
 
 #ifndef MCO_ASSERT
   #ifdef MCO_DEBUG
-    #include <assert.h>
-    #define MCO_ASSERT(c) assert(c)
+    #include <stdlib.h>
+    #define MCO_ASSERT(c) do { \
+      if (!(c)) \
+        exit(77); \
+    } while (0)
   #else
     #define MCO_ASSERT(c)
   #endif
@@ -1827,10 +1830,12 @@ mco_result mco_destroy(mco_coro* co) {
 mco_result mco_resume(mco_coro* co) {
   if(!co) {
     MCO_LOG("attempt to resume an invalid coroutine");
+    MCO_ASSERT(0);
     return MCO_INVALID_COROUTINE;
   }
   if(co->state != MCO_SUSPENDED) { /* Can only resume coroutines that are suspended. */
     MCO_LOG("attempt to resume a coroutine that is not suspended");
+    MCO_ASSERT(0);
     return MCO_NOT_SUSPENDED;
   }
   co->state = MCO_RUNNING; /* The coroutine is now running. */
