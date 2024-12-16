@@ -424,6 +424,17 @@ extern "C" {
 
 #ifdef MCO_VLOG_ON
 #include <stdio.h>
+static inline void _mco_log_coro(mco_coro* co) {
+  if (co) {
+    if (co->debug_name)
+      fprintf(stderr, "%s(%p)", co->debug_name, co->stack_base);
+    else
+      fprintf(stderr, "%p(%p)", co, co->stack_base);
+  } else {
+    fprintf(stderr, "<main>");
+  }
+}
+
 static inline void _mco_log_switch(mco_coro* from, mco_coro* to, int isout) {
   fprintf(stderr, "coro switch");
 
@@ -432,22 +443,18 @@ static inline void _mco_log_switch(mco_coro* from, mco_coro* to, int isout) {
   else
     fprintf(stderr, "(in ): ");
 
-  if (from && from->debug_name)
-    fprintf(stderr, "%s", from->debug_name);
-  else
-    fprintf(stderr, "%p", from);
-
+  _mco_log_coro(from);
   fprintf(stderr, " -> ");
-
-  if (to && to->debug_name)
-    fprintf(stderr, "%s", to->debug_name);
-  else
-    fprintf(stderr, "%p", to);
+  _mco_log_coro(to);
 
   fprintf(stderr, "\n");
 }
 #else
-static inline void _mco_log_switch(mco_coro* from, mco_coro* to, int isout) {}
+static inline void _mco_log_switch(mco_coro* from, mco_coro* to, int isout) {
+  (void)from;
+  (void)to;
+  (void)isout;
+}
 #endif
 
 #ifdef MCO_VLOG_ON
