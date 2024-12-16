@@ -176,7 +176,7 @@ static void udp_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
     return;
   }
 
-  ctx->nread = nread;
+  ctx->nread   = nread;
   ctx->addr    = addr;
   ctx->buf     = *buf;
   ctx->buf.len = nread >= 0 ? (UV_BUFLEN_T)nread : 0;

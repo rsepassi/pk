@@ -42,11 +42,11 @@ int uvco_udp_send(uv_udp_t* handle, const uv_buf_t bufs[], unsigned int nbufs,
 
 // UDP recv
 typedef struct {
-  uv_udp_t*               udp;
-  uv_buf_t                buf;
-  const struct sockaddr*  addr;
-  ssize_t                 nread;
-  CocoWait                wait;
+  uv_udp_t*              udp;
+  uv_buf_t               buf;
+  const struct sockaddr* addr;
+  ssize_t                nread;
+  CocoWait               wait;
 } UvcoUdpRecv;
 int uvco_udp_recv_start(UvcoUdpRecv* recv, uv_udp_t* handle);
 int uvco_udp_recv_next(UvcoUdpRecv* recv);
