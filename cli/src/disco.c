@@ -46,7 +46,8 @@ static void log_local_interfaces() {
     uv_interface_address_t* addr = &addrs[i];
     if (addr->is_internal)
       continue;
-    if (((struct sockaddr*)&addr->address)->sa_family != AF_INET)
+    sa_family_t t = ((struct sockaddr*)&addr->address)->sa_family;
+    if (!(t == AF_INET || t == AF_INET6))
       continue;
     IpStrStorage ip;
     CHECK0(IpStr_read(&ip, (struct sockaddr*)&addr->address));
