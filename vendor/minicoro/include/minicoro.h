@@ -303,6 +303,7 @@ struct mco_coro {
   void* asan_prev_stack; /* Used by address sanitizer. */
   void* tsan_prev_fiber; /* Used by thread sanitizer. */
   void* tsan_fiber; /* Used by thread sanitizer. */
+  char* debug_name; /* Used in debug logging. */
   size_t magic_number; /* Used to check stack overflow. */
 };
 
@@ -318,6 +319,7 @@ typedef struct mco_desc {
   /* These must be initialized only through `mco_init_desc`. */
   size_t coro_size;           /* Coroutine structure size. */
   size_t stack_size;          /* Coroutine stack size. */
+  char* debug_name;           /* Coroutine name used only in debug logs. */
 } mco_desc;
 
 /* Coroutine functions. */
@@ -414,9 +416,46 @@ extern "C" {
 #ifndef MCO_LOG
   #ifdef MCO_DEBUG
     #include <stdio.h>
-    #define MCO_LOG(s) fprintf(stderr, "%s\n", s)
+    #define MCO_LOG(s, ...) fprintf(stderr, s "\n", ##__VA_ARGS__)
   #else
-    #define MCO_LOG(s)
+    #define MCO_LOG(s, ...)
+  #endif
+#endif
+
+#ifdef MCO_VLOG_ON
+#include <stdio.h>
+static inline void _mco_log_switch(mco_coro* from, mco_coro* to, int isout) {
+  fprintf(stderr, "coro switch");
+
+  if (isout)
+    fprintf(stderr, "(out): ");
+  else
+    fprintf(stderr, "(in ): ");
+
+  if (from && from->debug_name)
+    fprintf(stderr, "%s", from->debug_name);
+  else
+    fprintf(stderr, "%p", from);
+
+  fprintf(stderr, " -> ");
+
+  if (to && to->debug_name)
+    fprintf(stderr, "%s", to->debug_name);
+  else
+    fprintf(stderr, "%p", to);
+
+  fprintf(stderr, "\n");
+}
+#else
+static inline void _mco_log_switch(mco_coro* from, mco_coro* to, int isout) {}
+#endif
+
+#ifdef MCO_VLOG_ON
+  #ifdef MCO_DEBUG
+    #include <stdio.h>
+    #define MCO_VLOG(s, ...) fprintf(stderr, s "\n", ##__VA_ARGS__)
+  #else
+    #define MCO_VLOG(s, ...)
   #endif
 #endif
 
@@ -577,6 +616,7 @@ static MCO_FORCE_INLINE void _mco_prepare_jumpin(mco_coro* co) {
     MCO_ASSERT(prev_co->state == MCO_RUNNING);
     prev_co->state = MCO_NORMAL;
   }
+  _mco_log_switch(prev_co, co, 0);
   mco_current_co = co;
 #ifdef _MCO_USE_ASAN
   if(prev_co) {
@@ -594,7 +634,7 @@ static MCO_FORCE_INLINE void _mco_prepare_jumpin(mco_coro* co) {
 }
 
 static MCO_FORCE_INLINE void _mco_prepare_jumpoutto(mco_coro* co, mco_coro* to) {
-  /* MCO_ASSERT(mco_running() == co); */
+  MCO_ASSERT(mco_running() == co);
   mco_coro* prev_co;
   if (to == NULL) {
     /* Switch back to the previous running coroutine. */
@@ -606,9 +646,10 @@ static MCO_FORCE_INLINE void _mco_prepare_jumpoutto(mco_coro* co, mco_coro* to) 
   co->prev_co = NULL;
 
   if(prev_co) {
-    /* MCO_ASSERT(prev_co->state == MCO_NORMAL); */
+    MCO_ASSERT(co != prev_co && prev_co->state != MCO_DEAD);
     prev_co->state = MCO_RUNNING;
   }
+  _mco_log_switch(co, prev_co, 1);
   mco_current_co = prev_co;
 #ifdef _MCO_USE_ASAN
   void* bottom_old = NULL;
@@ -1708,6 +1749,7 @@ mco_desc mco_desc_init(void (*func)(mco_coro* co), size_t stack_size) {
   desc.func = func;
   desc.storage_size = MCO_DEFAULT_STORAGE_SIZE;
   _mco_init_desc_sizes(&desc, stack_size);
+  desc.debug_name = 0;
   return desc;
 }
 
@@ -1755,6 +1797,7 @@ mco_result mco_init(mco_coro* co, mco_desc* desc) {
   co->tsan_fiber = __tsan_create_fiber(0);
 #endif
   co->magic_number = MCO_MAGIC_NUMBER;
+  co->debug_name = desc->debug_name;
   return MCO_SUCCESS;
 }
 
@@ -1861,12 +1904,14 @@ mco_result mco_yieldto(mco_coro* co, mco_coro* to) {
   size_t stack_min = (size_t)co->stack_base;
   size_t stack_max = stack_min + co->stack_size;
   if(co->magic_number != MCO_MAGIC_NUMBER || stack_addr < stack_min || stack_addr > stack_max) { /* Stack overflow. */
-    MCO_LOG("coroutine stack overflow, try increasing the stack size");
+    MCO_LOG("coroutine stack overflow, try increasing the stack size (%s)", co->debug_name);
+    MCO_ASSERT(0);
     return MCO_STACK_OVERFLOW;
   }
 #endif
   if(co->state != MCO_RUNNING) {  /* Can only yield coroutines that are running. */
     MCO_LOG("attempt to yield a coroutine that is not running");
+    MCO_ASSERT(0);
     return MCO_NOT_RUNNING;
   }
   co->state = MCO_SUSPENDED; /* The coroutine is now suspended. */
