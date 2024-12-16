@@ -68,7 +68,24 @@ static void pool_comain(mco_coro* co) {
   }
 }
 
-int CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al) {
+static int set_name(CocoPoolItem* item, Str name, int i) {
+  STATIC_CHECK(sizeof(item->debug_name) == 16);
+  // nameXXXX\0
+  if (i > 9999)
+    return 1;
+  if (name.len > 11)
+    return 1;
+
+  memcpy(item->debug_name, name.buf, name.len);
+  if (i >= 0)
+    sprintf(item->debug_name + name.len, "%d", (int)i);
+  else
+    item->debug_name[name.len] = 0;
+
+  return 0;
+}
+
+int CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al, Str name) {
   ZERO(pool);
 
   Bytes b;
@@ -80,17 +97,24 @@ int CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al) {
   pool->cos_len = n;
   pool->al      = al;
 
-  mco_desc desc       = mco_desc_init(pool_comain, stack_sz);
+  mco_desc desc = mco_desc_init(pool_comain, stack_sz);
+
+  // Use minicoro's built-in vmem allocator
   desc.allocator_data = &pool->al;
-  desc.alloc_cb       = stack_alloc;
-  desc.dealloc_cb     = stack_dealloc;
+  // desc.alloc_cb       = stack_alloc;
+  // desc.dealloc_cb     = stack_dealloc;
+  (void)stack_alloc;
+  (void)stack_dealloc;
 
   for (usize i = 0; i < n; ++i) {
     CocoPoolItem* x = &pool->cos[i];
     ZERO(x);
 
+    CHECK0(set_name(x, name, (int)i));
+
     x->pool        = pool;
     desc.user_data = x;
+    desc.debug_name = x->debug_name;
     q_enq(&pool->free, &x->node);
     CHECK0(mco_create(&x->co, &desc));
   }
@@ -127,8 +151,7 @@ void CocoPool_deinit(CocoPool* pool) {
     CocoPoolItem* x = &pool->cos[i];
     mco_destroy(x->co);
   }
-  allocator_free(pool->al,
-                 Bytes(pool->cos, pool->cos_len * sizeof(CocoPoolItem)));
+  Alloc_freen(pool->al, pool->cos, pool->cos_len);
 }
 
 int CocoPool_go(CocoPool* pool, CocoFn fn, void* arg) {
@@ -149,6 +172,10 @@ int CocoPool_go(CocoPool* pool, CocoFn fn, void* arg) {
 }
 
 int CocoPool_gonow(CocoPool* pool, CocoFn fn, void* arg) {
+  return CocoPool_gonow2(pool, fn, arg, BytesZero);
+}
+
+int CocoPool_gonow2(CocoPool* pool, CocoFn fn, void* arg, Str name) {
   Node* n = q_deq(&pool->free);
   if (n == NULL)
     return 1;
@@ -156,6 +183,8 @@ int CocoPool_gonow(CocoPool* pool, CocoFn fn, void* arg) {
   CocoPoolItem* x = CONTAINER_OF(n, CocoPoolItem, node);
   x->work.fn      = fn;
   x->work.arg     = arg;
+  if (name.len)
+    CHECK0(set_name(x, name, -1));
   CHECK0(mco_resume(x->co));
 
   return 0;

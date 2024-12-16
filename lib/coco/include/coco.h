@@ -44,6 +44,7 @@ typedef struct {
   Node         node;
   CocoPoolWork work;
   bool         exit;
+  char debug_name[16];
 } CocoPoolItem;
 
 struct CocoPool_s {
@@ -54,7 +55,8 @@ struct CocoPool_s {
   Queue         waiters;
 };
 
-int  CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al);
+int CocoPool_init(CocoPool* pool, usize n, usize stack_sz, Allocator al, Str name);
 void CocoPool_deinit(CocoPool* pool);
 int  CocoPool_go(CocoPool* pool, CocoFn fn, void* arg);
 int  CocoPool_gonow(CocoPool* pool, CocoFn fn, void* arg);
+int  CocoPool_gonow2(CocoPool* pool, CocoFn fn, void* arg, Str name);
