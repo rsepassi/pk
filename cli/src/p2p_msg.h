@@ -11,6 +11,12 @@
     code                                                                       \
   } Disco##name
 
+#define P2PMsg_decl(var, t)                                                    \
+  Disco##t var = {0};                                                          \
+  do {                                                                         \
+    var.type = P2PMsg##t;                                                      \
+  } while (0)
+
 P2PMsg_DEF(       //
     IpRequest,    //
     u16 request;  //
@@ -64,7 +70,7 @@ typedef enum {
   P2PMsgPing,
   P2PMsgPong,
   P2PMsgDone,
-  P2PMsgAdvert,
+  P2PMsgLocalAdvert,
   P2PMsgRelayInit,
   P2PMsgRelayPost,
   P2PMsg_COUNT,

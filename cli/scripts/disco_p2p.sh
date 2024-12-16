@@ -11,7 +11,7 @@ bobpk=5E656899DF2EB7ED7672044D667D7265CED3C8E9CE75E6F0294096BC9FF65370
 bobsk=14BA2E68C3BD427628F998A235551FC50ABCB0B5B9AA0034C7A1C95093E394F05E656899DF2EB7ED7672044D667D7265CED3C8E9CE75E6F0294096BC9FF65370
 
 chan=a1b2c3
-disco=":8899"
+disco=8899
 
 make --silent -j
 
@@ -20,11 +20,11 @@ stdsh_go D ./build/out/bin/cli demo-disco disco -p${disco}
 
 # Alice
 stdsh_go A ./build/out/bin/cli demo-disco p2p -i \
-  -p20000 -c${chan} -d${disco} -b${bobpk} -a${alicepk} -s${alicesk}
+  -p20000 -c${chan} -d":${disco}" -b${bobpk} -a${alicepk} -s${alicesk}
 
 # Bob
 stdsh_go B ./build/out/bin/cli demo-disco p2p \
-  -p20001 -c${chan} -d${disco} -b${bobpk} -a${alicepk} -s${bobsk}
+  -p20001 -c${chan} -d":${disco}" -b${bobpk} -a${alicepk} -s${bobsk}
 
 stdsh_tail_logs
 

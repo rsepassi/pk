@@ -26,11 +26,12 @@
 
 extern uv_loop_t* loop;
 
-static void log_sockaddr(const char* tag, const struct sockaddr* addr) {
-  IpStrStorage ips;
-  CHECK0(IpStr_read(&ips, (struct sockaddr*)addr));
-  LOG("%s=%" PRIIpStr, tag, IpStrPRI(ips));
-}
+#define LOG_SOCK(tag, sa)                                                      \
+  do {                                                                         \
+    IpStrStorage __ips;                                                        \
+    CHECK0(IpStr_read(&__ips, (struct sockaddr*)(sa)));                        \
+    LOG("%s=%" PRIIpStr, (tag), IpStrPRI(__ips));                              \
+  } while (0)
 
 static u16 parse_port(const char* port_str) {
   int iport = atoi(port_str);
@@ -59,12 +60,7 @@ static u16 udp_getsockport(uv_udp_t* udp) {
   struct sockaddr_storage me;
   int                     me_len = sizeof(me);
   CHECK0(uv_udp_getsockname(udp, (struct sockaddr*)&me, &me_len));
-  CHECK(me_len == sizeof(struct sockaddr_in));
-  CHECK(me.ss_family == AF_INET);
-
-  IpStrStorage me_str;
-  CHECK0(IpStr_read(&me_str, (struct sockaddr*)&me));
-  return me_str.port;
+  return stdnet_getport((struct sockaddr*)&me);
 }
 
 typedef struct __attribute__((packed)) {
@@ -85,6 +81,29 @@ static u64 disco_channel_derive(Bytes in) {
   CHECK0(
       crypto_generichash_blake2b((u8*)&out, sizeof(out), in.buf, in.len, 0, 0));
   return out;
+}
+
+static void disco_multicast6_derive(struct sockaddr_in6* addr, u64 channel) {
+  u8* h = (u8*)&channel;
+
+  ZERO(addr);
+  addr->sin6_family = AF_INET6;
+
+  // First 2 bytes are used for the port
+  // Windows, Mac use >=49152
+  // Linux uses <=60999
+  u16 port        = *(u16*)h;
+  addr->sin6_port = htons(49152 + (port % (60999 - 49152)));
+
+  u8* ip = (u8*)&addr->sin6_addr;
+  // fixed prefix
+  ip[0] = 0xFF;
+  // 4 bit flags, 4 bit scope
+  // flags = reserved, rendezvous, prefix, transient
+  ip[1] = BITSET(2, 4);  // link local, with transient bit set
+
+  // Just put the whole channel in the group id
+  memcpy(&ip[2], h, sizeof(channel));
 }
 
 static void disco_multicast4_derive(struct sockaddr_in* addr, u64 channel) {
@@ -207,14 +226,38 @@ typedef struct __attribute__((packed)) {
 #define DISCO_MAX_MSG_SZ 1600
 
 typedef struct {
-  uv_udp_t udp;
-  Hashmap  channels;  // u64 -> DiscoChannel
-} DiscoCtx;
-
-typedef struct {
   u64                     id;
   struct sockaddr_storage addr;
 } DiscoChannel;
+
+typedef struct {
+  uv_udp_t                udp;
+  struct sockaddr_storage me;
+  Hashmap                 channels;  // u64 -> DiscoChannel
+  CocoPool                pool;
+} DiscoCtx;
+
+static void DiscoCtx_bind(DiscoCtx* ctx, u16 port) {
+  CHECK0(uv_udp_init(loop, &ctx->udp));
+  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&ctx->me));
+  CHECK0(uv_udp_bind(&ctx->udp, (struct sockaddr*)&ctx->me, 0));
+  port                                      = udp_getsockport(&ctx->udp);
+  ((struct sockaddr_in*)&ctx->me)->sin_port = htons(port);
+  LOG_SOCK("me", (struct sockaddr*)&ctx->me);
+}
+
+static void DiscoCtx_init(DiscoCtx* ctx, Allocator al, u16 port) {
+  ZERO(ctx);
+  CHECK0(Hashmap_u64_create(&ctx->channels, DiscoChannel, al));
+  CHECK0(CocoPool_init(&ctx->pool, 64, 1024 * 4, al));
+  DiscoCtx_bind(ctx, port);
+}
+
+static void DiscoCtx_deinit(DiscoCtx* ctx) {
+  hashmap_deinit(&ctx->channels);
+  uvco_close((uv_handle_t*)&ctx->udp);
+  CocoPool_deinit(&ctx->pool);
+}
 
 typedef struct {
   DiscoCtx*    ctx;
@@ -223,21 +266,27 @@ typedef struct {
 
 static void disco_giveip(void* varg) {
   LOG("");
-  DiscoDispatchArg* argp = varg;
-  DiscoDispatchArg  arg  = *argp;
+  DiscoDispatchArg arg = *(DiscoDispatchArg*)varg;
 
   UvcoUdpRecv* recv = arg.recv;
-  IpMsg        msg;
-  CHECK0(IpMsg_read(&msg, recv->addr));
+  if (recv->buf.len != sizeof(DiscoIpRequest))
+    return;
+
+  DiscoIpRequest* req = (void*)recv->buf.base;
+
+  P2PMsg_decl(resp, Ip);
+  resp.request = req->request;
+
+  CHECK0(IpMsg_read(&resp.ip, recv->addr));
   struct sockaddr addr = *recv->addr;
-  uv_buf_t        buf  = UvBuf(BytesObj(msg));
+  LOG_SOCK("responding to", &addr);
+  uv_buf_t buf = UvBuf(BytesObj(resp));
   CHECK0(uvco_udp_send(recv->udp, &buf, 1, &addr));
 }
 
 static void disco_relay_init(void* varg) {
   LOG("");
-  DiscoDispatchArg* argp = varg;
-  DiscoDispatchArg  arg  = *argp;
+  DiscoDispatchArg arg = *(DiscoDispatchArg*)varg;
 
   UvcoUdpRecv* recv = arg.recv;
   Bytes        msg  = UvBytes(recv->buf);
@@ -312,31 +361,36 @@ static void disco_relay_post(void* varg) {
       uvco_udp_send(&arg.ctx->udp, &outuv, 1, (struct sockaddr*)&chan->addr));
 }
 
-static void disco_dispatch(CocoPool* pool, DiscoCtx* ctx, UvcoUdpRecv* recv) {
+static void DiscoCtx_dispatch(DiscoCtx* ctx, UvcoUdpRecv* recv) {
   LOG("");
   Bytes msg = UvBytes(recv->buf);
-
-  if (msg.len < DISCO_MIN_MSG_SZ)
-    return;
-  if (msg.len > DISCO_MAX_MSG_SZ)
+  if (msg.len == 0)
     return;
 
-  if (msg.buf[0] >= DiscoRelayMsg_N)
+  P2PMsgType type = msg.buf[0];
+  if (type >= P2PMsg_COUNT)
     return;
-  DiscoRelayMsgType type = msg.buf[0];
 
-  CocoFn handlers[DiscoRelayMsg_N] = {
-      disco_giveip,
-      disco_relay_init,
-      disco_relay_post,
-  };
+  CocoFn handler;
+  switch (type) {
+    case P2PMsgIpRequest:
+      handler = disco_giveip;
+      break;
+    default:
+      LOG("unhandled message type %s", P2PMsgType_str(type));
+      return;
+  }
+
+  (void)disco_relay_init;
+  (void)disco_relay_post;
 
   // gonow because the recv buf is ephemeral. If there's no handler now,
-  // drop the request.
+  // drop the request. The handler must copy DiscoDispatchArg into its local
+  // frame before suspending.
   DiscoDispatchArg arg = {0};
   arg.ctx              = ctx;
   arg.recv             = recv;
-  CocoPool_gonow(pool, handlers[type], &arg);
+  CocoPool_gonow(&ctx->pool, handler, &arg);
 }
 
 static int disco_server(int argc, char** argv) {
@@ -358,51 +412,21 @@ static int disco_server(int argc, char** argv) {
     }
   }
 
-  // Disco relay and rendezvous
-
-  // Alice now asks the Disco server to aid in rendezvous with Bob
-  //
-  // Alice asks Disco to open a channel
-  //   Channel ID:
-  //     * Hash(Alice PK): allows others to find Alice
-  //     * KDF(DH(Alice, Bob)): allows mutual finding
-  //     * Pre-shared code
-  //
-  // Bob sends a message to the channel
-  // Disco forwards the message to Alice
-  // Alice now has Bob's IP+Port (+Key)
-  //
-  // Alice and Bob can try direct communication
-  // If that fails, they can continue to use the channel
+  (void)log_local_interfaces;
 
   Allocator al = allocatormi_allocator();
 
-  DiscoCtx ctx = {0};
-  CHECK0(Hashmap_u64_create(&ctx.channels, DiscoChannel, al));
-
-  log_local_interfaces();
-
-  CHECK0(uv_udp_init(loop, &ctx.udp));
-  struct sockaddr_storage me;
-  CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&me));
-  CHECK0(uv_udp_bind(&ctx.udp, (struct sockaddr*)&me, UV_UDP_REUSEADDR));
-  port                                 = udp_getsockport(&ctx.udp);
-  ((struct sockaddr_in*)&me)->sin_port = htons(port);
-  log_sockaddr("me", (struct sockaddr*)&me);
-
-  CocoPool pool;
-  CHECK0(CocoPool_init(&pool, 64, 1024 * 4, al));
+  DiscoCtx ctx;
+  DiscoCtx_init(&ctx, al, port);
 
   UvcoUdpRecv recv;
   CHECK0(uvco_udp_recv_start(&recv, &ctx.udp));
   while (1) {
     CHECK(uvco_udp_recv_next(&recv) >= 0);
-    disco_dispatch(&pool, &ctx, &recv);
+    DiscoCtx_dispatch(&ctx, &recv);
   }
 
-  hashmap_deinit(&ctx.channels);
-  uvco_close((uv_handle_t*)&ctx.udp);
-  CocoPool_deinit(&pool);
+  DiscoCtx_deinit(&ctx);
   return 0;
 }
 
@@ -519,6 +543,11 @@ typedef struct {
   struct sockaddr*        me_public;
   bool                    upnp_port_present;
   u16                     upnp_port;
+  bool                    bob_present;
+  u64                     bob_id;
+  struct sockaddr_storage bob_storage;
+  struct sockaddr*        bob;
+
   Queue2 waiters[P2PMsg_COUNT];  // CocoWait, queue of waiters per message type
 } P2PCtx;
 
@@ -571,17 +600,17 @@ void P2PCtx_ping_listener(void* arg) {
       continue;
 
     DiscoPing* ping = (void*)recv->buf.base;
-    log_sockaddr("PING from", recv->addr);
+    LOG_SOCK("PING from", recv->addr);
     LOG("PING channel=%" PRIu64 " sender=%" PRIu64, ping->channel,
         ping->sender);
 
     // Send back a pong
-    DiscoPong pong = {0};
-    pong.type      = P2PMsgPong;
-    pong.channel   = ping->channel;
-    pong.sender    = ctx->id;
-    pong.receiver  = ping->sender;
+    P2PMsg_decl(pong, Pong);
+    pong.channel  = ping->channel;
+    pong.sender   = ctx->id;
+    pong.receiver = ping->sender;
 
+    LOG("sending PONG");
     uv_buf_t buf = UvBuf(BytesObj(pong));
     CHECK0(uvco_udp_send(&ctx->udp, &buf, 1, recv->addr));
 
@@ -590,10 +619,11 @@ void P2PCtx_ping_listener(void* arg) {
       continue;
     CHECK0(rc);
 
+    CHECK(!ctx->bob_present);
+    CHECK0(stdnet_sockaddr_cp(ctx->bob, recv->addr));
+    ctx->bob_id      = pong.receiver;
+    ctx->bob_present = true;
     LOG("DONE: connected!");
-
-    // Connected!
-    CHECK(false, "unimpl");
   }
 }
 
@@ -605,6 +635,7 @@ void P2PCtx_init(P2PCtx* ctx, const P2PCtxOptions* opts) {
   ctx->me        = (void*)&ctx->me_storage;
   ctx->disco     = (void*)&ctx->disco_storage;
   ctx->me_public = (void*)&ctx->me_public_storage;
+  ctx->bob       = (void*)&ctx->bob_storage;
   ctx->loop      = opts->loop;
 
   randombytes_buf(&ctx->id, sizeof(ctx->id));
@@ -660,37 +691,42 @@ void P2PCtx_start_listener(P2PCtx* ctx) {
 }
 
 void P2PCtx_disco_getip(P2PCtx* ctx) {
-  DiscoRelayMsgIp msgip = {0};
-  msgip.type            = DiscoRelayMsg_IP;
+  P2PMsg_decl(req, IpRequest);
+  randombytes_buf(&req.request, sizeof(req.request));
 
   int          i  = 0;
   int          rc = UV_ETIMEDOUT;
   UvcoUdpRecv* recv;
+  DiscoIp*     public_ip;
   while (i < 3) {
+    ++i;
+
+    LOG("sending IpRequest");
     // Send request to Disco
-    uv_buf_t buf = UvBuf(BytesObj(msgip));
+    uv_buf_t buf = UvBuf(BytesObj(req));
     CHECK0(uvco_udp_send(&ctx->udp, &buf, 1, ctx->disco));
 
     // Wait for reply
     rc = P2PCtx_await(ctx, P2PMsgIp, &recv, 1000);
     if (rc == UV_ETIMEDOUT)
       continue;
-    else
-      break;
-
-    i += 1;
+    else if (rc == 0) {
+      if (recv->buf.len == sizeof(DiscoIp)) {
+        public_ip = (void*)recv->buf.base;
+        if (public_ip->type == P2PMsgIp && public_ip->request == req.request)
+          break;
+      }
+    }
   }
 
   CHECK0(rc);
-  CHECK(recv->buf.len == sizeof(IpMsg));
 
   // Fill me_public
-  IpMsg* public_ip = (IpMsg*)recv->buf.base;
-  CHECK0(IpMsg_dump(ctx->me_public, public_ip));
+  CHECK0(IpMsg_dump(ctx->me_public, &public_ip->ip));
   ctx->me_public_present = true;
-}
 
-void P2PCtx_pingpong(P2PCtx* ctx) { CHECK(false, "unimpl"); }
+  LOG_SOCK("my public ip", ctx->me_public);
+}
 
 void P2PCtx_pingpong_relay(P2PCtx* ctx) { CHECK(false, "unimpl"); }
 
@@ -703,13 +739,17 @@ void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
 void P2PCtx_local_validate(P2PCtx* ctx, u64 channel, UvcoUdpRecv* recv,
                            bool* connected) {
   {
+    if (recv->buf.len != sizeof(DiscoLocalAdvert))
+      return;
+    if (recv->buf.base[0] != P2PMsgLocalAdvert)
+      return;
     DiscoLocalAdvert* advert = (void*)recv->buf.base;
     if (advert->channel != channel)
       return;
   }
 
   // Match, validate route
-  log_sockaddr("match from", recv->addr);
+  LOG_SOCK("match from", recv->addr);
 
   DiscoPing ping = {0};
   ping.type      = P2PMsgPing;
@@ -719,6 +759,7 @@ void P2PCtx_local_validate(P2PCtx* ctx, u64 channel, UvcoUdpRecv* recv,
   int i = 0;
   int rc;
   while (i < 3) {
+    LOG("sending PING");
     uv_buf_t buf = UvBuf(BytesObj(ping));
     UVCHECK(uvco_udp_send(&ctx->udp, &buf, 1, recv->addr));
     rc = P2PCtx_await(ctx, P2PMsgPong, &recv, 1000);
@@ -742,8 +783,12 @@ void P2PCtx_local_validate(P2PCtx* ctx, u64 channel, UvcoUdpRecv* recv,
   uv_buf_t buf = UvBuf(BytesObj(done));
   UVCHECK(uvco_udp_send(&ctx->udp, &buf, 1, recv->addr));
 
-  LOG("PONG: connected!");
   *connected = true;
+  CHECK(!ctx->bob_present);
+  ctx->bob_id = done.receiver;
+  CHECK0(stdnet_sockaddr_cp(ctx->bob, recv->addr));
+  ctx->bob_present = true;
+  LOG("PONG: connected!");
 }
 
 void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
@@ -757,15 +802,16 @@ void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
 
   // Determine our channel code
   u64 channel = disco_channel_code(ctx->code);
+  LOG("channel=%" PRIu64, channel);
 
   struct sockaddr_in multicast_addr;
   disco_multicast4_derive(&multicast_addr, channel);
-  log_sockaddr("multicast channel", (struct sockaddr*)&multicast_addr);
+  (void)disco_multicast6_derive;
+  LOG_SOCK("multicast", (struct sockaddr*)&multicast_addr);
 
   struct sockaddr_in me;
   CHECK0(uv_ip4_addr(STDNET_IPV4_ANY,
                      stdnet_getport((struct sockaddr*)&multicast_addr), &me));
-  log_sockaddr("multicast bind", (struct sockaddr*)&me);
 
   // Bind to the multicast port
   uv_udp_t udp;
@@ -789,11 +835,11 @@ void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
   }
 
   while (now < expiry) {
-    LOG("local tick");
+    LOG("sending local ADVERT");
     // Advertise on multicast address...
     {
-      DiscoLocalAdvert advert = {0};
-      advert.channel          = channel;
+      P2PMsg_decl(advert, LocalAdvert);
+      advert.channel = channel;
 
       uv_buf_t buf = UvBuf(BytesObj(advert));
       UVCHECK(
@@ -816,6 +862,12 @@ void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
       UVCHECK(rc);
     }
 
+    // See if the ping listener completed
+    if (ctx->bob_present) {
+      *connected = true;
+      break;
+    }
+
     // Throttle
     i64 tick = now + 1000;
     now      = stdtime_now_monotonic_ms();
@@ -827,12 +879,17 @@ void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
 }
 
 void P2PCtx_upnp(P2PCtx* ctx) {
+  LOG("trying upnp");
   PlumCtx pctx       = {0};
   pctx.internal_port = stdnet_getport(ctx->me);
   CHECK0(uvco_arun(ctx->loop, async_plumfn, &pctx));
   ctx->upnp_port = pctx.external_port;
-  if (ctx->upnp_port)
+  if (ctx->upnp_port) {
+    LOG("upnp port %d", ctx->upnp_port);
     ctx->upnp_port_present = true;
+  } else {
+    LOG("no upnp");
+  }
 }
 
 // cli demo-disco p2p -i -p20000 -ca1b2c3 -d:30000
@@ -907,8 +964,8 @@ static int disco_p2p(int argc, char** argv) {
   P2PCtx_disco_local(&ctx, 30, &connected);
 
   if (connected) {
-    P2PCtx_pingpong(&ctx);
-    return 0;
+    CHECK(ctx.bob_present);
+    LOG_SOCK("connected to peer at", ctx.bob);
   }
 
   P2PCtx_disco_getip(&ctx);
@@ -918,7 +975,7 @@ static int disco_p2p(int argc, char** argv) {
   P2PCtx_disco_dance(&ctx, 30, &connected);
 
   if (connected) {
-    P2PCtx_pingpong(&ctx);
+    LOG("connected, exit");
     return 0;
   }
 
