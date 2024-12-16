@@ -2059,6 +2059,38 @@ static void mco_dealloc(void* ptr, size_t size, void* udata) {
   allocator_free(ctx->allocator, Bytes(ptr, size));
 }
 
+typedef enum {
+  LogHandle_ALL,
+  LogHandle_ACTIVE,
+  LogHandle_INACTIVE,
+} LogHandleOpt;
+
+static void live_uv_handle_cb(uv_handle_t* handle, void* arg) {
+  LogHandleOpt opt = *(LogHandleOpt*)arg;
+
+  int is_active = uv_is_active(handle);
+
+  if (is_active && opt == LogHandle_INACTIVE)
+    return;
+  if (!is_active && opt == LogHandle_ACTIVE)
+    return;
+
+  LOG("uv %s(%p) active=%d closing=%d", uv_handle_type_name(handle->type),
+      handle, is_active, uv_is_closing(handle));
+}
+
+#if CORO_VLOG == 1
+static void log_uv_handles(uv_loop_t* loop) {
+  LOG("tick");
+  LogHandleOpt opt = LogHandle_ACTIVE;
+  uv_walk(loop, live_uv_handle_cb, &opt);
+  opt = LogHandle_INACTIVE;
+  uv_walk(loop, live_uv_handle_cb, &opt);
+}
+#else
+static void log_uv_handles(uv_loop_t* loop) { (void)live_uv_handle_cb; }
+#endif
+
 int main(int argc, char** argv) {
   LOG("");
 
@@ -2073,19 +2105,27 @@ int main(int argc, char** argv) {
   uv_loop_init(loop);
 
   // coro init
-  MainCoroCtx ctx     = {argc, argv, al, 0};
-  mco_desc    desc    = mco_desc_init(main_coro, MAIN_STACK_SIZE);
-  desc.allocator_data = &ctx;
-  desc.alloc_cb       = mco_alloc;
-  desc.dealloc_cb     = mco_dealloc;
-  desc.user_data      = &ctx;
+  MainCoroCtx ctx  = {argc, argv, al, 0};
+  mco_desc    desc = mco_desc_init(main_coro, MAIN_STACK_SIZE);
+  // desc.allocator_data = &ctx;
+  // desc.alloc_cb       = mco_alloc;
+  // desc.dealloc_cb     = mco_dealloc;
+  (void)mco_alloc;
+  (void)mco_dealloc;
+  desc.user_data  = &ctx;
+  desc.debug_name = "main";
   mco_coro* co;
   CHECK(mco_create(&co, &desc) == MCO_SUCCESS);
 
   // run
-  CHECK(mco_resume(co) == MCO_SUCCESS);
-  if (mco_status(co) == MCO_SUSPENDED) {
-    uv_run(loop, UV_RUN_DEFAULT);
+  while (mco_status(co) != MCO_DEAD) {
+    CHECK0(mco_resume(co));
+    while (1) {
+      log_uv_handles(loop);
+      int rc = uv_run(loop, UV_RUN_ONCE);
+      if (rc == 0)
+        break;
+    }
     LOG("uv loop exit");
   }
 

@@ -58,6 +58,11 @@ P2PMsg_DEF(       //
     u64 channel;  //
 );
 
+P2PMsg_DEF(        //
+    RelayInitAck,  //
+    u64 channel;   //
+);
+
 P2PMsg_DEF(       //
     RelayPost,    //
     u64 channel;  //
@@ -72,33 +77,36 @@ typedef enum {
   P2PMsgDone,
   P2PMsgLocalAdvert,
   P2PMsgRelayInit,
+  P2PMsgRelayInitAck,
   P2PMsgRelayPost,
   P2PMsg_COUNT,
   P2PMsg_RESERVED = 255,
 } P2PMsgType;
 
 const char* P2PMsgType_strs[P2PMsg_COUNT] = {
-    "UNKNOWN",    //
-    "IPREQ",      //
-    "IP",         //
-    "PING",       //
-    "PONG",       //
-    "DONE",       //
-    "ADVERT",     //
-    "RELAYINIT",  //
-    "RELAY",      //
+    "UNKNOWN",       //
+    "IPREQ",         //
+    "IP",            //
+    "PING",          //
+    "PONG",          //
+    "DONE",          //
+    "ADVERT",        //
+    "RELAYINIT",     //
+    "RELAYINITACK",  //
+    "RELAY",         //
 };
 
 size_t P2PMsg_SZ[P2PMsg_COUNT] = {
     0,
-    sizeof(DiscoIpRequest),    //
-    sizeof(DiscoIp),           //
-    sizeof(DiscoPing),         //
-    sizeof(DiscoPong),         //
-    sizeof(DiscoDone),         //
-    sizeof(DiscoLocalAdvert),  //
-    sizeof(DiscoRelayInit),    //
-    sizeof(DiscoRelayPost),    //
+    sizeof(DiscoIpRequest),     //
+    sizeof(DiscoIp),            //
+    sizeof(DiscoPing),          //
+    sizeof(DiscoPong),          //
+    sizeof(DiscoDone),          //
+    sizeof(DiscoLocalAdvert),   //
+    sizeof(DiscoRelayInit),     //
+    sizeof(DiscoRelayInitAck),  //
+    sizeof(DiscoRelayPost),     //
 };
 
 static inline const char* P2PMsgType_str(P2PMsgType t) {

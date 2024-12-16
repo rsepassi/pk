@@ -8,6 +8,10 @@ LOCAL_CFLAGS += -Wno-unused-parameter
 
 BIN := cli
 
+ifdef CORO_VLOG
+	LOCAL_CFLAGS += -DCORO_VLOG=1
+endif
+
 .PHONY: default
 default: cli
 
