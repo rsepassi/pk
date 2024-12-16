@@ -37,16 +37,6 @@ int uvco_fs_mkdir(uv_loop_t* loop, const char* path, int mode) {
   return (int)req.result;
 }
 
-void uvco_sleep(uv_loop_t* loop, u64 ms) {
-  CocoWait   wait = CocoWait();
-  uv_timer_t timer;
-  uv_timer_init(loop, &timer);
-  timer.data = &wait;
-  UVCHECK(uv_timer_start(&timer, timer_cb, ms, 0));
-  COCO_AWAIT(&wait);
-  uvco_close((uv_handle_t*)&timer);
-}
-
 typedef struct {
   CocoWait wait;
   int      status;
@@ -182,15 +172,12 @@ static void udp_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf,
 
   // nobody's waiting...
   if (ctx == NULL || ctx->wait.co == NULL) {
-    LOG("message dropped, no waiter");
+    DLOG("message dropped, no waiter");
     return;
   }
 
   ctx->nread = nread;
-  // copy the address so that it stays in UdpRecvBuf even after a even loop
-  // tick (e.g. for uvco_close).
-  CHECK0(stdnet_sockaddr_cp((struct sockaddr*)&ctx->addr_storage, addr));
-  ctx->addr    = (struct sockaddr*)&ctx->addr_storage;
+  ctx->addr    = addr;
   ctx->buf     = *buf;
   ctx->buf.len = nread >= 0 ? (UV_BUFLEN_T)nread : 0;
 
@@ -237,27 +224,36 @@ int uvco_timer_start(UvcoTimer* t, uv_loop_t* loop, usize ms) {
   return 0;
 }
 
+void uvco_sleep(uv_loop_t* loop, u64 ms) {
+  CocoWait wait = CocoWait();
+  CHECK(uvco_await_timeout(loop, &wait, ms) == UV_ETIMEDOUT);
+}
+
+static void handle_free(uv_handle_t* h) { free(h->data); }
+
 int uvco_await_timeout(uv_loop_t* loop, CocoWait* wait, usize timeout_ms) {
   // Start timer
-  UvcoTimer t;
-  UVCHECK(uvco_timer_start(&t, loop, timeout_ms));
+  UvcoTimer* ts = malloc(sizeof(UvcoTimer));
+  UvcoTimer* t  = ts;
+  UVCHECK(uvco_timer_start(t, loop, timeout_ms));
 
   // Suspend
-  while (!t.wait.done && !wait->done)
-    COCO_SUSPEND();
+  while (!t->wait.done && !wait->done)
+    coco_yield();
 
   // We're back
   int rc = 0;
-  if (t.wait.done) {
+  if (t->wait.done) {
     // Timer expired
     rc = UV_ETIMEDOUT;
   } else {
     // Cancel the timer
-    UVCHECK(uv_timer_stop(&t.timer));
+    UVCHECK(uv_timer_stop(&t->timer));
   }
 
   // Cleanup
-  uvco_close((uv_handle_t*)&t.timer);
+  t->timer.data = t;
+  uv_close((uv_handle_t*)&t->timer, handle_free);
 
   return rc;
 }
@@ -325,26 +321,20 @@ static void uvco_async_cb(uv_async_t* async) {
 }
 
 int uvco_arun(uv_loop_t* loop, uvco_arun_fn work, void* arg) {
-  uv_async_t async;
-  CocoWait   wait = CocoWait();
-  async.data      = &wait;
+  uv_async_t* async = malloc(sizeof(uv_async_t));
+  CocoWait    wait  = CocoWait();
+  async->data       = &wait;
   int rc;
-  if ((rc = uv_async_init(loop, &async, uvco_async_cb)))
-    return rc;
-  work(&async, arg);
+  if ((rc = uv_async_init(loop, async, uvco_async_cb)))
+    goto cleanup;
+  work(async, arg);
   COCO_AWAIT(&wait);
-  uvco_close((uv_handle_t*)&async);
-  return 0;
-}
 
-static void uvco_close_cb(uv_handle_t* h) {
-  CocoWait* wait = h->data;
-  COCO_DONE(wait);
-}
+  rc = 0;
 
-void uvco_close(uv_handle_t* h) {
-  CocoWait wait = CocoWait();
-  h->data       = &wait;
-  uv_close(h, uvco_close_cb);
-  COCO_AWAIT(&wait);
+cleanup:
+  async->data = async;
+  uv_close((uv_handle_t*)async, handle_free);
+
+  return rc;
 }

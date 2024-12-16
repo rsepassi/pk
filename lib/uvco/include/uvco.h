@@ -17,6 +17,7 @@
 
 // Time
 void uvco_sleep(uv_loop_t* loop, u64 ms);
+int  uvco_await_timeout(uv_loop_t* loop, CocoWait* wait, usize timeout_ms);
 
 // Thread
 typedef int (*uvco_trun_fn)(void*);
@@ -43,7 +44,6 @@ int uvco_udp_send(uv_udp_t* handle, const uv_buf_t bufs[], unsigned int nbufs,
 typedef struct {
   uv_udp_t*               udp;
   uv_buf_t                buf;
-  struct sockaddr_storage addr_storage;
   const struct sockaddr*  addr;
   ssize_t                 nread;
   CocoWait                wait;
@@ -51,9 +51,3 @@ typedef struct {
 int uvco_udp_recv_start(UvcoUdpRecv* recv, uv_udp_t* handle);
 int uvco_udp_recv_next(UvcoUdpRecv* recv);
 int uvco_udp_recv_next2(UvcoUdpRecv* recv, usize timeout_ms);
-
-// Handle
-void uvco_close(uv_handle_t* h);
-
-// Wait with timeout
-int uvco_await_timeout(uv_loop_t* loop, CocoWait* wait, usize timeout_ms);
