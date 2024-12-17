@@ -51,3 +51,15 @@ typedef struct {
 int uvco_udp_recv_start(UvcoUdpRecv* recv, uv_udp_t* handle);
 int uvco_udp_recv_next(UvcoUdpRecv* recv);
 int uvco_udp_recv_next2(UvcoUdpRecv* recv, usize timeout_ms);
+
+typedef struct {
+  uv_loop_t* loop;
+  void*      data;
+} CocoMainArg;
+typedef int (*CocoMainFn)(int argc, char** argv, CocoMainArg arg);
+typedef struct {
+  size_t     stack_size;
+  CocoMainFn fn;
+  void*      data;
+} CocoMainOpts;
+int uvco_main(int argc, char** argv, CocoMainOpts opts);

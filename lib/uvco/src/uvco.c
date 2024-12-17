@@ -338,3 +338,97 @@ cleanup:
 
   return rc;
 }
+
+typedef struct {
+  int         argc;
+  char**      argv;
+  CocoMainArg arg;
+  CocoMainFn  fn;
+  int         status;
+} InternalMainArg;
+
+static void main_coro(mco_coro* co) {
+  InternalMainArg* arg = mco_get_user_data(co);
+  int              rc  = arg->fn(arg->argc, arg->argv, arg->arg);
+  arg->status          = rc;
+}
+
+typedef enum {
+  LogHandle_ALL,
+  LogHandle_ACTIVE,
+  LogHandle_INACTIVE,
+} LogHandleOpt;
+
+static void live_uv_handle_cb(uv_handle_t* handle, void* arg) {
+  LogHandleOpt opt = *(LogHandleOpt*)arg;
+
+  int is_active = uv_is_active(handle);
+
+  if (is_active && opt == LogHandle_INACTIVE)
+    return;
+  if (!is_active && opt == LogHandle_ACTIVE)
+    return;
+
+  LOG("uv %s(%p) active=%d closing=%d", uv_handle_type_name(handle->type),
+      handle, is_active, uv_is_closing(handle));
+}
+
+#if CORO_VLOG == 1
+static void log_uv_handles(uv_loop_t* loop) {
+  LOG("tick");
+  LogHandleOpt opt = LogHandle_ACTIVE;
+  uv_walk(loop, live_uv_handle_cb, &opt);
+  opt = LogHandle_INACTIVE;
+  uv_walk(loop, live_uv_handle_cb, &opt);
+}
+#else
+static void log_uv_handles(uv_loop_t* loop) {
+  (void)loop;
+  (void)live_uv_handle_cb;
+}
+#endif
+
+int uvco_main(int argc, char** argv, CocoMainOpts opts) {
+  uv_loop_t loop;
+  uv_loop_init(&loop);
+
+  InternalMainArg arg = {0};
+  arg.arg.loop        = &loop;
+  arg.arg.data        = opts.data;
+  arg.argc            = argc;
+  arg.argv            = argv;
+  arg.fn              = opts.fn;
+
+  mco_desc desc   = mco_desc_init(main_coro, opts.stack_size);
+  desc.user_data  = &arg;
+  desc.debug_name = "main";
+
+  int rc = 0;
+
+  mco_coro* co;
+  rc = mco_create(&co, &desc);
+  if (rc != 0)
+    goto cleanup;
+
+  // run
+  while (mco_status(co) != MCO_DEAD) {
+    CHECK0(mco_resume(co));
+    while (1) {
+      log_uv_handles(&loop);
+      int rc = uv_run(&loop, UV_RUN_ONCE);
+      if (rc == 0)
+        break;
+    }
+  }
+
+  // coro deinit
+  CHECK(mco_status(co) == MCO_DEAD);
+  CHECK(mco_destroy(co) == MCO_SUCCESS);
+
+  rc = arg.status;
+
+cleanup:
+  uv_loop_close(&loop);
+
+  return rc;
+}
