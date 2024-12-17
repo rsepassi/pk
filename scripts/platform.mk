@@ -54,7 +54,7 @@ ifeq ($(USE_CLANG), 1)
 endif
 
 CFLAGS += -target $(MACTARGET) `need --cflags platform/macos`
-PLATFORM_LDFLAGS += -target $(MACTARGET)
+PLATFORM_LDFLAGS += -target $(MACTARGET) `need --libs platform/macos`
 
 platform:
 	@:

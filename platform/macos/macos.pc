@@ -1,4 +1,6 @@
 Name: macos
 Version: 0.0.0
 Description: macos platform
-Cflags: -isystem ${src_prefix}/include -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3
+Cflags: -isystem ${src_prefix}/include -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 \
+  --sysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
+Libs: --sysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
