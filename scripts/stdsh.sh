@@ -77,11 +77,13 @@ stdsh_go__() {
   $@ 1>&2 2>$STDSH_DIR/$tag.log
   code=$?
   echo "$tag exited $code" >> $STDSH_DIR/$tag.log
+  echo $code > "$STDSH_DIR/$tag.exit"
   set -e
 }
 
 stdsh_cleanup__() {
   set +e
+
   kill $(jobs -p) 2>/dev/null
   wait
 
