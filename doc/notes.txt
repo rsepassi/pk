@@ -123,3 +123,11 @@ service
 * Service supervision
 * Security: https://wiki.alpinelinux.org/wiki/Securing_Alpine_Linux
   * https://github.com/ironpeakservices/iron-alpine/blob/master/Dockerfile
+* https://www.vultr.com/api
+  45.76.246.26
+  2001:19f0:8000:1ac8::/64
+  2001:19f0:8000:1ac8:5400:05ff:fe35:fa46
+
+
+
+https://magicant.github.io/yash/doc/

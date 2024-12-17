@@ -173,6 +173,7 @@ static u64 disco_channel_mutual(const CryptoSignPK* me,
 typedef struct {
   u16            internal_port;
   u16            external_port;
+  const char*    external_host;
   uv_async_t*    async;
   int            mapping_id;
   plum_mapping_t mapping;
@@ -182,8 +183,10 @@ static void mapping_callback(int id, plum_state_t state,
                              const plum_mapping_t* mapping) {
   PlumCtx* ctx = mapping->user_ptr;
   CHECK0(ctx->external_port);
-  if (state == PLUM_STATE_SUCCESS)
+  if (state == PLUM_STATE_SUCCESS) {
     ctx->external_port = mapping->external_port;
+    ctx->external_host = mapping->external_host;
+  }
   uv_async_send(ctx->async);
 }
 
@@ -565,7 +568,9 @@ typedef struct {
   bool                    me_public_present;
   struct sockaddr_storage me_public_storage;
   struct sockaddr*        me_public;
-  bool                    upnp_port_present;
+  struct sockaddr_storage upnp_storage;
+  struct sockaddr*        upnp;
+  bool                    upnp_present;
   u16                     upnp_port;
   bool                    bob_present;
   u64                     bob_id;
@@ -661,6 +666,7 @@ void P2PCtx_init(P2PCtx* ctx, const P2PCtxOptions* opts) {
   ctx->me        = (void*)&ctx->me_storage;
   ctx->disco     = (void*)&ctx->disco_storage;
   ctx->me_public = (void*)&ctx->me_public_storage;
+  ctx->upnp      = (void*)&ctx->upnp_storage;
   ctx->bob       = (void*)&ctx->bob_storage;
   ctx->loop      = opts->loop;
 
@@ -795,6 +801,71 @@ void P2PCtx_disco_channel(P2PCtx* ctx) {
 
   CHECK0(rc);
   LOG("channel initialized");
+
+  // Over the relay channel, we send the addresses that we want the peer to
+  // try to contact us:
+  // * Public IP from Disco
+  // * External host + port from upnp
+  // * All local external interfaces (todo)
+
+  u8    msg_buf[1200];
+  Bytes msg_bytes = BytesArray(msg_buf);
+  P2PMsg_declbuf(RelayPost, msg, msg_bytes);
+  msg->channel = ctx->channel;
+  msg->sender  = ctx->id;
+
+  Bytes w = msg_bytes;
+
+  Bytes advert_bytes = bytes_advance(&w, sizeof(DiscoRelayPost));
+  P2PMsg_declbuf(Advert, advert, advert_bytes);
+  advert->channel = ctx->channel;
+  advert->sender  = ctx->id;
+  advert->naddrs  = ctx->upnp_present ? 2 : 1;
+  CHECK(ctx->me_public_present);
+
+  // Add in as many addresses as we have or can fit
+  // For now, just public + upnp
+  {
+    Bytes w = advert_bytes;
+    bytes_advance(&w, sizeof(DiscoAdvert));
+
+    IpMsg msg;
+
+    CHECK0(IpMsg_read(&msg, ctx->me_public));
+    if (msg.ip4.ip_type == IpType_IPv4) {
+      bytes_write(&w, BytesObj(msg.ip4));
+    } else {
+      bytes_write(&w, BytesObj(msg.ip6));
+    }
+
+    if (ctx->upnp_present) {
+      CHECK0(IpMsg_read(&msg, ctx->upnp));
+      if (msg.ip4.ip_type == IpType_IPv4) {
+        bytes_write(&w, BytesObj(msg.ip4));
+      } else {
+        bytes_write(&w, BytesObj(msg.ip6));
+      }
+    }
+
+    advert_bytes.len = w.buf - advert_bytes.buf;
+  }
+
+  // Send the Advert over the relay to our peer and wait for Advert back
+  i64 now    = stdtime_now_monotonic_ms();
+  i64 expiry = now + 5000;
+  while (now < expiry) {
+    LOG("sending channel ADVERT");
+    uv_buf_t buf = UvBuf(msg_bytes);
+    UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, ctx->disco));
+
+    // Throttle
+    i64 tick = now + 1000;
+    now      = stdtime_now_monotonic_ms();
+    if (now < tick) {
+      LOG("sleep %d", (int)(tick - now));
+      uvco_sleep(ctx->loop, tick - now);
+    }
+  }
 }
 
 void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
@@ -815,10 +886,9 @@ void P2PCtx_local_validate(P2PCtx* ctx, UvcoUdpRecv* recv, bool* connected) {
   LOG_SOCK("match from", recv->addr);
   CHECK0(stdnet_sockaddr_cp(ctx->bob, recv->addr));
 
-  DiscoPing ping = {0};
-  ping.type      = P2PMsgPing;
-  ping.channel   = ctx->channel;
-  ping.sender    = ctx->id;
+  P2PMsg_decl(ping, Ping);
+  ping.channel = ctx->channel;
+  ping.sender  = ctx->id;
 
   int i = 0;
   int rc;
@@ -952,10 +1022,11 @@ void P2PCtx_upnp(P2PCtx* ctx) {
     PlumCtx pctx       = {0};
     pctx.internal_port = stdnet_getport(ctx->me);
     CHECK0(uvco_arun(ctx->loop, async_plumfn, &pctx));
-    ctx->upnp_port = pctx.external_port;
-    if (ctx->upnp_port) {
-      LOG("upnp port %d", ctx->upnp_port);
-      ctx->upnp_port_present = true;
+    if (pctx.external_port) {
+      CHECK0(uv_ip4_addr(pctx.external_host, pctx.external_port,
+                         (struct sockaddr_in*)&ctx->upnp));
+      LOG_SOCK("upnp", ctx->upnp);
+      ctx->upnp_present = true;
       break;
     }
   }

@@ -11,10 +11,17 @@
     code                                                                       \
   } Disco##name
 
-#define P2PMsg_decl(var, t)                                                    \
-  Disco##t var = {0};                                                          \
+#define P2PMsg_decl(var, T)                                                    \
+  Disco##T var = {0};                                                          \
   do {                                                                         \
-    var.type = P2PMsg##t;                                                      \
+    var.type = P2PMsg##T;                                                      \
+  } while (0)
+
+#define P2PMsg_declbuf(T, var, b)                                              \
+  Disco##T* var = (void*)(b).buf;                                              \
+  do {                                                                         \
+    ZERO(var);                                                                 \
+    var->type = P2PMsg##T;                                                     \
   } while (0)
 
 P2PMsg_DEF(       //
@@ -55,6 +62,13 @@ P2PMsg_DEF(       //
 );
 
 P2PMsg_DEF(       //
+    Advert,       //
+    u64 channel;  //
+    u64 sender;   //
+    u8  naddrs;   //
+);
+
+P2PMsg_DEF(       //
     RelayInit,    //
     u64 channel;  //
     u64 sender;   //
@@ -68,6 +82,7 @@ P2PMsg_DEF(        //
 P2PMsg_DEF(       //
     RelayPost,    //
     u64 channel;  //
+    u64 sender;   //
 );
 
 typedef enum {
@@ -81,6 +96,7 @@ typedef enum {
   P2PMsgRelayInit,
   P2PMsgRelayInitAck,
   P2PMsgRelayPost,
+  P2PMsgAdvert,
   P2PMsg_COUNT,
   P2PMsg_RESERVED = 255,
 } P2PMsgType;
@@ -92,10 +108,11 @@ const char* P2PMsgType_strs[P2PMsg_COUNT] = {
     "PING",          //
     "PONG",          //
     "DONE",          //
-    "ADVERT",        //
+    "LOCALADVERT",   //
     "RELAYINIT",     //
     "RELAYINITACK",  //
     "RELAY",         //
+    "ADVERT",        //
 };
 
 size_t P2PMsg_SZ[P2PMsg_COUNT] = {
@@ -109,6 +126,7 @@ size_t P2PMsg_SZ[P2PMsg_COUNT] = {
     sizeof(DiscoRelayInit),     //
     sizeof(DiscoRelayInitAck),  //
     sizeof(DiscoRelayPost),     //
+    sizeof(DiscoAdvert),        //
 };
 
 static inline const char* P2PMsgType_str(P2PMsgType t) {
@@ -126,7 +144,7 @@ static inline bool P2PMsgType_valid(P2PMsgType t) {
 static inline bool P2PMsg_valid(Bytes b, P2PMsgType t) {
   if (!P2PMsgType_valid(t))
     return false;
-  if (b.len != P2PMsg_SZ[t])
+  if (b.len < P2PMsg_SZ[t])
     return false;
   if (b.buf[0] != t)
     return false;
