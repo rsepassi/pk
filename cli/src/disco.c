@@ -599,18 +599,59 @@ void P2PCtx_add_disco(P2PCtx* ctx, IpStr ip) {
       uv_ip4_addr((char*)ip.ip.buf, ip.port, (struct sockaddr_in*)ctx->disco));
 }
 
+typedef struct {
+  P2PCtx*     ctx;
+  CocoWait    wait;
+  P2PMsgType* mtype;
+  usize       mtype_len;
+  i64         expiry;
+} P2PCtxWaiter;
+
+void P2PCtxWaiter_init(P2PCtx* ctx, P2PCtxWaiter* waiter, P2PMsgType* mtype,
+                       usize mtype_len, usize timeout_ms) {
+  i64 now = stdtime_now_monotonic_ms();
+
+  ZERO(waiter);
+  waiter->ctx       = ctx;
+  waiter->wait      = CocoWait();
+  waiter->mtype     = mtype;
+  waiter->mtype_len = mtype_len;
+  waiter->expiry    = now + timeout_ms;
+
+  // Register as a waiting on the requested message types
+  for (usize i = 0; i < mtype_len; ++i)
+    q2_enq(&waiter->ctx->waiters[mtype[i]], &waiter->wait.node);
+}
+
+int P2PCtxWaiter_next(P2PCtxWaiter* waiter, UvcoUdpRecv** recv) {
+  i64 now = stdtime_now_monotonic_ms();
+  if (now >= waiter->expiry)
+    return UV_ETIMEDOUT;
+
+  usize timeout_ms = waiter->expiry - now;
+  int   rc = uvco_await_timeout(waiter->ctx->loop, &waiter->wait, timeout_ms);
+  if (rc == 0) {
+    *recv = waiter->wait.data;
+
+    // Re-enqueue waiting
+    q2_enq(&waiter->ctx->waiters[(P2PMsgType)(*recv)->buf.base[0]],
+           &waiter->wait.node);
+  }
+
+  return rc;
+}
+
+void P2PCtxWaiter_stop(P2PCtxWaiter* waiter) {
+  for (usize i = 0; i < waiter->mtype_len; ++i)
+    q2_del(&waiter->ctx->waiters[waiter->mtype[i]], &waiter->wait.node);
+}
+
 int P2PCtx_await(P2PCtx* ctx, P2PMsgType mtype, UvcoUdpRecv** recv,
                  usize timeout_ms) {
-  CocoWait wait = CocoWait();
-  q2_enq(&ctx->waiters[mtype], &wait.node);
-
-  int rc = uvco_await_timeout(ctx->loop, &wait, timeout_ms);
-  if (rc == 0) {
-    *recv = wait.data;
-  } else if (rc == UV_ETIMEDOUT) {
-    // If we timed out, delete the waiter from the queue
-    q2_del(&ctx->waiters[mtype], &wait.node);
-  }
+  P2PCtxWaiter waiter;
+  P2PCtxWaiter_init(ctx, &waiter, &mtype, 1, timeout_ms);
+  int rc = P2PCtxWaiter_next(&waiter, recv);
+  P2PCtxWaiter_stop(&waiter);
   return rc;
 }
 
@@ -815,8 +856,9 @@ void P2PCtx_disco_channel(P2PCtx* ctx) {
   msg->sender  = ctx->id;
 
   Bytes w = msg_bytes;
+  bytes_advance(&w, sizeof(DiscoRelayPost));
 
-  Bytes advert_bytes = bytes_advance(&w, sizeof(DiscoRelayPost));
+  Bytes advert_bytes = bytes_advance(&w, sizeof(DiscoAdvert));
   P2PMsg_declbuf(Advert, advert, advert_bytes);
   advert->channel = ctx->channel;
   advert->sender  = ctx->id;
@@ -826,9 +868,7 @@ void P2PCtx_disco_channel(P2PCtx* ctx) {
   // Add in as many addresses as we have or can fit
   // For now, just public + upnp
   {
-    Bytes w = advert_bytes;
-    bytes_advance(&w, sizeof(DiscoAdvert));
-
+    // TODO: write into the msg buf directly
     IpMsg msg;
 
     CHECK0(IpMsg_read(&msg, ctx->me_public));
@@ -850,13 +890,73 @@ void P2PCtx_disco_channel(P2PCtx* ctx) {
     advert_bytes.len = w.buf - advert_bytes.buf;
   }
 
+  u8    peer_advert_buf[1200];
+  Bytes peer_advert_store = BytesArray(peer_advert_buf);
+  bool  we_got_peers      = false;
+  bool  peer_got_ours     = false;
+
   // Send the Advert over the relay to our peer and wait for Advert back
   i64 now    = stdtime_now_monotonic_ms();
   i64 expiry = now + 5000;
+  rc         = 0;
   while (now < expiry) {
     LOG("sending channel ADVERT");
     uv_buf_t buf = UvBuf(msg_bytes);
     UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, ctx->disco));
+
+    // Listen for an ADVERTACK or an ADVERT
+    P2PMsgType   mtypes[2] = {P2PMsgAdvert, P2PMsgAdvertAck};
+    P2PCtxWaiter waiter;
+    P2PCtxWaiter_init(ctx, &waiter, mtypes, ARRAY_LEN(mtypes), 1000);
+
+    while (1) {
+      rc = P2PCtxWaiter_next(&waiter, &recv);
+      if (rc == UV_ETIMEDOUT)
+        break;
+      CHECK0(rc);
+      P2PMsgType type = recv->buf.base[0];
+      if (type == P2PMsgAdvert) {
+        DiscoAdvert* peer_advert = (void*)recv->buf.base;
+        if (peer_advert->channel != ctx->channel)
+          continue;
+
+        we_got_peers = true;
+
+        // Hang on to the advertisement for holepunching
+        bytes_copy(&peer_advert_store, UvBytes(recv->buf));
+
+        // Acknowledge receipt
+        LOG("acking ADVERT");
+        u8    msg2_buf[sizeof(DiscoRelayPost) + sizeof(DiscoAdvertAck)];
+        Bytes msg2_bytes = BytesArray(msg2_buf);
+        P2PMsg_declbuf(RelayPost, msg2, msg2_bytes);
+        msg2->channel = ctx->channel;
+        msg2->sender  = ctx->id;
+
+        Bytes w2 = msg2_bytes;
+        bytes_advance(&w2, sizeof(DiscoRelayPost));
+        Bytes ack_bytes = bytes_advance(&w2, sizeof(DiscoAdvertAck));
+        P2PMsg_declbuf(AdvertAck, ack, ack_bytes);
+        ack->channel  = ctx->channel;
+        ack->receiver = peer_advert->sender;
+        ack->sender   = ctx->id;
+        uv_buf_t buf2 = UvBuf(msg2_bytes);
+        UVCHECK(uvco_udp_send(ctx->udp, &buf2, 1, ctx->disco));
+      } else if (type == P2PMsgAdvertAck) {
+        DiscoAdvertAck* peer_ack = (void*)recv->buf.base;
+        if (peer_ack->channel != ctx->channel)
+          continue;
+        if (peer_ack->receiver != ctx->id)
+          continue;
+
+        peer_got_ours = true;
+      }
+    }
+
+    P2PCtxWaiter_stop(&waiter);
+
+    if (we_got_peers && peer_got_ours)
+      break;
 
     // Throttle
     i64 tick = now + 1000;
@@ -866,6 +966,11 @@ void P2PCtx_disco_channel(P2PCtx* ctx) {
       uvco_sleep(ctx->loop, tick - now);
     }
   }
+
+  if (peer_got_ours)
+    LOG("confirmed ADVERT delivery");
+  if (we_got_peers)
+    LOG("received peer ADVERT");
 }
 
 void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
@@ -1117,7 +1222,7 @@ static int disco_p2p(int argc, char** argv) {
   // Contact Disco for public IP
   P2PCtx_disco_getip(&ctx);
   // Try establishing an external port
-  P2PCtx_upnp(&ctx);
+  // P2PCtx_upnp(&ctx);
   (void)P2PCtx_upnp;
   // Establish a channel and send the info to peer
   P2PCtx_disco_channel(&ctx);

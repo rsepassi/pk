@@ -68,6 +68,13 @@ P2PMsg_DEF(       //
     u8  naddrs;   //
 );
 
+P2PMsg_DEF(        //
+    AdvertAck,     //
+    u64 channel;   //
+    u64 sender;    //
+    u64 receiver;  //
+);
+
 P2PMsg_DEF(       //
     RelayInit,    //
     u64 channel;  //
@@ -97,6 +104,7 @@ typedef enum {
   P2PMsgRelayInitAck,
   P2PMsgRelayPost,
   P2PMsgAdvert,
+  P2PMsgAdvertAck,
   P2PMsg_COUNT,
   P2PMsg_RESERVED = 255,
 } P2PMsgType;
@@ -113,6 +121,7 @@ const char* P2PMsgType_strs[P2PMsg_COUNT] = {
     "RELAYINITACK",  //
     "RELAY",         //
     "ADVERT",        //
+    "ADVERTACK",     //
 };
 
 size_t P2PMsg_SZ[P2PMsg_COUNT] = {
@@ -127,6 +136,7 @@ size_t P2PMsg_SZ[P2PMsg_COUNT] = {
     sizeof(DiscoRelayInitAck),  //
     sizeof(DiscoRelayPost),     //
     sizeof(DiscoAdvert),        //
+    sizeof(DiscoAdvertAck),     //
 };
 
 static inline const char* P2PMsgType_str(P2PMsgType t) {
