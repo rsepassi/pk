@@ -61,3 +61,10 @@ static inline Bytes bytes_advance(Bytes* in, size_t step) {
   in->len -= step;
   return out;
 }
+
+static inline Bytes bytes_write(Bytes* dst, Bytes src) {
+  CHECK(dst->len >= src.len);
+  Bytes out = bytes_advance(dst, src.len);
+  bytes_copy(&out, src);
+  return out;
+}
