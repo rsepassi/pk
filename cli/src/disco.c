@@ -26,13 +26,6 @@
 
 extern uv_loop_t* loop;
 
-#define LOG_SOCK(tag, sa)                                                      \
-  do {                                                                         \
-    IpStrStorage __ips;                                                        \
-    CHECK0(IpStr_read(&__ips, (struct sockaddr*)(sa)));                        \
-    LOG("%s=%" PRIIpStr, (tag), IpStrPRI(__ips));                              \
-  } while (0)
-
 static u16 parse_port(const char* port_str) {
   int iport = atoi(port_str);
   CHECK(iport <= UINT16_MAX);
@@ -344,43 +337,37 @@ static void disco_relay_init(void* varg) {
 }
 
 static void disco_relay_post(void* varg) {
-  // LOG("");
-  // DiscoDispatchArg* argp = varg;
-  // DiscoDispatchArg  arg  = *argp;
+  LOG("");
+  DiscoDispatchArg arg  = *(DiscoDispatchArg*)varg;
+  DiscoCtx*        ctx  = arg.ctx;
+  UvcoUdpRecv*     recv = arg.recv;
 
-  // UvcoUdpRecv* recv = arg.recv;
-  // Bytes        msg  = UvBytes(recv->buf);
+  Bytes           msg          = UvBytes(recv->buf);
+  Bytes           header_bytes = bytes_advance(&msg, sizeof(DiscoRelayPost));
+  DiscoRelayPost* relay        = (void*)header_bytes.buf;
 
-  // if (msg.len < sizeof(DiscoRelayMsgPost))
-  //   return;
-  // Bytes header = bytes_advance(&msg, sizeof(DiscoRelayMsgPost));
+  // Look up the channel
+  HashmapIter it = hashmap_get(&ctx->channels, &relay->channel);
+  if (it == hashmap_end(&ctx->channels))
+    return;
+  DiscoChannel* chan = hashmap_val(&ctx->channels, it);
 
-  // DiscoRelayMsgPost* post_msg = (void*)header.buf;
-  // if (post_msg->payload_len != msg.len)
-  //   return;
-  // if (msg.len > DISCO_MAX_MSG_SZ)
-  //   return;
+  if (!(chan->alice_present && chan->bob_present))
+    return;
 
-  // HashmapIter it = hashmap_get(&arg.ctx->channels, &post_msg->channel_id);
-  // if (it == hashmap_end(&arg.ctx->channels))
-  //   return;
+  struct sockaddr* addr = 0;
+  if (relay->sender == chan->alice_id) {
+    addr = (void*)&chan->bob;
+    LOG("relaying to alice, channel=%" PRIu64, chan->id);
+  } else if (relay->sender == chan->bob_id) {
+    addr = (void*)&chan->alice;
+    LOG("relaying to bob, channel=%" PRIu64, chan->id);
+  } else
+    return;
 
-  // DiscoChannel* chan = hashmap_val(&arg.ctx->channels, it);
-
-  // // Copy the message into our frame to keep it alive for sending
-  // u8    out_buf[DISCO_MAX_MSG_SZ];
-  // Bytes out = BytesArray(out_buf);
-  // bytes_copy(&out, msg);
-
-  // IpStrStorage ipstr;
-  // CHECK0(IpStr_read(&ipstr, (struct sockaddr*)recv->addr));
-  // LOG("channel post %" PRIu64 " from %" PRIIpStr, chan->id, IpStrPRI(ipstr));
-
-  // // Send message on channel
-  // uv_buf_t outuv = UvBuf(out);
-  // CHECK0(
-  //     uvco_udp_send(&arg.ctx->udp, &outuv, 1, (struct
-  //     sockaddr*)&chan->addr));
+  // Forward the message
+  uv_buf_t buf = UvBuf(msg);
+  UVCHECK(uvco_udp_send(&ctx->udp, &buf, 1, addr));
 }
 
 static void DiscoCtx_dispatch(DiscoCtx* ctx, UvcoUdpRecv* recv) {
@@ -390,7 +377,7 @@ static void DiscoCtx_dispatch(DiscoCtx* ctx, UvcoUdpRecv* recv) {
     return;
 
   P2PMsgType type = msg.buf[0];
-  if (type >= P2PMsg_COUNT)
+  if (!P2PMsg_valid(msg, type))
     return;
 
   CocoFn handler;
@@ -401,12 +388,13 @@ static void DiscoCtx_dispatch(DiscoCtx* ctx, UvcoUdpRecv* recv) {
     case P2PMsgRelayInit:
       handler = disco_relay_init;
       break;
+    case P2PMsgRelayPost:
+      handler = disco_relay_post;
+      break;
     default:
       LOG("unhandled message type %s", P2PMsgType_str(type));
       return;
   }
-
-  (void)disco_relay_post;
 
   // gonow because the recv buf is ephemeral. If there's no handler now,
   // drop the request. The handler must copy DiscoDispatchArg into its local
@@ -627,6 +615,9 @@ int P2PCtxWaiter_next(P2PCtxWaiter* waiter, UvcoUdpRecv** recv) {
   i64 now = stdtime_now_monotonic_ms();
   if (now >= waiter->expiry)
     return UV_ETIMEDOUT;
+
+  // Re-arm waiter
+  waiter->wait = CocoWait();
 
   usize timeout_ms = waiter->expiry - now;
   int   rc = uvco_await_timeout(waiter->ctx->loop, &waiter->wait, timeout_ms);
@@ -900,9 +891,14 @@ void P2PCtx_disco_channel(P2PCtx* ctx) {
   i64 expiry = now + 5000;
   rc         = 0;
   while (now < expiry) {
-    LOG("sending channel ADVERT");
-    uv_buf_t buf = UvBuf(msg_bytes);
-    UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, ctx->disco));
+    if (we_got_peers && peer_got_ours)
+      break;
+
+    if (!peer_got_ours) {
+      LOG("sending channel ADVERT");
+      uv_buf_t buf = UvBuf(msg_bytes);
+      UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, ctx->disco));
+    }
 
     // Listen for an ADVERTACK or an ADVERT
     P2PMsgType   mtypes[2] = {P2PMsgAdvert, P2PMsgAdvertAck};
@@ -949,6 +945,7 @@ void P2PCtx_disco_channel(P2PCtx* ctx) {
         if (peer_ack->receiver != ctx->id)
           continue;
 
+        LOG("peer acked ADVERT");
         peer_got_ours = true;
       }
     }
@@ -967,10 +964,31 @@ void P2PCtx_disco_channel(P2PCtx* ctx) {
     }
   }
 
-  if (peer_got_ours)
-    LOG("confirmed ADVERT delivery");
-  if (we_got_peers)
-    LOG("received peer ADVERT");
+  CHECK(peer_got_ours);
+  LOG("confirmed ADVERT delivery");
+
+  CHECK(we_got_peers);
+  DiscoAdvert* peer_advert = (void*)peer_advert_store.buf;
+  LOG("received peer ADVERT, id=%" PRIu64, peer_advert->sender);
+  Bytes abytes = peer_advert_store;
+  bytes_advance(&abytes, sizeof(DiscoAdvert));
+  for (int i = 0; i < peer_advert->naddrs; ++i) {
+    CHECK(abytes.len >= sizeof(Ip4Msg));
+
+    IpMsg* ip;
+
+    if (abytes.buf[0] == IpType_IPv4) {
+      ip = (void*)bytes_advance(&abytes, sizeof(Ip4Msg)).buf;
+    } else if (abytes.buf[0] == IpType_IPv6) {
+      CHECK(abytes.len >= sizeof(Ip6Msg));
+      ip = (void*)bytes_advance(&abytes, sizeof(Ip6Msg)).buf;
+    } else
+      CHECK(false);
+
+    struct sockaddr_storage peer_sa;
+    CHECK0(IpMsg_dump((struct sockaddr*)&peer_sa, ip));
+    LOG_SOCK("peer address", &peer_sa);
+  }
 }
 
 void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
@@ -1120,20 +1138,15 @@ void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
 }
 
 void P2PCtx_upnp(P2PCtx* ctx) {
-  int i = 0;
-  while (i < 3) {
-    ++i;
-    LOG("trying upnp");
-    PlumCtx pctx       = {0};
-    pctx.internal_port = stdnet_getport(ctx->me);
-    CHECK0(uvco_arun(ctx->loop, async_plumfn, &pctx));
-    if (pctx.external_port) {
-      CHECK0(uv_ip4_addr(pctx.external_host, pctx.external_port,
-                         (struct sockaddr_in*)&ctx->upnp));
-      LOG_SOCK("upnp", ctx->upnp);
-      ctx->upnp_present = true;
-      break;
-    }
+  LOG("trying upnp");
+  PlumCtx pctx       = {0};
+  pctx.internal_port = stdnet_getport(ctx->me);
+  CHECK0(uvco_arun(ctx->loop, async_plumfn, &pctx));
+  if (pctx.external_port) {
+    CHECK0(uv_ip4_addr(pctx.external_host, pctx.external_port,
+                       (struct sockaddr_in*)&ctx->upnp));
+    LOG_SOCK("upnp", ctx->upnp);
+    ctx->upnp_present = true;
   }
 
   if (!ctx->upnp_port)
@@ -1222,7 +1235,7 @@ static int disco_p2p(int argc, char** argv) {
   // Contact Disco for public IP
   P2PCtx_disco_getip(&ctx);
   // Try establishing an external port
-  // P2PCtx_upnp(&ctx);
+  P2PCtx_upnp(&ctx);
   (void)P2PCtx_upnp;
   // Establish a channel and send the info to peer
   P2PCtx_disco_channel(&ctx);
