@@ -57,6 +57,7 @@ P2PMsg_DEF(       //
 P2PMsg_DEF(       //
     RelayInit,    //
     u64 channel;  //
+    u64 sender;   //
 );
 
 P2PMsg_DEF(        //

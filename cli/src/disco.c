@@ -228,7 +228,9 @@ typedef struct __attribute__((packed)) {
 typedef struct {
   u64                     id;
   struct sockaddr_storage alice;
+  u64                     alice_id;
   struct sockaddr_storage bob;
+  u64                     bob_id;
   bool                    alice_present;
   bool                    bob_present;
 } DiscoChannel;
@@ -292,11 +294,10 @@ static void disco_relay_init(void* varg) {
   DiscoDispatchArg arg = *(DiscoDispatchArg*)varg;
 
   UvcoUdpRecv* recv = arg.recv;
-  Bytes        msg  = UvBytes(recv->buf);
-  if (msg.len != sizeof(DiscoRelayMsgInit))
+  if (!P2PMsg_valid(UvBytes(recv->buf), P2PMsgRelayInit))
     return;
 
-  DiscoRelayInit* init_msg = (void*)msg.buf;
+  DiscoRelayInit* init_msg = (void*)recv->buf.base;
 
   // Insert or lookup
   HashmapStatus ret;
@@ -311,10 +312,13 @@ static void disco_relay_init(void* varg) {
   DiscoChannel* chan    = hashmap_val(&arg.ctx->channels, it);
   bool          present = ret == HashmapStatus_Present;
   if (present) {
+    if (chan->alice_id == init_msg->sender)
+      return;
     if (chan->bob_present)
       return;
     // Bob joining
     chan->bob         = *(struct sockaddr_storage*)recv->addr;
+    chan->bob_id      = init_msg->sender;
     chan->bob_present = true;
     LOG("bob joined channel %" PRIu64, chan->id);
     LOG_SOCK("bob", recv->addr);
@@ -323,6 +327,7 @@ static void disco_relay_init(void* varg) {
     ZERO(chan);
     chan->id            = init_msg->channel;
     chan->alice         = *(struct sockaddr_storage*)recv->addr;
+    chan->alice_id      = init_msg->sender;
     chan->alice_present = true;
     LOG("new channel %" PRIu64, chan->id);
     LOG_SOCK("alice", recv->addr);
@@ -770,6 +775,7 @@ void P2PCtx_disco_getip(P2PCtx* ctx) {
 void P2PCtx_disco_channel(P2PCtx* ctx) {
   P2PMsg_decl(init, RelayInit);
   init.channel = ctx->channel;
+  init.sender  = ctx->id;
 
   int          rc = 0;
   int          i  = 0;
