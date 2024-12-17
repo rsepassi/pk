@@ -608,19 +608,15 @@ void P2PCtx_ping_listener(void* arg) {
   P2PCtx* ctx = arg;
 
   UvcoUdpRecv* recv;
-  while (1) {
+  while (!ctx->exit) {
     LOG("");
-
-    if (ctx->exit)
-      return;
 
     int rc = P2PCtx_await(ctx, P2PMsgPing, &recv, 1000);
     if (rc == UV_ETIMEDOUT)
       continue;
     CHECK0(rc);
 
-    if (!(recv->buf.len == sizeof(DiscoPing) &&
-          recv->buf.base[0] == P2PMsgPing))
+    if (!P2PMsg_valid(UvBytes(recv->buf), P2PMsgPing))
       continue;
 
     DiscoPing* ping = (void*)recv->buf.base;
@@ -702,24 +698,24 @@ void P2PCtx_listener(void* arg) {
 
   UvcoUdpRecv recv;
   CHECK0(uvco_udp_recv_start(&recv, ctx->udp));
-  while (1) {
+  while (!ctx->exit) {
     LOG("");
 
-    if (ctx->exit)
-      return;
-
-    CHECK0(uvco_udp_recv_next(&recv));
-
-    if (recv.buf.len < 1)
+    // Wait for a valid message
+    int rc = uvco_udp_recv_next2(&recv, 1000);
+    if (rc == UV_ETIMEDOUT)
       continue;
-    if (recv.buf.base[0] >= P2PMsg_COUNT)
-      continue;
+    CHECK0(rc);
 
+    if (recv.buf.len == 0)
+      continue;
     P2PMsgType type = recv.buf.base[0];
-    if (recv.buf.len != P2PMsg_SZ[type])
+    if (!P2PMsg_valid(UvBytes(recv.buf), type))
       continue;
 
     LOG("incoming p2p msg type=%s", P2PMsgType_str(type));
+
+    // Pass to waiters
     Node2* n;
     q2_drain(&ctx->waiters[type], n, {
       CocoWait* wait = CONTAINER_OF(n, CocoWait, node);
@@ -800,15 +796,14 @@ void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
 }
 
 void P2PCtx_local_validate(P2PCtx* ctx, UvcoUdpRecv* recv, bool* connected) {
-  {
-    if (recv->buf.len != sizeof(DiscoLocalAdvert))
-      return;
-    if (recv->buf.base[0] != P2PMsgLocalAdvert)
-      return;
-    DiscoLocalAdvert* advert = (void*)recv->buf.base;
-    if (advert->channel != ctx->channel)
-      return;
-  }
+  if (!P2PMsg_valid(UvBytes(recv->buf), P2PMsgLocalAdvert))
+    return;
+
+  DiscoLocalAdvert* advert = (void*)recv->buf.base;
+  if (advert->sender == ctx->id)
+    return;
+  if (advert->channel != ctx->channel)
+    return;
 
   // Match, validate route
   LOG_SOCK("match from", recv->addr);
@@ -901,25 +896,28 @@ void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
     {
       P2PMsg_decl(advert, LocalAdvert);
       advert.channel = ctx->channel;
+      advert.sender  = ctx->id;
 
       uv_buf_t buf = UvBuf(BytesObj(advert));
       UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, multicast_addr));
     }
 
-    // Skip our own message, which we expect to come through ~instantly
-    CHECK0(uvco_udp_recv_next2(&recv, 1));
-
     // Listen for 1s...
-    int rc = uvco_udp_recv_next2(&recv, 1000);
-    if (rc == 0) {
-      // ok
-      P2PCtx_local_validate(ctx, &recv, connected);
-      if (*connected)
-        break;
-    } else if (rc == UV_ETIMEDOUT) {
-      // timed out
-    } else {
-      UVCHECK(rc);
+    i64 wait_expiry = now + 1000;
+    while (now < wait_expiry) {
+      int rc = uvco_udp_recv_next2(&recv, wait_expiry - now);
+      if (rc == 0) {
+        // ok
+        P2PCtx_local_validate(ctx, &recv, connected);
+        if (*connected)
+          break;
+      } else if (rc == UV_ETIMEDOUT) {
+        // timed out
+      } else {
+        UVCHECK(rc);
+      }
+
+      now = stdtime_now_monotonic_ms();
     }
 
     // See if the ping listener completed

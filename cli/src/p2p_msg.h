@@ -51,6 +51,7 @@ P2PMsg_DEF(        //
 P2PMsg_DEF(       //
     LocalAdvert,  //
     u64 channel;  //
+    u64 sender;   //
 );
 
 P2PMsg_DEF(       //
@@ -111,4 +112,22 @@ size_t P2PMsg_SZ[P2PMsg_COUNT] = {
 
 static inline const char* P2PMsgType_str(P2PMsgType t) {
   return P2PMsgType_strs[t];
+}
+
+static inline bool P2PMsgType_valid(P2PMsgType t) {
+  if (t == 0)
+    return false;
+  if (t >= P2PMsg_COUNT)
+    return false;
+  return true;
+}
+
+static inline bool P2PMsg_valid(Bytes b, P2PMsgType t) {
+  if (!P2PMsgType_valid(t))
+    return false;
+  if (b.len != P2PMsg_SZ[t])
+    return false;
+  if (b.buf[0] != t)
+    return false;
+  return true;
 }
