@@ -864,14 +864,16 @@ void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
 
   LOG("channel=%" PRIu64, ctx->channel);
 
-  struct sockaddr_in multicast_addr;
-  disco_multicast4_derive(&multicast_addr, ctx->channel);
+  struct sockaddr_storage multicast_storage = {0};
+  struct sockaddr* multicast_addr = (void*)&multicast_storage;
+
+  disco_multicast4_derive((struct sockaddr_in*)multicast_addr, ctx->channel);
   (void)disco_multicast6_derive;
-  LOG_SOCK("multicast", (struct sockaddr*)&multicast_addr);
+  LOG_SOCK("multicast", multicast_addr);
 
   struct sockaddr_in me;
   CHECK0(uv_ip4_addr(STDNET_IPV4_ANY,
-                     stdnet_getport((struct sockaddr*)&multicast_addr), &me));
+                     stdnet_getport(multicast_addr), &me));
 
   // Bind to the multicast port
   uv_udp_t* udp = ctx->multicast_udp;
@@ -880,7 +882,7 @@ void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
 
   // Join the multicast group
   IpStrStorage mstr;
-  CHECK0(IpStr_read(&mstr, (struct sockaddr*)&multicast_addr));
+  CHECK0(IpStr_read(&mstr, multicast_addr));
   UVCHECK(uv_udp_set_membership(udp, (char*)mstr.ip.buf, NULL, UV_JOIN_GROUP));
 
   UvcoUdpRecv recv;
@@ -903,7 +905,7 @@ void P2PCtx_disco_local(P2PCtx* ctx, usize timeout_secs, bool* connected) {
 
       uv_buf_t buf = UvBuf(BytesObj(advert));
       UVCHECK(
-          uvco_udp_send(ctx->udp, &buf, 1, (struct sockaddr*)&multicast_addr));
+          uvco_udp_send(ctx->udp, &buf, 1, multicast_addr));
     }
 
     // Skip our own message, which we expect to come through ~instantly

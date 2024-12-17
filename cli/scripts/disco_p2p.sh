@@ -14,21 +14,24 @@ chan=a1b2c3
 disco=8899
 
 make --silent -j
+# VALGRIND=1
 # ASAN=1
 # export ASAN_OPTIONS=strict_string_checks=1:detect_stack_use_after_return=1:detect_invalid_pointer_pairs=2:detect_leaks=1
 # export ASAN_SYMBOLIZER_PATH=/opt/homebrew/opt/llvm@19/bin/llvm-symbolizer
+# export ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer
 # export MIMALLOC_SHOW_STATS=1
+# exec_prefix="valgrind -s --leak-check=full --show-leak-kinds=all --track-origins=yes --num-callers=16"
 
 
 # Disco, our support server
 stdsh_go D ./build/out/bin/cli demo-disco disco -p${disco}
 
 # Alice
-stdsh_go A ./build/out/bin/cli demo-disco p2p -i \
+stdsh_go A $exec_prefix ./build/out/bin/cli demo-disco p2p -i \
   -p20000 -c${chan} -d":${disco}" -b${bobpk} -a${alicepk} -s${alicesk}
 
 # Bob
-stdsh_go B ./build/out/bin/cli demo-disco p2p \
+stdsh_go B $exec_prefix ./build/out/bin/cli demo-disco p2p \
   -p20001 -c${chan} -d":${disco}" -b${bobpk} -a${alicepk} -s${bobsk}
 
 stdsh_tail_logs

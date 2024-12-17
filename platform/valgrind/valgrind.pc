@@ -1,4 +1,4 @@
 Name: valgrind
 Version: 0.0.0
 Description: debugging tool
-Cflags: -isystem {src_prefix}/include
+Cflags: -isystem ${src_prefix}/include
