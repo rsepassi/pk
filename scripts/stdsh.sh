@@ -1,4 +1,5 @@
-STDSH_DIR=${STDSH_DIR:-$(mktemp -d -t stdsh_XXXXXX)}
+: ${TMPDIR:=/tmp}
+STDSH_DIR=${STDSH_DIR:-$(mktemp -d $TMPDIR/stdsh_XXXXXX)}
 
 stdsh_init() {
   set -e --pipe-fail
@@ -10,6 +11,7 @@ stdsh_init() {
     mkdir -p $ROOTDIR/build
     ln -s $STDSH_DIR $ROOTDIR/build/log
   fi
+  mkdir -p $STDSH_DIR/stdsh
 }
 
 stdsh_done() {
@@ -24,7 +26,28 @@ stdsh_done() {
 }
 
 stdsh_go() {
-  stdsh_go__ $@ &
+  tag=$1
+  shift
+
+  # Create the log file with the command line
+  echo $@ > $STDSH_DIR/$tag.log
+
+  # Create the actual script to run in the background
+  cat <<EOF > $STDSH_DIR/stdsh/$tag.run
+$@ 1>&2 2>>$STDSH_DIR/$tag.log
+code=\$?
+echo "exited \$code" >> $STDSH_DIR/$tag.log
+echo \$code > "$STDSH_DIR/stdsh/$tag.exit"
+EOF
+
+  # Write out the background command so that the jobs list has a
+  # variable-expanded name
+  cat <<EOF > $STDSH_DIR/stdsh/$tag.run2
+sh $STDSH_DIR/stdsh/$tag.run &
+EOF
+
+  # Source the background command file to actually run $tag.run &
+  . $STDSH_DIR/stdsh/$tag.run2
 }
 
 stdsh_pipe() {
@@ -70,19 +93,11 @@ stdsh_tail_logs() {
   tail -f -n +1 $STDSH_DIR/*.log
 }
 
-stdsh_go__() {
-  set +e
-  tag=$1
-  shift
-  $@ 1>&2 2>$STDSH_DIR/$tag.log
-  code=$?
-  echo "$tag exited $code" >> $STDSH_DIR/$tag.log
-  echo $code > "$STDSH_DIR/$tag.exit"
-  set -e
-}
-
 stdsh_cleanup__() {
   set +e
+
+  # Display still-running jobs
+  jobs -lr
 
   kill $(jobs -p) 2>/dev/null
   wait
