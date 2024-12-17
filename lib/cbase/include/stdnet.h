@@ -31,15 +31,27 @@ typedef struct {
 typedef enum {
   IpType_IPv4,
   IpType_IPv6,
-  IpType_MAX,
+  IpType_COUNT,
 } IpType;
 
-// A stable IP and port representation suitable to put on the network
+// Stable IP and port representations suitable to put on the network
 typedef struct __attribute__((packed)) {
-  uint8_t  ip_buf[STDNET_INET6_ADDRLEN];  // IPv4=4 bytes, IPv6=16 bytes
-  uint16_t port;                          // little-endian
-  uint8_t  ip_type;                       // IpType
+  uint8_t  ip_type;  // IpType
+  uint16_t port;     // network byte order
   uint8_t  _pad;
+  uint8_t  ip_buf[STDNET_INET4_ADDRLEN];
+} Ip4Msg;
+
+typedef struct __attribute__((packed)) {
+  uint8_t  ip_type;  // IpType
+  uint16_t port;     // network byte order
+  uint8_t  _pad;
+  uint8_t  ip_buf[STDNET_INET6_ADDRLEN];
+} Ip6Msg;
+
+typedef union {
+  Ip4Msg ip4;
+  Ip6Msg ip6;
 } IpMsg;
 
 int IpStr_read(IpStrStorage* out, const struct sockaddr* sa);
