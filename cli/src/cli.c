@@ -2028,6 +2028,9 @@ static const CliCmd commands[] = {
 static int main_coro(int argc, char** argv, CocoMainArg arg) {
   loop = arg.loop;
 
+  // libsodium init
+  CHECK0(sodium_init());
+
   for (usize i = 0; i < (ARRAY_LEN(commands) - 1) && argc > 1; ++i) {
     if (!strcmp(commands[i].cmd, argv[1])) {
       return commands[i].fn(argc - 1, argv + 1);
@@ -2040,9 +2043,6 @@ static int main_coro(int argc, char** argv, CocoMainArg arg) {
 }
 
 int main(int argc, char** argv) {
-  // libsodium init
-  CHECK0(sodium_init());
-
   CocoMainOpts opts = {0};
   opts.stack_size   = 1 << 22;  // 4 MiB
   opts.fn           = main_coro;
