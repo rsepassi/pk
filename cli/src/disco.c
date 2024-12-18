@@ -49,26 +49,6 @@ static void log_local_interfaces() {
   }
 }
 
-static u16 udp_getsockport(uv_udp_t* udp) {
-  struct sockaddr_storage me;
-  int                     me_len = sizeof(me);
-  CHECK0(uv_udp_getsockname(udp, (struct sockaddr*)&me, &me_len));
-  return stdnet_getport((struct sockaddr*)&me);
-}
-
-typedef struct __attribute__((packed)) {
-  P2PMsg_FIELDS;
-} DiscoRelayMsgIp;
-
-typedef struct {
-  IpStr              multicast_addrs;
-  struct sockaddr_in multicast_addr;
-  uv_udp_t           multicast_udp;
-  uv_udp_t           udp;
-  int                port;
-  u64                id;
-} DiscoLocalCtx;
-
 static u64 disco_channel_derive(Bytes in) {
   u64 out;
   CHECK0(
@@ -192,35 +172,6 @@ static void async_plumfn(uv_async_t* async, void* arg) {
   ctx->mapping_id = plum_create_mapping(&ctx->mapping, mapping_callback);
 }
 
-// Disco relay service
-// * Initialize channel
-// * Post message to channel
-
-typedef enum {
-  DiscoRelayMsg_IP,
-  DiscoRelayMsg_INIT,
-  DiscoRelayMsg_POST,
-  DiscoRelayMsg_N,
-} DiscoRelayMsgType;
-
-typedef struct __attribute__((packed)) {
-  u8  type;
-  u8  reserved[3];
-  u64 channel_id;
-} DiscoRelayMsgInit;
-
-typedef struct __attribute__((packed)) {
-  u8  type;
-  u8  reserved[3];
-  u64 channel_id;
-  u16 payload_len;
-} DiscoRelayMsgPost;
-
-#define DISCO_MIN_MSG_SZ                                                       \
-  MIN(sizeof(DiscoRelayMsgIp),                                                 \
-      MIN(sizeof(DiscoRelayMsgInit), sizeof(DiscoRelayMsgPost)))
-#define DISCO_MAX_MSG_SZ 1600
-
 typedef struct {
   u64                     id;
   struct sockaddr_storage alice;
@@ -242,7 +193,7 @@ static void DiscoCtx_bind(DiscoCtx* ctx, u16 port) {
   CHECK0(uv_udp_init(loop, &ctx->udp));
   CHECK0(uv_ip4_addr(STDNET_IPV4_ANY, port, (struct sockaddr_in*)&ctx->me));
   CHECK0(uv_udp_bind(&ctx->udp, (struct sockaddr*)&ctx->me, 0));
-  port                                      = udp_getsockport(&ctx->udp);
+  port                                      = uvco_udp_port(&ctx->udp);
   ((struct sockaddr_in*)&ctx->me)->sin_port = htons(port);
   LOG_SOCK("me", (struct sockaddr*)&ctx->me);
 }
@@ -443,95 +394,6 @@ static int disco_server(int argc, char** argv) {
   return 0;
 }
 
-static int disco_relay_client(int argc, char** argv) {
-  (void)argc;
-
-  char* ip         = STDNET_IPV4_LOCALHOST;
-  u16   port       = 443;
-  u64   channel_id = 22;
-
-  struct optparse opts;
-  optparse_init(&opts, argv);
-  int option;
-  while ((option = optparse(&opts, "p:a:c:")) != -1) {
-    switch (option) {
-      case 'p':
-        port = parse_port(opts.optarg);
-        break;
-      case 'a':
-        ip = opts.optarg;
-        break;
-      case 'c':
-        channel_id = atoi(opts.optarg);
-        break;
-      case '?':
-        LOGE("unrecognized option %c", option);
-        return 1;
-    }
-  }
-
-  struct sockaddr_storage relay;
-  CHECK0(uv_ip4_addr(ip, port, (struct sockaddr_in*)&relay));
-
-  uv_udp_t udp;
-  CHECK0(uv_udp_init(loop, &udp));
-
-  // Initiate a channel
-  {
-    DiscoRelayMsgInit init = {0};
-    init.type              = DiscoRelayMsg_INIT;
-    init.channel_id        = channel_id;
-    uv_buf_t buf           = UvBuf(BytesObj(init));
-    LOG("init channel");
-    CHECK0(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&relay));
-  }
-
-  // Listen for the ack
-  UvcoUdpRecv recv;
-  CHECK0(uvco_udp_recv_start(&recv, &udp));
-  CHECK(uvco_udp_recv_next(&recv) >= 0);
-  CHECK(recv.buf.len == 1);
-  CHECK(recv.buf.base[0] == 0);
-  LOG("acked");
-
-  // Post to the channel
-  {
-    u8                 msg_buf[sizeof(DiscoRelayMsgPost) + 1];
-    DiscoRelayMsgPost* post = (void*)msg_buf;
-    ZERO(post);
-    post->type                         = DiscoRelayMsg_POST;
-    post->channel_id                   = channel_id;
-    post->payload_len                  = 1;
-    msg_buf[sizeof(DiscoRelayMsgPost)] = 88;
-    uv_buf_t buf                       = UvBuf(BytesArray(msg_buf));
-    LOG("post to channel");
-    CHECK0(uvco_udp_send(&udp, &buf, 1, (struct sockaddr*)&relay));
-  }
-
-  // Listen for the forward
-  CHECK(uvco_udp_recv_next(&recv) >= 0);
-  CHECK(recv.buf.len == 1);
-  CHECK(recv.buf.base[0] == 88);
-  LOG("forwarded");
-
-  uv_udp_recv_stop(&udp);
-  uv_close((uv_handle_t*)&udp, 0);
-
-  return 0;
-}
-
-static void parse_pk(CryptoSignPK* key, const char* s) {
-  usize binlen;
-  CHECK0(sodium_hex2bin((u8*)key, sizeof(*key), s, strlen(s), 0, &binlen, 0));
-  CHECK(binlen == sizeof(*key));
-}
-
-static void parse_sk(CryptoSignSK* key, const char* s) {
-  usize binlen;
-  CHECK0(sodium_hex2bin((u8*)key, sizeof(*key), s, strlen(s), 0, &binlen, 0));
-  CHECK(binlen == sizeof(*key));
-}
-
 typedef struct {
   Allocator  al;
   uv_loop_t* loop;
@@ -566,6 +428,8 @@ typedef struct {
   struct sockaddr*        bob;
   Queue2 waiters[P2PMsg_COUNT];  // CocoWait, queue of waiters per message type
   bool   exit;
+
+  struct sockaddr_storage holepunch_candidates[3];
 } P2PCtx;
 
 void P2PCtx_bind(P2PCtx* ctx, u16 port) {
@@ -972,7 +836,9 @@ void P2PCtx_disco_channel(P2PCtx* ctx) {
   LOG("received peer ADVERT, id=%" PRIu64, peer_advert->sender);
   Bytes abytes = peer_advert_store;
   bytes_advance(&abytes, sizeof(DiscoAdvert));
-  for (int i = 0; i < peer_advert->naddrs; ++i) {
+  for (usize i = 0;
+       i < MIN(peer_advert->naddrs, ARRAY_LEN(ctx->holepunch_candidates));
+       ++i) {
     CHECK(abytes.len >= sizeof(Ip4Msg));
 
     IpMsg* ip;
@@ -985,8 +851,8 @@ void P2PCtx_disco_channel(P2PCtx* ctx) {
     } else
       CHECK(false);
 
-    struct sockaddr_storage peer_sa;
-    CHECK0(IpMsg_dump((struct sockaddr*)&peer_sa, ip));
+    struct sockaddr* peer_sa = (void*)&ctx->holepunch_candidates[i];
+    CHECK0(IpMsg_dump(peer_sa, ip));
     LOG_SOCK("peer address", &peer_sa);
   }
 }
@@ -1190,15 +1056,15 @@ static int disco_p2p(int argc, char** argv) {
         break;
       case 'b':
         // Bob
-        parse_pk(&bob, opts.optarg);
+        CHECK0(CryptoSignPK_parsehex(&bob, Str0(opts.optarg)));
         break;
       case 'a':
         // Alice
-        parse_pk(&alice, opts.optarg);
+        CHECK0(CryptoSignPK_parsehex(&alice, Str0(opts.optarg)));
         break;
       case 's':
         // SK
-        parse_sk(&sk, opts.optarg);
+        CHECK0(CryptoSignSK_parsehex(&sk, Str0(opts.optarg)));
         break;
       case '?':
         LOGE("unrecognized option %c", option);
@@ -1257,9 +1123,8 @@ static int disco_p2p(int argc, char** argv) {
 }
 
 static const CliCmd disco_commands[] = {
-    {"disco", disco_server},               //
-    {"relay-client", disco_relay_client},  //
-    {"p2p", disco_p2p},                    //
+    {"disco", disco_server},  //
+    {"p2p", disco_p2p},       //
     {0},
 };
 
