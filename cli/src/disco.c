@@ -856,6 +856,7 @@ void P2PCtx_disco_channel(P2PCtx* ctx) {
 }
 
 void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
+  *connected = false;
   CHECK(ctx->bob_id);
   CHECK(ctx->holepunch_candidates_len);
   bool is_initiator = ctx->id < ctx->bob_id;
@@ -876,9 +877,11 @@ void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
   //   Send a packet to each holepunch_candidate
   //   Wait for incoming
 
+  i64 rtt = 0;
+
   if (is_initiator) {
     LOG("starting disco dance as initiator");
-    uvco_sleep(ctx->loop, 100);
+    uvco_sleep(ctx->loop, 400);
 
     // Send Sync via relay
     i64 send_time = stdtime_now_monotonic_ms();
@@ -907,7 +910,7 @@ void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
     CHECK0(rc);
     // TODO: retry
 
-    i64 rtt = stdtime_now_monotonic_ms() - send_time;
+    rtt = stdtime_now_monotonic_ms() - send_time;
     LOG("received SYNCACK rtt=%" PRIi64 "ms", rtt);
 
     // Send GO
@@ -943,6 +946,7 @@ void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
     LOG("received SYNC");
 
     // Send back Syncack via relay
+    i64 send_time = stdtime_now_monotonic_ms();
     {
       u8    msg_buf[sizeof(DiscoRelayPost) + sizeof(DiscoSyncAck)];
       Bytes msg_bytes = BytesArray(msg_buf);
@@ -967,12 +971,65 @@ void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
     CHECK0(rc);
     // TODO: retry
 
+    rtt = stdtime_now_monotonic_ms() - send_time;
+
     LOG("received GO");
   }
 
   // GO Holepunch
   LOG("GOGOGO");
-  CHECK(false, "unimpl");
+  {
+    P2PMsg_decl(ping, Ping);
+    ping.channel = ctx->channel;
+    ping.sender  = ctx->id;
+
+    for (int punch = 0; punch < 3; ++punch) {
+      LOG("sending volley %d", punch);
+      {
+        u8 jitter;
+        randombytes_buf(&jitter, 1);
+        uvco_sleep(ctx->loop, jitter);
+      }
+
+      uv_buf_t buf = UvBuf(BytesObj(ping));
+      for (int i = 0; i < ctx->holepunch_candidates_len; ++i)
+        UVCHECK(uvco_udp_send(ctx->udp, &buf, 1,
+                              (struct sockaddr*)&ctx->holepunch_candidates[i]));
+
+      UvcoUdpRecv* recv;
+      int          rc = P2PCtx_await(ctx, P2PMsgPong, &recv,
+                                     MIN((int)((float)(rtt) * 1.5), 300));
+      if (rc == 0) {
+        LOG("received PONG");
+        if (ctx->bob_present)
+          break;
+
+        // Send done
+
+        DiscoPong* pong = (void*)recv->buf.base;
+
+        P2PMsg_decl(done, Done);
+        done.channel  = ctx->channel;
+        done.sender   = ctx->id;
+        done.receiver = pong->sender;
+
+        uv_buf_t buf = UvBuf(BytesObj(done));
+        UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, ctx->bob));
+
+        *connected = true;
+        CHECK(!ctx->bob_present);
+        ctx->bob_id      = done.receiver;
+        ctx->bob_present = true;
+        LOG("PONG: connected!");
+        break;
+      }
+
+      uvco_sleep(ctx->loop, MIN(rtt, 300));
+    }
+  }
+
+  if (ctx->bob_present)
+    *connected = true;
 }
 
 void P2PCtx_local_validate(P2PCtx* ctx, UvcoUdpRecv* recv, bool* connected) {
@@ -1011,11 +1068,10 @@ void P2PCtx_local_validate(P2PCtx* ctx, UvcoUdpRecv* recv, bool* connected) {
 
   DiscoPong* pong = (void*)recv->buf.base;
 
-  DiscoDone done = {0};
-  done.type      = P2PMsgDone;
-  done.channel   = ctx->channel;
-  done.sender    = ctx->id;
-  done.receiver  = pong->sender;
+  P2PMsg_decl(done, Done);
+  done.channel  = ctx->channel;
+  done.sender   = ctx->id;
+  done.receiver = pong->sender;
 
   uv_buf_t buf = UvBuf(BytesObj(done));
   UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, ctx->bob));
@@ -1219,6 +1275,9 @@ static int disco_p2p(int argc, char** argv) {
     LOG("local disco ended without a peer");
   }
 
+  // For testing, clear out bob_present to try the relay route too
+  ctx.bob_present = false;
+
   // Contact Disco for public IP
   P2PCtx_disco_getip(&ctx);
   // Try establishing an external port
@@ -1236,7 +1295,7 @@ static int disco_p2p(int argc, char** argv) {
 
   LOG("exiting");
   P2PCtx_deinit(&ctx);
-  return 0;
+  return !connected;
 }
 
 static const CliCmd disco_commands[] = {
