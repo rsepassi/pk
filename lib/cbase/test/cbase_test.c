@@ -278,6 +278,7 @@ void test_ifail(Str s) {
 void test_parseint(void) {
   test_i(Str("1"), 1);
   test_i(Str("-1"), -1);
+  test_i(Str("-308"), -308);
   test_i(Str("+1"), 1);
   test_i(Str("+0123"), 123);
   test_i(Str("0000875432"), 875432);
@@ -300,6 +301,51 @@ void test_parseint(void) {
   test_ifail(Str("123+"));
 }
 
+void test_f(Str s, f64 x) {
+  f64 out;
+  CHECK0(float_from_str(&out, s), "failed to parse %" PRIStr, StrPRI(s));
+  CHECK(out == x, "got %e for %" PRIStr " expected %e", out, StrPRI(s), x);
+}
+
+void test_ffail(Str s) {
+  f64 out;
+  CHECK(float_from_str(&out, s) != 0, "expected to fail but passed: %" PRIStr,
+        StrPRI(s));
+}
+
+void test_parsefloat(void) {
+  // left
+  test_f(Str("1"), 1.0);
+  // left + right
+  test_f(Str("0.1"), 0.1);
+  test_f(Str("1.1"), 1.1);
+  // left + exp
+  test_f(Str("1e3"), 1000.0);
+  test_f(Str("1E3"), 1000.0);
+  // left + right + exp
+  test_f(Str("1.1e3"), 1100.0);
+  test_f(Str("1.1E3"), 1100.0);
+
+  test_f(Str("1234.56789"), 1234.56789);
+  test_f(Str("1234.111111111111"), 1234.111111111111);
+  test_f(Str("0.111111111111"), 0.111111111111);
+  test_f(Str("0.111111111111e2"), 11.1111111111);
+  test_f(Str("0.111111111111e10"), 1111111111.11);
+  test_f(Str("0.111111111111e15"), 111111111111000);
+  test_f(Str("111111111111.111111111111"), 111111111111.111111111111);
+  test_f(Str("1.7e307"), 1.7e307);
+  test_f(Str("1.7e308"), 1.7e308);
+  test_f(Str("1.7e-307"), 1.7e-307);
+
+  test_ffail(Str(""));
+  test_ffail(Str(".1"));
+  test_ffail(Str("e1"));
+  test_ffail(Str("1..0"));
+  test_ffail(Str("1e1.0"));
+  test_ffail(Str("1.7e309"));
+  test_ffail(Str("1.7e-308"));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_allocator);
@@ -309,5 +355,6 @@ int main(void) {
   RUN_TEST(test_str);
   RUN_TEST(test_macros);
   RUN_TEST(test_parseint);
+  RUN_TEST(test_parsefloat);
   return UNITY_END();
 }

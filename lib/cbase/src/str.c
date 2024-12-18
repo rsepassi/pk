@@ -1,5 +1,9 @@
 #include "str.h"
 
+#include "log.h"
+
+#include <float.h>
+#include <math.h>
 #include <stdint.h>
 
 int int_from_str(int64_t* out, Str s) {
@@ -78,6 +82,98 @@ int int_from_str(int64_t* out, Str s) {
     *out = -(*out);
 
 #undef ADVANCE
+
+  return 0;
+}
+
+int float_from_str(double* out, Str s) {
+  *out = 0;
+
+  if (s.len == 0)
+    return 1;
+
+  Str ldec_str = {0};
+  {
+    size_t i = 0;
+    for (; i < s.len; ++i) {
+      uint8_t c = s.buf[i];
+      if (c == '.' || c == 'e' || c == 'E')
+        break;
+    }
+    if (i == 0)
+      return 1;
+
+    ldec_str = bytes_advance(&s, i);
+  }
+
+  Str    rdec_str    = {0};
+  size_t rdec_places = 0;
+  {
+    if (s.len && s.buf[0] == '.') {
+      bytes_advance(&s, 1);
+      size_t i = 0;
+      for (; i < s.len; ++i) {
+        uint8_t c = s.buf[i];
+        if (c == 'e' || c == 'E')
+          break;
+        if (c != '_')
+          rdec_places++;
+      }
+      rdec_str = bytes_advance(&s, i);
+    }
+  }
+
+  Str exp_str = {0};
+  {
+    if (s.len && (s.buf[0] == 'e' || s.buf[0] == 'E')) {
+      bytes_advance(&s, 1);
+      exp_str = s;
+    }
+  }
+
+  int64_t ldec_i;
+  if (int_from_str(&ldec_i, ldec_str))
+    return 1;
+  double ldec_d = (double)ldec_i;
+
+  int64_t rdec_i = 0;
+  if (rdec_str.len)
+    if (int_from_str(&rdec_i, rdec_str))
+      return 1;
+  if (rdec_places > DBL_MAX_10_EXP)
+    return 1;
+  if (rdec_i < 0)
+    return 1;
+  double rdec_d = (double)rdec_i / pow(10.0, (double)(rdec_places));
+
+  int64_t exp_i   = 0;
+  bool    neg_exp = false;
+  if (exp_str.len)
+    if (int_from_str(&exp_i, exp_str))
+      return 1;
+  if (exp_i < 0) {
+    if (exp_i < DBL_MIN_10_EXP)
+      return 1;
+    neg_exp = true;
+    exp_i   = -exp_i;
+  } else {
+    if (exp_i > DBL_MAX_10_EXP)
+      return 1;
+  }
+  double exp_d = pow(10.0, (double)exp_i);
+
+  *out = (ldec_d + rdec_d);
+  if (exp_i) {
+    if (neg_exp)
+      *out /= exp_d;
+    else
+      *out *= exp_d;
+  }
+
+  if (isinf(*out))
+    return 1;
+  if (isnan(*out))
+    return 1;
 
   return 0;
 }

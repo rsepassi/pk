@@ -70,3 +70,4 @@ static inline Bytes bytes_write(Bytes* dst, Bytes src) {
 }
 
 int int_from_str(int64_t* out, Str s);
+int float_from_str(double* out, Str s);

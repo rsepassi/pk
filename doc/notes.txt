@@ -1,3 +1,7 @@
+integer/float parsing
+* could be better about limits (underflow/overflow)
+* consider normalizing number before math (123.456e77 -> 1.23456e79)
+
 disco
 * ipv6
   test capability
