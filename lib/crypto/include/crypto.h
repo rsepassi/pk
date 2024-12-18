@@ -52,3 +52,6 @@ typedef struct {
   Allocator base;
 } CryptoAllocator;
 Allocator allocator_crypto(CryptoAllocator* base);
+
+int CryptoSignPK_parsehex(CryptoSignPK* pk, Bytes hex);
+int CryptoSignSK_parsehex(CryptoSignSK* sk, Bytes hex);
