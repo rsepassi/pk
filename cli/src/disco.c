@@ -415,7 +415,7 @@ typedef struct {
   struct sockaddr_storage upnp_storage;
   struct sockaddr*        upnp;
   bool                    upnp_present;
-  u16                     upnp_port;
+  int                     upnp_mapping_id;
   bool                    bob_present;
   u64                     bob_id;
   struct sockaddr_storage bob_storage;
@@ -424,6 +424,7 @@ typedef struct {
   bool   exit;
 
   struct sockaddr_storage holepunch_candidates[3];
+  int                     holepunch_candidates_len;
 } P2PCtx;
 
 void P2PCtx_bind(P2PCtx* ctx, u16 port) {
@@ -584,9 +585,10 @@ void P2PCtx_init(P2PCtx* ctx, const P2PCtxOptions* opts) {
 void free_handle_data(uv_handle_t* h) { free(h->data); }
 
 void P2PCtx_deinit(P2PCtx* ctx) {
-  // TODO: destroy plum mapping
+  ctx->exit = true;
   uv_udp_recv_stop(ctx->udp);
   CocoPool_deinit(&ctx->pool);
+  plum_destroy_mapping(ctx->upnp_mapping_id);
   plum_cleanup();
   ctx->udp->data = ctx->udp;
   uv_close((uv_handle_t*)ctx->udp, free_handle_data);
@@ -847,11 +849,129 @@ void P2PCtx_disco_channel(P2PCtx* ctx) {
 
     struct sockaddr* peer_sa = (void*)&ctx->holepunch_candidates[i];
     CHECK0(IpMsg_dump(peer_sa, ip));
-    LOG_SOCK("peer address", &peer_sa);
+    ctx->holepunch_candidates_len++;
+    LOG_SOCK("peer address", peer_sa);
   }
+  ctx->bob_id = peer_advert->sender;
 }
 
 void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
+  CHECK(ctx->bob_id);
+  CHECK(ctx->holepunch_candidates_len);
+  bool is_initiator = ctx->id < ctx->bob_id;
+
+  // Holepunch dance
+  //
+  // Alice is whoever has the lower id
+  //
+  // Alice sends Bob Sync
+  // Bob sends back Syncack
+  // Alice estimates rtt
+  // Alice sends GO
+  // Alice starts holepunch attempt after 1/2 rtt
+  // Bob starts holepunch attempt on receipt of GO
+  //
+  // Holepunch attempt
+  // Loop
+  //   Send a packet to each holepunch_candidate
+  //   Wait for incoming
+
+  if (is_initiator) {
+    LOG("starting disco dance as initiator");
+    uvco_sleep(ctx->loop, 100);
+
+    // Send Sync via relay
+    i64 send_time = stdtime_now_monotonic_ms();
+    {
+      u8    msg_buf[sizeof(DiscoRelayPost) + sizeof(DiscoSync)];
+      Bytes msg_bytes = BytesArray(msg_buf);
+
+      Bytes w           = msg_bytes;
+      Bytes relay_bytes = bytes_advance(&w, sizeof(DiscoRelayPost));
+      P2PMsg_declbuf(RelayPost, relay, relay_bytes);
+      relay->channel = ctx->channel;
+      relay->sender  = ctx->id;
+
+      Bytes sync_bytes = bytes_advance(&w, sizeof(DiscoSync));
+      P2PMsg_declbuf(Sync, sync, sync_bytes);
+      relay->sender = ctx->id;
+
+      uv_buf_t buf = UvBuf(msg_bytes);
+      LOG("send SYNC");
+      UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, ctx->disco));
+    }
+
+    // Wait for Syncack
+    UvcoUdpRecv* recv;
+    int          rc = P2PCtx_await(ctx, P2PMsgSyncAck, &recv, 1000);
+    CHECK0(rc);
+    // TODO: retry
+
+    i64 rtt = stdtime_now_monotonic_ms() - send_time;
+    LOG("received SYNCACK rtt=%" PRIi64 "ms", rtt);
+
+    // Send GO
+    {
+      u8    msg_buf[sizeof(DiscoRelayPost) + sizeof(DiscoGo)];
+      Bytes msg_bytes = BytesArray(msg_buf);
+
+      Bytes w           = msg_bytes;
+      Bytes relay_bytes = bytes_advance(&w, sizeof(DiscoRelayPost));
+      P2PMsg_declbuf(RelayPost, relay, relay_bytes);
+      relay->channel = ctx->channel;
+      relay->sender  = ctx->id;
+
+      Bytes go_bytes = bytes_advance(&w, sizeof(DiscoGo));
+      P2PMsg_declbuf(Go, go, go_bytes);
+      go->sender = ctx->id;
+
+      LOG("send GO");
+      uv_buf_t buf = UvBuf(msg_bytes);
+      UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, ctx->disco));
+    }
+
+    // Wait 1/2 rtt
+    uvco_sleep(ctx->loop, rtt / 2);
+  } else {
+    LOG("starting disco dance as responder");
+    // Wait for Sync via relay
+    UvcoUdpRecv* recv;
+    int          rc = P2PCtx_await(ctx, P2PMsgSync, &recv, 1000);
+    CHECK0(rc);
+    // TODO: retry
+
+    LOG("received SYNC");
+
+    // Send back Syncack via relay
+    {
+      u8    msg_buf[sizeof(DiscoRelayPost) + sizeof(DiscoSyncAck)];
+      Bytes msg_bytes = BytesArray(msg_buf);
+
+      Bytes w           = msg_bytes;
+      Bytes relay_bytes = bytes_advance(&w, sizeof(DiscoRelayPost));
+      P2PMsg_declbuf(RelayPost, relay, relay_bytes);
+      relay->channel = ctx->channel;
+      relay->sender  = ctx->id;
+
+      Bytes ack_bytes = bytes_advance(&w, sizeof(DiscoSyncAck));
+      P2PMsg_declbuf(SyncAck, ack, ack_bytes);
+      ack->sender = ctx->id;
+
+      LOG("send SYNCACK");
+      uv_buf_t buf = UvBuf(msg_bytes);
+      UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, ctx->disco));
+    }
+
+    // Wait for GO
+    rc = P2PCtx_await(ctx, P2PMsgGo, &recv, 1000);
+    CHECK0(rc);
+    // TODO: retry
+
+    LOG("received GO");
+  }
+
+  // GO Holepunch
+  LOG("GOGOGO");
   CHECK(false, "unimpl");
 }
 
@@ -1006,10 +1126,13 @@ void P2PCtx_upnp(P2PCtx* ctx) {
     CHECK0(uv_ip4_addr(pctx.external_host, pctx.external_port,
                        (struct sockaddr_in*)&ctx->upnp));
     LOG_SOCK("upnp", ctx->upnp);
-    ctx->upnp_present = true;
+    ctx->upnp_present    = true;
+    ctx->upnp_mapping_id = pctx.mapping_id;
+  } else {
+    plum_destroy_mapping(pctx.mapping_id);
   }
 
-  if (!ctx->upnp_port)
+  if (!ctx->upnp_present)
     LOG("no upnp");
 }
 
@@ -1025,11 +1148,12 @@ static int disco_p2p(int argc, char** argv) {
   CryptoSignPK bob          = {0};
   CryptoSignSK sk           = {0};
   bool         is_alice     = false;
+  bool         try_upnp     = false;
 
   struct optparse opts;
   optparse_init(&opts, argv);
   int option;
-  while ((option = optparse(&opts, "ip:c:d:b:a:s:")) != -1) {
+  while ((option = optparse(&opts, "ip:c:d:b:a:s:u")) != -1) {
     switch (option) {
       case 'i':
         // Initiator
@@ -1059,6 +1183,9 @@ static int disco_p2p(int argc, char** argv) {
       case 's':
         // SK
         CHECK0(CryptoSignSK_parsehex(&sk, Str0(opts.optarg)));
+        break;
+      case 'u':
+        try_upnp = true;
         break;
       case '?':
         LOGE("unrecognized option %c", option);
@@ -1095,23 +1222,19 @@ static int disco_p2p(int argc, char** argv) {
   // Contact Disco for public IP
   P2PCtx_disco_getip(&ctx);
   // Try establishing an external port
-  P2PCtx_upnp(&ctx);
-  (void)P2PCtx_upnp;
+  if (try_upnp)
+    P2PCtx_upnp(&ctx);
   // Establish a channel and send the info to peer
   P2PCtx_disco_channel(&ctx);
 
-  // P2PCtx_disco_dance(&ctx, 30, &connected);
-  // if (connected) {
-  //   LOG_SOCK("connected to peer at", ctx.bob);
-  // }
-
-  // If ctx.bob_present
-  //   Direct connection
-  // Else
-  //   Relay
+  P2PCtx_disco_dance(&ctx, 30, &connected);
+  if (connected) {
+    LOG_SOCK("connected to peer at", ctx.bob);
+  } else {
+    LOG("no connection!");
+  }
 
   LOG("exiting");
-  ctx.exit = true;
   P2PCtx_deinit(&ctx);
   return 0;
 }

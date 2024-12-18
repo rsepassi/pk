@@ -92,6 +92,21 @@ P2PMsg_DEF(       //
     u64 sender;   //
 );
 
+P2PMsg_DEF(      //
+    Sync,        //
+    u64 sender;  //
+);
+
+P2PMsg_DEF(      //
+    SyncAck,     //
+    u64 sender;  //
+);
+
+P2PMsg_DEF(      //
+    Go,          //
+    u64 sender;  //
+);
+
 typedef enum {
   P2PMsg_UNKNOWN,
   P2PMsgIpRequest,
@@ -105,6 +120,9 @@ typedef enum {
   P2PMsgRelayPost,
   P2PMsgAdvert,
   P2PMsgAdvertAck,
+  P2PMsgSync,
+  P2PMsgSyncAck,
+  P2PMsgGo,
   P2PMsg_COUNT,
   P2PMsg_RESERVED = 255,
 } P2PMsgType;
@@ -122,6 +140,9 @@ const char* P2PMsgType_strs[P2PMsg_COUNT] = {
     "RELAY",         //
     "ADVERT",        //
     "ADVERTACK",     //
+    "SYNC",          //
+    "SYNCACK",       //
+    "GO",            //
 };
 
 size_t P2PMsg_SZ[P2PMsg_COUNT] = {
@@ -137,6 +158,9 @@ size_t P2PMsg_SZ[P2PMsg_COUNT] = {
     sizeof(DiscoRelayPost),     //
     sizeof(DiscoAdvert),        //
     sizeof(DiscoAdvertAck),     //
+    sizeof(DiscoSync),          //
+    sizeof(DiscoSyncAck),       //
+    sizeof(DiscoGo),            //
 };
 
 static inline const char* P2PMsgType_str(P2PMsgType t) {
