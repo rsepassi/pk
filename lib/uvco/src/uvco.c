@@ -432,3 +432,10 @@ cleanup:
 
   return rc;
 }
+
+u16 uvco_udp_port(uv_udp_t* udp) {
+  struct sockaddr_storage me;
+  int                     me_len = sizeof(me);
+  UVCHECK(uv_udp_getsockname(udp, (struct sockaddr*)&me, &me_len));
+  return stdnet_getport((struct sockaddr*)&me);
+}

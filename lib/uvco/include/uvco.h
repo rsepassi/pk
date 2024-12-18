@@ -36,11 +36,7 @@ int  uvco_fs_read(uv_loop_t* loop, uv_file fd, Bytes* contents, usize offset);
 void uvco_fs_close(uv_loop_t* loop, uv_file fd);
 int  uvco_fs_writefull(uv_loop_t* loop, const char* path, Bytes contents);
 
-// UDP send
-int uvco_udp_send(uv_udp_t* handle, const uv_buf_t bufs[], unsigned int nbufs,
-                  const struct sockaddr* addr);
-
-// UDP recv
+// UDP
 typedef struct {
   uv_udp_t*              udp;
   uv_buf_t               buf;
@@ -48,10 +44,14 @@ typedef struct {
   ssize_t                nread;
   CocoWait               wait;
 } UvcoUdpRecv;
+u16 uvco_udp_port(uv_udp_t* udp);
+int uvco_udp_send(uv_udp_t* handle, const uv_buf_t bufs[], unsigned int nbufs,
+                  const struct sockaddr* addr);
 int uvco_udp_recv_start(UvcoUdpRecv* recv, uv_udp_t* handle);
 int uvco_udp_recv_next(UvcoUdpRecv* recv);
 int uvco_udp_recv_next2(UvcoUdpRecv* recv, usize timeout_ms);
 
+// Main
 typedef struct {
   uv_loop_t* loop;
   void*      data;
