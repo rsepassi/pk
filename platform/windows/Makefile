@@ -1,4 +1,4 @@
-include $(ROOTDIR)/scripts/bdir.mk
+include $(ROOTDIR)/mk/bdir.mk
 
 URL := https://github.com/mstorsjo/llvm-mingw/releases/download/20241119/llvm-mingw-20241119-ucrt-ubuntu-20.04-x86_64.tar.xz
 HASH := 5b2173bf32cd9ba06d2f8ee8ad5268adffe7e53cbf35f5a5ccff3e1b3869b468

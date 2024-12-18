@@ -1,4 +1,4 @@
-include $(ROOTDIR)/scripts/bdir.mk
+include $(ROOTDIR)/mk/bdir.mk
 
 URL := http://ftp.freebsd.org/pub/FreeBSD/releases/amd64/14.2-RELEASE/base.txz
 HASH := e3971a3d4f36ed1ac67d2e7a5501726de79dd3695aa76bfad2a4ebe91a88a134

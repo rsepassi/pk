@@ -6,6 +6,6 @@ ifdef CORO_VLOG
 LOCAL_CFLAGS += -DMCO_VLOG_ON
 endif
 
-include $(ROOTDIR)/scripts/cc.mk
-include $(ROOTDIR)/scripts/deps.mk
-include $(ROOTDIR)/scripts/clean.mk
+include $(ROOTDIR)/mk/cc.mk
+include $(ROOTDIR)/mk/deps.mk
+include $(ROOTDIR)/mk/clean.mk

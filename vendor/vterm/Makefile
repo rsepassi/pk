@@ -5,6 +5,6 @@ LOCAL_CFLAGS += -Wno-unused-parameter \
 								-Wno-implicit-fallthrough \
 								-Wno-empty-body
 
-include $(ROOTDIR)/scripts/cc.mk
-include $(ROOTDIR)/scripts/deps.mk
-include $(ROOTDIR)/scripts/clean.mk
+include $(ROOTDIR)/mk/cc.mk
+include $(ROOTDIR)/mk/deps.mk
+include $(ROOTDIR)/mk/clean.mk

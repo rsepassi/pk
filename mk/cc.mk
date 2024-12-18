@@ -1,4 +1,4 @@
-include $(ROOTDIR)/scripts/bdir.mk
+include $(ROOTDIR)/mk/bdir.mk
 
 # Args
 LIBNAME ?= $(notdir $(CURDIR))
@@ -19,7 +19,7 @@ MK_DEPS := \
 	$(HDRS) \
 	$(DEPS_OK) \
 	Makefile \
-	$(ROOTDIR)/scripts/cc.mk
+	$(ROOTDIR)/mk/cc.mk
 CC_CFLAGS := -Iinclude $(CFLAGS) `need --cflags $(DEPS)` $(LOCAL_CFLAGS)
 
 .PHONY: lib

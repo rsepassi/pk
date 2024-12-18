@@ -1,4 +1,4 @@
-include $(ROOTDIR)/scripts/bdir.mk
+include $(ROOTDIR)/mk/bdir.mk
 
 DEPS_PATHS := $(wildcard $(ROOTDIR)/lib/*) \
 							$(wildcard $(ROOTDIR)/vendor/*)
@@ -15,8 +15,8 @@ endif
 .PHONY: default
 default: cli
 
-include $(ROOTDIR)/scripts/cc.mk
-include $(ROOTDIR)/scripts/ccld.mk
-include $(ROOTDIR)/scripts/deps.mk
-include $(ROOTDIR)/scripts/clean.mk
-include $(ROOTDIR)/scripts/notest.mk
+include $(ROOTDIR)/mk/cc.mk
+include $(ROOTDIR)/mk/ccld.mk
+include $(ROOTDIR)/mk/deps.mk
+include $(ROOTDIR)/mk/clean.mk
+include $(ROOTDIR)/mk/notest.mk

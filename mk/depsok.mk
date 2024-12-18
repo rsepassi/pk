@@ -1,4 +1,4 @@
-include $(ROOTDIR)/scripts/bdir.mk
+include $(ROOTDIR)/mk/bdir.mk
 
 ifdef DEPS
 DEPS_OK := $(BDIR)/.deps.ok

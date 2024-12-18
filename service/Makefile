@@ -1,4 +1,4 @@
-include $(ROOTDIR)/scripts/bdir.mk
+include $(ROOTDIR)/mk/bdir.mk
 
 DO_RESERVED_IP := 24.199.69.99
 DO_PEER2_IMG_ID := 172089670

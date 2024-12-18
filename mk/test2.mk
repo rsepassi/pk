@@ -1,4 +1,4 @@
-include $(ROOTDIR)/scripts/bdir.mk
+include $(ROOTDIR)/mk/bdir.mk
 
 # Args
 # * TEST_DEPS=
@@ -19,7 +19,7 @@ $(BDIR)/test/%.ok: $(BDIR)/test/%$(EXE)
 	$(EXEC_PREFIX) $< && touch $@
 
 # compile a test executable
-$(BDIR)/test/%$(EXE): test/%.c $(ROOTDIR)/scripts/test.mk $(BDIR)/.build
+$(BDIR)/test/%$(EXE): test/%.c $(ROOTDIR)/mk/test.mk $(BDIR)/.build
 	mkdir -p $(dir $@)
 	$(CCLD) -o $@.tmp $< \
 		$(CFLAGS) \

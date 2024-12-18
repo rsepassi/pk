@@ -1,7 +1,7 @@
 # ==============================================================================
 # VARIABLES
 # ==============================================================================
-include scripts/target.mk
+include mk/target.mk
 
 export \
 	TARGET TARGET_OS TARGET_ARCH HOST HOST_OS HOST_ARCH \
@@ -110,4 +110,4 @@ site:
 service:
 	$(MAKE) -C service $(T)
 
-include scripts/platform.mk
+include mk/platform.mk

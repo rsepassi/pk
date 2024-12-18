@@ -98,11 +98,11 @@ else ifeq ($(TARGET_OS), freebsd)
     -DHAVE_PTHREAD_PRIO_INHERIT=1
 endif
 
-include $(ROOTDIR)/scripts/bdir.mk
+include $(ROOTDIR)/mk/bdir.mk
 $(BDIR)/.build: $(BDIR)/libuv.a $(wildcard *.pc)
 	[ $(TARGET_OS) != "windows" ] || cp uv.windows.pc $(BDIR)/uv.pc
 	touch $@
 
-include $(ROOTDIR)/scripts/cc.mk
-include $(ROOTDIR)/scripts/deps.mk
-include $(ROOTDIR)/scripts/clean.mk
+include $(ROOTDIR)/mk/cc.mk
+include $(ROOTDIR)/mk/deps.mk
+include $(ROOTDIR)/mk/clean.mk

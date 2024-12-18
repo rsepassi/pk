@@ -1,6 +1,6 @@
 DEPS := lib/cbase lib/crypto vendor/sodium vendor/tai
 
-include $(ROOTDIR)/scripts/cc.mk
-include $(ROOTDIR)/scripts/deps.mk
-include $(ROOTDIR)/scripts/clean.mk
-include $(ROOTDIR)/scripts/test.mk
+include $(ROOTDIR)/mk/cc.mk
+include $(ROOTDIR)/mk/deps.mk
+include $(ROOTDIR)/mk/clean.mk
+include $(ROOTDIR)/mk/test.mk

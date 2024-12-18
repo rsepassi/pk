@@ -37,14 +37,14 @@
 # 	A: .deps.ok ...
 # 	  .deps.ok modified, rebuild
 # 	  touch .build
-include $(ROOTDIR)/scripts/bdir.mk
+include $(ROOTDIR)/mk/bdir.mk
 
 DEPS_OK := $(BDIR)/.deps.ok
 DEPS_BUILDS := $(addprefix $(BROOT)/, $(addsuffix /.build, $(DEPS_ARG)))
 
 .PHONY: deps deps-check $(DEPS_ARG)
 deps: $(DEPS_ARG)
-	$(MAKE) -f $(ROOTDIR)/scripts/deps2.mk deps-check
+	$(MAKE) -f $(ROOTDIR)/mk/deps2.mk deps-check
 deps-check: $(DEPS_OK)
 
 $(DEPS_OK): $(DEPS_BUILDS)
