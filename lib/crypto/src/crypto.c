@@ -26,8 +26,7 @@ static int parsehex(Bytes out, Bytes hex) {
   if (hex.len != out.len * 2)
     return 1;
   usize binlen;
-  if (sodium_hex2bin(out.buf, out.len, (char*)hex.buf, hex.len, 0, &binlen,
-                     0))
+  if (sodium_hex2bin(out.buf, out.len, (char*)hex.buf, hex.len, 0, &binlen, 0))
     return 1;
   CHECK(binlen == out.len);
   return 0;
