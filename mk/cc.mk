@@ -1,4 +1,5 @@
 include $(ROOTDIR)/mk/bdir.mk
+include $(ROOTDIR)/mk/depsok.mk
 
 # Args
 LIBNAME ?= $(notdir $(CURDIR))
@@ -10,10 +11,6 @@ OBJS := $(OBJS:.S=.$(O))
 OBJS := $(addprefix $(BDIR)/, $(OBJS))
 LIB := $(BDIR)/lib$(LIBNAME).a
 CLANGDS := $(SRCS:.c=.clangd)
-
-ifdef DEPS
-DEPS_OK := $(BDIR)/.deps.ok
-endif
 
 MK_DEPS := \
 	$(HDRS) \

@@ -39,15 +39,15 @@
 # 	  touch .build
 include $(ROOTDIR)/mk/bdir.mk
 
-DEPS_OK := $(BDIR)/.deps.ok
+DEPS_OK_ARG ?= $(BDIR)/.deps.ok
 DEPS_BUILDS := $(addprefix $(BROOT)/, $(addsuffix /.build, $(DEPS_ARG)))
 
 .PHONY: deps deps-check $(DEPS_ARG)
 deps: $(DEPS_ARG)
 	$(MAKE) -f $(ROOTDIR)/mk/deps2.mk deps-check
-deps-check: $(DEPS_OK)
+deps-check: $(DEPS_OK_ARG)
 
-$(DEPS_OK): $(DEPS_BUILDS)
+$(DEPS_OK_ARG): $(DEPS_BUILDS)
 	mkdir -p $(dir $@)
 	touch $@
 

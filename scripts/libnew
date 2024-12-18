@@ -28,6 +28,7 @@ EOF
 cat <<EOF > "test/${name}_test.c"
 #include "$name.h"
 #include "log.h"
+#include "stdtypes.h"
 #include "unity.h"
 
 void test_$name(void) {
@@ -48,10 +49,10 @@ EOF
 cat <<EOF > Makefile
 DEPS := lib/cbase
 
-include \$(ROOTDIR)/scripts/cc.mk
-include \$(ROOTDIR)/scripts/deps.mk
-include \$(ROOTDIR)/scripts/clean.mk
-include \$(ROOTDIR)/scripts/test.mk
+include \$(ROOTDIR)/mk/cc.mk
+include \$(ROOTDIR)/mk/deps.mk
+include \$(ROOTDIR)/mk/clean.mk
+include \$(ROOTDIR)/mk/test.mk
 EOF
 
 # pkgconf

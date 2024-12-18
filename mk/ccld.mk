@@ -14,3 +14,4 @@ $(BINPATH): $(OBJS) $(HDRS) Makefile $(DEPS_OK)
 		$(PLATFORM_LDFLAGS) \
 		-lc
 	mv $@.tmp $@
+	touch $(BDIR)/.build

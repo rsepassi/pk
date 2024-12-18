@@ -90,7 +90,7 @@ $(ALL_LIBS): platform
 	$(MAKE) -C $@ deps
 	$(MAKE) -C $@ $(T)
 	rm -f $(BROOT_ALL)/out
-	ln -s $(BROOT)/$@ $(BROOT_ALL)/out
+	if [ -d $(BROOT)/$@ ]; then ln -s $(BROOT)/$@ $(BROOT_ALL)/out; fi
 
 $(ALL_LIBS_NOLINK): platform
 	$(MAKE) -C $(@:%.nolink=%) deps
