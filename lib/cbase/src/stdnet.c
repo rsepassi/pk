@@ -14,7 +14,7 @@
 #define IPv6_SZ       STDNET_INET6_ADDRLEN
 #define LOCALHOST_STR "localhost"
 
-int stdnet_port_parse(u16* port, Bytes port_str) {
+int stdnet_port_parse(u16* port, Str port_str) {
   i64 out;
   if (int_from_str(&out, port_str))
     return 1;

@@ -26,12 +26,6 @@
 
 extern uv_loop_t* loop;
 
-static u16 parse_port(const char* port_str) {
-  int iport = atoi(port_str);
-  CHECK(iport <= UINT16_MAX);
-  return (u16)iport;
-}
-
 static void log_local_interfaces() {
   uv_interface_address_t* addrs;
   int                     count;
@@ -367,7 +361,7 @@ static int disco_server(int argc, char** argv) {
   while ((option = optparse(&opts, "p:")) != -1) {
     switch (option) {
       case 'p':
-        port = parse_port(opts.optarg);
+        CHECK0(stdnet_port_parse(&port, Str0(opts.optarg)));
         break;
       case '?':
         LOGE("unrecognized option %c", option);
@@ -1043,7 +1037,7 @@ static int disco_p2p(int argc, char** argv) {
         break;
       case 'p':
         // Port
-        port = parse_port(opts.optarg);
+        CHECK0(stdnet_port_parse(&port, Str0(opts.optarg)));
         break;
       case 'c':
         // Channel
