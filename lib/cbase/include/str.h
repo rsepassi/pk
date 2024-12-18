@@ -23,9 +23,9 @@ typedef Bytes Str;
 #define BytesArray(arr) ((Bytes){sizeof(arr), (uint8_t*)(arr)})
 #define BytesObj(obj)   ((Bytes){sizeof(obj), (uint8_t*)&(obj)})
 
-#define PRIusz      "lu"
-#define PRIBytes    ".*s"
-#define BytesPRI(b) (int)(b).len, (b).buf
+#define PRIusz    "lu"
+#define PRIStr    ".*s"
+#define StrPRI(s) (int)(s).len, (s).buf
 
 static inline bool str_eq(Str a, Str b) {
   if (a.len != b.len)
@@ -68,3 +68,5 @@ static inline Bytes bytes_write(Bytes* dst, Bytes src) {
   bytes_copy(&out, src);
   return out;
 }
+
+int int_from_str(int64_t* out, Str s);

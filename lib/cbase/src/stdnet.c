@@ -1,6 +1,7 @@
 #include "stdnet.h"
 
 #include "log.h"
+#include "stdtypes.h"
 
 #ifdef _WIN32
 #include <ws2tcpip.h>
@@ -12,6 +13,18 @@
 #define IPv4_SZ       4
 #define IPv6_SZ       STDNET_INET6_ADDRLEN
 #define LOCALHOST_STR "localhost"
+
+int stdnet_port_parse(u16* port, Bytes port_str) {
+  i64 out;
+  if (int_from_str(&out, port_str))
+    return 1;
+
+  if (out <= 0 || out > UINT16_MAX)
+    return 1;
+
+  *port = (u16)out;
+  return 0;
+}
 
 int IpStr_fromstr(IpStrStorage* out, const char* ip) {
   size_t ip_len = strlen(ip);

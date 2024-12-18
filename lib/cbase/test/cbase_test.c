@@ -263,6 +263,43 @@ void test_containers(void) {
   }
 }
 
+void test_i(Str s, i64 x) {
+  i64 out;
+  CHECK0(int_from_str(&out, s));
+  CHECK(out == x, "got %" PRIi64 " expected %" PRIi64, out, x);
+}
+
+void test_ifail(Str s) {
+  i64 out;
+  CHECK(int_from_str(&out, s) != 0, "expected to fail but passed: %" PRIStr,
+        StrPRI(s));
+}
+
+void test_parseint(void) {
+  test_i(Str("1"), 1);
+  test_i(Str("-1"), -1);
+  test_i(Str("+1"), 1);
+  test_i(Str("+0123"), 123);
+  test_i(Str("0000875432"), 875432);
+  test_i(Str("0o667"), 439);
+  test_i(Str("0b11001111"), 207);
+  test_i(Str("0x00a4f9a10"), 172988944);
+  test_i(Str("-0x00a4f9a10"), -172988944);
+  test_i(Str("+0x00a4f9a10"), 172988944);
+  test_i(Str("+0x00a4_f9a1_0888"), 708562716808);
+  test_i(Str("+0x00A4_F9A1_0888"), 708562716808);
+  test_i(Str("+0x00a4F9A10888"), 708562716808);
+  test_i(Str("222_555_777"), 222555777);
+
+  test_ifail(Str(""));
+  test_ifail(Str("+"));
+  test_ifail(Str("-"));
+  test_ifail(Str("0x"));
+  test_ifail(Str("zzz"));
+  test_ifail(Str("123zzz"));
+  test_ifail(Str("123+"));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_allocator);
@@ -271,5 +308,6 @@ int main(void) {
   RUN_TEST(test_log);
   RUN_TEST(test_str);
   RUN_TEST(test_macros);
+  RUN_TEST(test_parseint);
   return UNITY_END();
 }
