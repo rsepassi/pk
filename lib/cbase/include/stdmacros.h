@@ -43,7 +43,7 @@
 #define IS_EVEN(x) (!IS_ODD((x)))
 #endif
 
-#ifndef BIT
+#ifndef BITSET
 #define BIT(x)          (1 << (x))
 #define BITGET(x, i)    (((x) >> (i)) & 1)
 #define BITSET(x, i)    ((x) | (__typeof__(x))(1 << (i)))
