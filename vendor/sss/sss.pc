@@ -1,0 +1,6 @@
+Name: sss
+Description: shamir secret shares
+Version: 16c3fdb
+Cflags: -I${src_prefix}/include
+Libs: -L${build_prefix} -lsss
+Requirez: vendor/sodium

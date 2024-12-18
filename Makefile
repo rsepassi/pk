@@ -52,7 +52,7 @@ CFLAGS += \
 LDFLAGS += -flto
 endif
 
-TEST_DIRS := $(wildcard lib/*) vendor/base58 vendor/qrcodegen
+TEST_DIRS := $(wildcard lib/*) vendor/base58 vendor/qrcodegen vendor/sss
 ALL_LIBS := cli $(wildcard lib/*) $(wildcard vendor/*)
 ALL_LIBS_NOLINK := $(addsuffix .nolink, $(ALL_LIBS))
 ALL_TESTS := $(addsuffix /test, $(TEST_DIRS))
