@@ -107,7 +107,7 @@ extern uv_loop_t* loop;
 //   Alice and Bob both have a short code
 
 static void IpStr_log(const IpStr* s, Str tag) {
-  LOG("%" PRIBytes "=%" PRIIpStr, BytesPRI(tag), IpStrPRI(*s));
+  LOG("%" PRIStr "=%" PRIIpStr, StrPRI(tag), IpStrPRI(*s));
 }
 
 static void handle_message(UvcoUdpRecv* recv) {
