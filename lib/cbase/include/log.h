@@ -3,15 +3,17 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
-#define __FILENAME__                                                           \
+#ifndef __FILE_NAME__
+#include <string.h>
+#define __FILE_NAME__                                                          \
   (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
+#endif
 
 #define LOG_PREFIX_(level, fd)                                                 \
   do {                                                                         \
     fprintf(fd, "%s[%s %8s:%4d %-16s] ", #level, log_get_current_time(),       \
-            __FILENAME__, __LINE__, __func__);                                 \
+            __FILE_NAME__, __LINE__, __func__);                                \
   } while (0)
 #define LOG_(level, fd, fmt, ...)                                              \
   do {                                                                         \

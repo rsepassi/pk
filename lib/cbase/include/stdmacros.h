@@ -78,7 +78,8 @@ static inline uint64_t SWAP_U64(uint64_t val) {
 #error "Cannot determine endianness"
 #endif
 
-#define UNUSED(x) (void)x
+#define UNUSED(x)   (void)x
+#define MUST_USE(T) T __attribute__((warn_unused_result))
 
 #define ZERO(x)                                                                \
   do {                                                                         \
