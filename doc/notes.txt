@@ -133,5 +133,15 @@ service
   2001:19f0:8000:1ac8:5400:05ff:fe35:fa46
 
 
+clang builtins
+* __builtin_cpu_supports
+* __builtin_offsetof
+* __builtin_bitreverse, __builtin_rotateleft, __builtin_rotateright
+* __builtin_popcountg, __builtin_clzg, __builtin_ctzg
+* __builtin_unreachable
+* __builtin_expect, __builtin_expect_with_probability, __builtin_unpredictable
+* __builtin_prefetch
+
+
 
 https://magicant.github.io/yash/doc/
