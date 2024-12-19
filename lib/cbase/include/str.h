@@ -49,6 +49,10 @@ static inline void bytes_copy(Bytes* dst, Bytes src) {
   memcpy(dst->buf, src.buf, src.len);
 }
 
+static inline Bytes bytes_peek(Bytes in, size_t step) {
+  return Bytes(in.buf, step);
+}
+
 static inline Bytes bytes_advance(Bytes* in, size_t step) {
   Bytes out = *in;
   if (step >= in->len) {
