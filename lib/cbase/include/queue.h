@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdlib.h>
+
 typedef struct Node {
   struct Node* next;
 } Node;
@@ -21,7 +23,7 @@ typedef struct {
 
 static inline void q_enq(Queue* q, Node* x) {
   x->next = 0;
-  if (q->head == NULL) {
+  if (q->head == 0) {
     q->head = x;
     q->tail = x;
   } else if (q->head == q->tail) {
@@ -70,8 +72,9 @@ static inline size_t q_len(Queue* q) {
   do {                                                                         \
     Node* __tail = (q)->tail;                                                  \
     while (((nvar) = q_deq((q)))) {                                            \
+      bool __is_tail = ((nvar) == __tail);                                     \
       code;                                                                    \
-      if ((nvar) == __tail)                                                    \
+      if (__is_tail)                                                           \
         break;                                                                 \
     }                                                                          \
   } while (0)
@@ -79,7 +82,7 @@ static inline size_t q_len(Queue* q) {
 static inline void q2_enq(Queue2* q, Node2* x) {
   x->next = 0;
   x->prev = 0;
-  if (q->head == NULL) {
+  if (q->head == 0) {
     q->head = x;
     q->tail = x;
   } else if (q->head == q->tail) {
@@ -162,8 +165,9 @@ static inline void q2_del(Queue2* q, Node2* n) {
   do {                                                                         \
     Node2* __tail = (q)->tail;                                                 \
     while (((nvar) = q2_deq((q)))) {                                           \
+      bool __is_tail = ((nvar) == __tail);                                     \
       code;                                                                    \
-      if ((nvar) == __tail)                                                    \
+      if (__is_tail)                                                           \
         break;                                                                 \
     }                                                                          \
   } while (0)
