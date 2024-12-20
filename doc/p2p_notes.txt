@@ -1,0 +1,56 @@
+Next steps
+* Separate Disco server multicast from relay
+  Channel should have 1 recipient
+  Multicast can have multiple
+* Rm brittle timers
+* Test with public ipv4 server
+* ipv6
+
+We have a shared channel id (symmetric)
+  Collide on local multicast
+    Directly contact locally
+  Collide on relay multicast
+    Directly contact on relay
+    Holepunch
+
+We have each other's identities (asymmetric)
+  Directly contact on local multicast
+    Directly contact locally
+  Directly contact on relay
+    Holepunch
+
+Noise Patterns
+
+Initiator static key:
+N = No static key for initiator
+K = Static key for initiator Known to responder
+X = Static key for initiator Xmitted ("transmitted") to responder
+I = Static key for initiator Immediately transmitted to responder, despite reduced or absent identity hiding
+
+Responder static key:
+N = No static key for responder
+K = Static key for responder Known to initiator
+X = Static key for responder Xmitted ("transmitted") to initiator
+
+Noise Pipe
+XX:  
+  -> e
+  <- e, ee, s, es
+  -> s, se
+
+IK:                   
+  <- s                         
+  ...
+  -> e, es, s, ss          
+  <- e, ee, se
+
+XXfallback:                   
+  -> e
+  ...
+  <- e, ee, s, es
+  -> s, se
+The XX pattern is used for a full handshake if the parties haven't communicated before, after which Alice can cache Bob's static public key.
+
+The IK pattern is used for a zero-RTT handshake.
+
+The XXfallback pattern is used for a switch handshake if Bob fails to decrypt an initial IK message (perhaps due to having changed his static key).
