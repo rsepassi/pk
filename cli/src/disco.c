@@ -235,8 +235,10 @@ static void disco_relay_init(void* varg) {
   DiscoDispatchArg arg = *(DiscoDispatchArg*)varg;
 
   UvcoUdpRecv* recv = arg.recv;
-  if (!P2PMsg_valid(UvBytes(recv->buf), P2PMsgRelayInit))
+  if (!P2PMsg_valid(UvBytes(recv->buf), P2PMsgRelayInit)) {
+    LOG("invalid msg");
     return;
+  }
 
   DiscoRelayInit* init_msg = (void*)recv->buf.base;
 
@@ -245,6 +247,7 @@ static void disco_relay_init(void* varg) {
   HashmapIter   it = hashmap_put(&arg.ctx->channels, &init_msg->channel, &ret);
   switch (ret) {
     case HashmapStatus_ERR:
+      CHECK(false);
       return;
     default:
       break;
@@ -253,16 +256,14 @@ static void disco_relay_init(void* varg) {
   DiscoChannel* chan    = hashmap_val(&arg.ctx->channels, it);
   bool          present = ret == HashmapStatus_Present;
   if (present) {
-    if (chan->alice_id == init_msg->sender)
-      return;
-    if (chan->bob_present)
-      return;
-    // Bob joining
-    chan->bob         = *(struct sockaddr_storage*)recv->addr;
-    chan->bob_id      = init_msg->sender;
-    chan->bob_present = true;
-    LOG("bob joined channel %" PRIu64, chan->id);
-    LOG_SOCK("bob", recv->addr);
+    if (chan->alice_id != init_msg->sender && !chan->bob_present) {
+      // Bob joining
+      chan->bob         = *(struct sockaddr_storage*)recv->addr;
+      chan->bob_id      = init_msg->sender;
+      chan->bob_present = true;
+      LOG("bob joined channel %" PRIu64, chan->id);
+      LOG_SOCK("bob", recv->addr);
+    }
   } else {
     // New channel
     ZERO(chan);
@@ -274,11 +275,13 @@ static void disco_relay_init(void* varg) {
     LOG_SOCK("alice", recv->addr);
   }
 
-  // Send back an ack
-  P2PMsg_decl(ack, RelayInitAck);
-  ack.channel  = chan->id;
-  uv_buf_t buf = UvBuf(BytesObj(ack));
-  CHECK0(uvco_udp_send(&arg.ctx->udp, &buf, 1, recv->addr));
+  if (init_msg->sender == chan->alice_id || init_msg->sender == chan->bob_id) {
+    // Send back an ack
+    P2PMsg_decl(ack, RelayInitAck);
+    ack.channel  = chan->id;
+    uv_buf_t buf = UvBuf(BytesObj(ack));
+    CHECK0(uvco_udp_send(&arg.ctx->udp, &buf, 1, recv->addr));
+  }
 }
 
 static void disco_relay_post(void* varg) {
@@ -389,6 +392,7 @@ static int disco_server(int argc, char** argv) {
 }
 
 typedef struct {
+  u64        id;
   Allocator  al;
   uv_loop_t* loop;
   u16        port;
@@ -560,8 +564,8 @@ void P2PCtx_init(P2PCtx* ctx, const P2PCtxOptions* opts) {
   ctx->upnp      = (void*)&ctx->upnp_storage;
   ctx->bob       = (void*)&ctx->bob_storage;
   ctx->loop      = opts->loop;
+  ctx->id        = opts->id;
 
-  randombytes_buf(&ctx->id, sizeof(ctx->id));
   LOG("id=%" PRIu64, ctx->id);
 
   CHECK0(CocoPool_init(&ctx->pool, 16, 1024 * 64, ctx->al, Str("P2PCtx")));
@@ -1013,6 +1017,7 @@ void P2PCtx_disco_dance(P2PCtx* ctx, usize timeout_secs, bool* connected) {
         done.sender   = ctx->id;
         done.receiver = pong->sender;
 
+        CHECK0(stdnet_sockaddr_cp(ctx->bob, recv->addr));
         uv_buf_t buf = UvBuf(BytesObj(done));
         UVCHECK(uvco_udp_send(ctx->udp, &buf, 1, ctx->bob));
 
@@ -1249,11 +1254,10 @@ static int disco_p2p(int argc, char** argv) {
     }
   }
 
-  (void)is_alice;
-
   Allocator al = allocatormi_allocator();
 
   P2PCtxOptions p2p_opts = {
+      .id    = is_alice ? 77 : 88,
       .loop  = loop,
       .port  = port,
       .al    = al,

@@ -1,9 +1,11 @@
 include $(ROOTDIR)/mk/bdir.mk
 
+DO_TOKEN ?= xxxxxxxx
+
 DO_RESERVED_IP := 24.199.69.99
 DO_PEER2_IMG_ID := 172089670
 DO_PEER2_VPC_ID := a69c789c-5bab-4057-a852-652a875e53fa
-DO_PEER2_DID := 461475209
+DO_PEER2_DROPLETID := 461475209
 DO_PEER2_SSHQUIC_FIREWALL_ID := 5c2c4b60-305e-443d-98f4-05df10a62e03
 ISTUDIOS_SSH_MD5 := ec:25:0d:e9:e2:85:95:0e:ed:4c:b8:39:2f:b4:03:91
 DO_CURL := curl -s \
@@ -11,7 +13,7 @@ DO_CURL := curl -s \
 		-H "Authorization: Bearer $(DO_TOKEN)"
 
 TAG ?= make
-DID ?= $(DO_PEER2_DID)
+DID ?= $(DO_PEER2_DROPLETID)
 IMG ?= $(BDIR)/vmimage/peer2.qcow2
 SRC ?= $(BROOT_ALL)/x86_64-linux-musl/cli/bin/cli
 DST ?= /home/peer2/
