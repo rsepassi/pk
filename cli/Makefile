@@ -1,8 +1,23 @@
 include $(ROOTDIR)/mk/bdir.mk
 
-DEPS_PATHS := $(wildcard $(ROOTDIR)/lib/*) \
-							$(wildcard $(ROOTDIR)/vendor/*)
-DEPS := $(DEPS_PATHS:$(ROOTDIR)/%=%)
+DEPS_PATHS := $(wildcard $(ROOTDIR)/lib/*)
+DEPS := \
+	$(DEPS_PATHS:$(ROOTDIR)/%=%) \
+	vendor/base58 \
+	vendor/fastrange \
+	vendor/lmdb \
+	vendor/mimalloc \
+	vendor/minicoro \
+	vendor/ngtcp2 \
+	vendor/optparse \
+	vendor/plum \
+	vendor/qrcodegen \
+	vendor/sodium \
+	vendor/sss \
+	vendor/tai \
+	vendor/unity \
+	vendor/uv \
+	vendor/vterm
 
 LOCAL_CFLAGS += -Wno-unused-parameter
 

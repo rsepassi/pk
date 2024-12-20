@@ -2046,5 +2046,5 @@ int main(int argc, char** argv) {
   CocoMainOpts opts = {0};
   opts.stack_size   = 1 << 22;  // 4 MiB
   opts.fn           = main_coro;
-  CHECK0(uvco_main(argc, argv, opts));
+  return uvco_main(argc, argv, opts);
 }
