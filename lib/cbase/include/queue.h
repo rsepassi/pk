@@ -66,6 +66,19 @@ static inline size_t q_len(Queue* q) {
   return i;
 }
 
+#define q_foreach(q, nvar, field, code)                                        \
+  do {                                                                         \
+    Node* __tail = (q)->tail;                                                  \
+    Node* __cur  = (q)->head;                                                  \
+    while (1) {                                                                \
+      (nvar) = CONTAINER_OF(__cur, __typeof__(*nvar), field);                  \
+      code;                                                                    \
+      if (__cur == __tail)                                                     \
+        break;                                                                 \
+      __cur = __cur->next;                                                     \
+    }                                                                          \
+  } while (0)
+
 // Drain the queue, running code for each node.
 // code can re-enqueue, the drain will only run through the original tail.
 #define q_drain(q, nvar, code)                                                 \
