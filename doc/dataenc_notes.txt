@@ -1,0 +1,39 @@
+Formats
+* ASN.1 BER
+* SBE
+* Capn Proto
+* FlatBuffers
+* Protocol Buffers
+* Thrift
+* Avro
+* Bebop
+* Colfer
+
+Features to consider
+* Versioning, change tolerance forwards/backwards
+* Little-endian, aligned
+* Zero-work decode
+* Zero allocation
+* Comptime type-level functions/generics
+* Constant literal values
+* In-memory C, C ABI, B-Tree Page, UDP packet
+* varint https://dcreager.net/2021/03/a-better-varint/
+* Zero-cost if could be represented as a C struct
+* Multiple gen backends for different purposes
+
+FlatBuffers notes
+https://flatbuffers.dev/flatbuffers_internals.html
+https://github.com/dvidelabs/flatcc/blob/master/doc/binary-format.md
+* Defined in terms of offsets and adjacency only
+* Offset is uint32_t forwards
+* Format starts with offset to root table
+* Structs are inlined
+* Tables are referred to by offset
+  Start with signed offset to vtable
+  Followed by all fields as aligned scalars or offsets
+  Fields are optional, no set order/layout
+* vtable offset is u16
+  Starts with vtable size
+  Then size of object
+  Then N offsets
+* Unions: enum representing choice (plus NONE) and offset to element

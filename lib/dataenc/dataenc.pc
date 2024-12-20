@@ -1,0 +1,6 @@
+Name: dataenc
+Version: 0.0.1
+Description: <none>
+Libs: -L${build_prefix} -ldataenc
+Cflags: -I${src_prefix}/include
+Requirez: lib/cbase
