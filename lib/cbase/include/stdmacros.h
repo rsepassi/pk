@@ -52,9 +52,10 @@
 #endif
 
 #ifndef CONCAT
-#define CONCAT(a, b)       a##b
-#define UNIQUENAME(prefix) CONCAT(prefix, __LINE__)
+#define CONCAT_(a, b) a##b
+#define CONCAT(a, b)  CONCAT_(a, b)
 #endif
+#define UNIQUENAME(prefix) CONCAT(prefix, __COUNTER__)
 
 #define SWAP_U32(x)                                                            \
   (((x) >> 24) | (((x) & 0x00FF0000) >> 8) | (((x) & 0x0000FF00) << 8) |       \
