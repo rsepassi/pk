@@ -73,7 +73,7 @@ clean:
 	rm -rf $(BROOT)
 
 fmt:
-	clang-format -i `find lib cli -type f -name '*.c' -o -name '*.h'`
+	clang-format -i `find lib cli -type f -name '*.c' -o -name '*.inc' -o -name '*.h'`
 
 clangd: $(ALL_LIBS)
 	mkdir -p $(BROOT)/clangd

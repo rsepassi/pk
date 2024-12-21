@@ -1,10 +1,9 @@
-#include "stdtypes.h"
-#include "hashmap.h"
 #include "allocatormi.h"
-
-#include "sodium.h"
-#include "uv.h"
+#include "hashmap.h"
 #include "ngtcp2/ngtcp2.h"
+#include "sodium.h"
+#include "stdtypes.h"
+#include "uv.h"
 
 #define TCP2_LOCALHOST       "127.0.0.1"
 #define TCP2_LOCALHOST6      "::1"

@@ -1,5 +1,5 @@
-#include "nik_cxn.h"
 #include "log.h"
+#include "nik_cxn.h"
 #include "stdtypes.h"
 #include "unity.h"
 

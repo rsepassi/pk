@@ -17,13 +17,17 @@ typedef Bytes Str;
 
 // Convenience constructors
 #define Str(s)          ((Str){STRLEN((s)), (uint8_t*)(s)})
-#define Str0(s)         ((Str){strlen((s)), (uint8_t*)(s)})
+#define Str0(s)         ((Str){strlen((char*)(s)), (uint8_t*)(s)})
 #define BytesZero       ((Bytes){0, 0})
 #define Bytes(b, l)     ((Bytes){(l), (uint8_t*)(b)})
 #define BytesArray(arr) ((Bytes){sizeof(arr), (uint8_t*)(arr)})
 #define BytesObj(obj)   ((Bytes){sizeof(obj), (uint8_t*)&(obj)})
 
-#define PRIusz    "lu"
+#ifdef _WIN32
+#define PRIusz "llu"
+#else
+#define PRIusz "lu"
+#endif
 #define PRIStr    ".*s"
 #define StrPRI(s) (int)(s).len, (s).buf
 

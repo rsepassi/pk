@@ -13,7 +13,7 @@ static int xshmem_create2(XShmem* shmem, Str name, usize sz, int flags) {
   shmem->name_len       = (u8)(name.len + 1);
 
   int mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
-  int fd = shm_open((char*)shmem->name, O_RDWR | flags, mode);
+  int fd   = shm_open((char*)shmem->name, O_RDWR | flags, mode);
   if (fd < 0)
     return 1;
 
@@ -24,8 +24,7 @@ static int xshmem_create2(XShmem* shmem, Str name, usize sz, int flags) {
     }
   }
 
-  void* base =
-      mmap(0, sz, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  void* base = mmap(0, sz, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (base == MAP_FAILED)
     return 1;
 

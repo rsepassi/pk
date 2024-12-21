@@ -576,23 +576,23 @@ static int demo_opts(int argc, char** argv) {
 
 static int demo_shm(int argc, char** argv) {
   int create = 0;
-  Str f = BytesZero;
+  Str f      = BytesZero;
 
   struct optparse opts;
   optparse_init(&opts, argv);
   int option;
   while ((option = optparse(&opts, "cf:")) != -1) {
     switch (option) {
-    case 'c':
-      create = 1;
-      break;
-    case 'f':
-      f = Str0(opts.optarg);
-      break;
-    case '?':
-      LOGE("unrecognized option %c", option);
-      return 1;
-  }
+      case 'c':
+        create = 1;
+        break;
+      case 'f':
+        f = Str0(opts.optarg);
+        break;
+      case '?':
+        LOGE("unrecognized option %c", option);
+        return 1;
+    }
   }
 
   CHECK(f.len);
@@ -636,7 +636,7 @@ static const CliCmd commands[] = {
     {"demo-echo", demo_echo},             //
     {"demo-thread", demo_thread},         //
     {"demo-disco", demo_disco},           //
-    {"demo-shm", demo_shm},           //
+    {"demo-shm", demo_shm},               //
     {"pk", pk_main},                      //
     {0},
 };

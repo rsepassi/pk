@@ -1,7 +1,6 @@
 #include "nik.h"
-
-#include "unity.h"
 #include "stdtypes.h"
+#include "unity.h"
 
 void test_nik() {
   CryptoKxKeypair kx_keys_i;
