@@ -26,6 +26,7 @@
 #include "stdtypes.h"
 #include "taia.h"
 #include "uvco.h"
+#include "xshmem.h"
 
 #define MAX_PW_LEN 2048
 
@@ -573,6 +574,46 @@ static int demo_opts(int argc, char** argv) {
   return 0;
 }
 
+static int demo_shm(int argc, char** argv) {
+  int create = 0;
+  Str f = BytesZero;
+
+  struct optparse opts;
+  optparse_init(&opts, argv);
+  int option;
+  while ((option = optparse(&opts, "cf:")) != -1) {
+    switch (option) {
+    case 'c':
+      create = 1;
+      break;
+    case 'f':
+      f = Str0(opts.optarg);
+      break;
+    case '?':
+      LOGE("unrecognized option %c", option);
+      return 1;
+  }
+  }
+
+  CHECK(f.len);
+  LOGS(f);
+
+  XShmem shmem;
+  if (create) {
+    CHECK0(xshmem_create(&shmem, f, 4096));
+    char* s = "77 hello world!";
+    memcpy(shmem.mem.buf, s, strlen(s) + 1);
+    LOG("sleep...");
+    uvco_sleep(loop, 10000);
+  } else {
+    CHECK0(xshmem_open(&shmem, f, 4096));
+    LOGS(Str0(shmem.mem.buf));
+  }
+
+  xshmem_close(&shmem);
+  return 0;
+}
+
 typedef struct {
   int       argc;
   char**    argv;
@@ -595,6 +636,7 @@ static const CliCmd commands[] = {
     {"demo-echo", demo_echo},             //
     {"demo-thread", demo_thread},         //
     {"demo-disco", demo_disco},           //
+    {"demo-shm", demo_shm},           //
     {"pk", pk_main},                      //
     {0},
 };
