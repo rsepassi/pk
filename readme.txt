@@ -1,14 +1,17 @@
 pk
 ---
 
+Setup:
+  make vendor/yash SHELL=/bin/sh
+
 Build and run cli:
-  make cli && ./build/cli/bin/cli
+  make --silent -j cli && ./build/cli/bin/cli
 
 Build a library:
-  make vendor/sodium
+  make --silent -j vendor/sodium
 
 Test a library:
-  make lib/cbase/test
+  make --silent -j lib/cbase/test
 
 Test all:
   make test-clean

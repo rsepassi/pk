@@ -13,7 +13,7 @@ endif
 ifdef TEST_DEPS
 TEST_DEPS_OK := $(BDIR)/.testdeps.ok
 test-deps:
-	$(MAKE) -f $(ROOTDIR)/mk/deps2.mk DEPS_ARG="$(TEST_DEPS) vendor/unity" DEPS_OK_ARG="$(TEST_DEPS_OK)"
+	$(MAKE) -f $(ROOTDIR)/mk/deps2.mk DEPS_ARG="$(TEST_DEPS)" DEPS_OK_ARG="$(TEST_DEPS_OK)"
 else
 test-deps:
 	@:
