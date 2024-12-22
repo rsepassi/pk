@@ -1,0 +1,6 @@
+Name: tcp2
+Version: 0.0.1
+Description: <none>
+Libs: -L${build_prefix} -ltcp2
+Cflags: -I${src_prefix}/include
+Requirez: lib/cbase lib/stdtime vendor/sodium vendor/ngtcp2
