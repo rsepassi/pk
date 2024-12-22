@@ -1,6 +1,0 @@
-Name: stdtime
-Version: 0.0.1
-Description: <none>
-Libs: -L${build_prefix} -lstdtime
-Cflags: -I${src_prefix}/include
-Requirez: lib/cbase vendor/uv

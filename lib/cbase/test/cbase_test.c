@@ -6,6 +6,7 @@
 #include "queue.h"
 #include "stdmacros.h"
 #include "stdtypes.h"
+#include "stdtime.h"
 #include "str.h"
 #include "unity.h"
 
@@ -346,6 +347,21 @@ void test_parsefloat(void) {
   test_ffail(Str("1.7e-308"));
 }
 
+void test_stdtime(void) {
+  i64 now = stdtime_now_secs();
+
+  char ts_buf[STDTIME_RFC3339_UTC_TIMESTAMP_LEN];
+  Str  ts = BytesArray(ts_buf);
+
+  stdtime_rfc3339_utc_format(ts, now);
+  LOGS(ts);
+
+  i64 now2;
+  CHECK0(stdtime_rfc3339_utc_parse(ts, &now2));
+
+  CHECK(now == now2);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_allocator);
@@ -356,5 +372,6 @@ int main(void) {
   RUN_TEST(test_macros);
   RUN_TEST(test_parseint);
   RUN_TEST(test_parsefloat);
+  RUN_TEST(test_stdtime);
   return UNITY_END();
 }

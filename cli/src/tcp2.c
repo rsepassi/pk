@@ -1,8 +1,9 @@
+#include "tcp2.h"
+
 #include "allocatormi.h"
 #include "sodium.h"
 #include "stdnet.h"
 #include "stdtime.h"
-#include "tcp2.h"
 
 static int tcp2_recv_datagram(ngtcp2_conn* conn, uint32_t flags,
                               const uint8_t* data, size_t datalen,

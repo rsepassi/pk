@@ -1,4 +1,4 @@
-DEPS := lib/cbase lib/stdtime lib/coco vendor/uv vendor/minicoro
+DEPS := lib/cbase lib/coco vendor/uv vendor/minicoro
 
 include $(ROOTDIR)/mk/cc.mk
 include $(ROOTDIR)/mk/deps.mk

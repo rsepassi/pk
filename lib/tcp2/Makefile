@@ -1,4 +1,4 @@
-DEPS := lib/cbase lib/stdtime vendor/sodium vendor/ngtcp2
+DEPS := lib/cbase vendor/sodium vendor/ngtcp2
 
 LOCAL_CFLAGS += -Wno-unused-parameter
 

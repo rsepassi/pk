@@ -3,4 +3,4 @@ Version: 0.0.1
 Description: <none>
 Libs: -L${build_prefix} -luvco
 Cflags: -I${src_prefix}/include
-Requirez: lib/cbase lib/stdtime lib/coco vendor/uv vendor/minicoro
+Requirez: lib/cbase lib/coco vendor/uv vendor/minicoro
