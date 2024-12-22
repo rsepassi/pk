@@ -41,6 +41,12 @@ i64 stdtime_now_monotonic_ms(void) {
   return time.tv_sec * MS_PER_S + time.tv_nsec / NS_PER_MS;
 }
 
+i64 stdtime_now_monotonic_ns(void) {
+  uv_timespec64_t time;
+  uv_clock_gettime(UV_CLOCK_MONOTONIC, &time);
+  return time.tv_sec * MS_PER_S * NS_PER_MS + time.tv_nsec;
+}
+
 void stdtime_rfc3339_utc_format(Bytes ts, i64 epoch_secs) {
   CHECK(ts.len == STDTIME_RFC3339_UTC_TIMESTAMP_LEN);
   const time_t sec = epoch_secs;

@@ -15,3 +15,4 @@ i64  stdtime_now_secs(void);
 i64  stdtime_now_ms(void);
 i64  stdtime_now_monotonic_secs(void);
 i64  stdtime_now_monotonic_ms(void);
+i64  stdtime_now_monotonic_ns(void);
