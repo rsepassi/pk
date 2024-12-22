@@ -65,7 +65,7 @@ CFLAGS += -target $(TARGET) `need --cflags platform/linux`
 PLATFORM_LDFLAGS += -target $(TARGET) `need --libs platform/linux`
 
 platform:
-	$(MAKE) -C platform/linux $(T)
+	$(MAKE) -C platform/linux $(PLATFORM_T)
 
 else ifeq ($(TARGET_OS), freebsd)
 
@@ -78,7 +78,7 @@ CFLAGS += -target $(BSDTARGET) `need --cflags platform/freebsd`
 PLATFORM_LDFLAGS += -target $(BSDTARGET) `need --libs platform/freebsd`
 
 platform:
-	$(MAKE) -C platform/freebsd $(T)
+	$(MAKE) -C platform/freebsd $(PLATFORM_T)
 
 else ifeq ($(TARGET_OS), windows)
 
@@ -91,7 +91,7 @@ CFLAGS += -target $(WINTARGET) `need --cflags platform/windows`
 PLATFORM_LDFLAGS += -target $(WINTARGET) `need --libs platform/windows`
 
 platform:
-	$(MAKE) -C platform/windows $(T)
+	$(MAKE) -C platform/windows $(PLATFORM_T)
 
 else
 

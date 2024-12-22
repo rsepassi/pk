@@ -2,7 +2,7 @@ pk
 ---
 
 Setup:
-  make vendor/yash SHELL=/bin/sh
+  make vendor/yash SHELL=/bin/sh OPT=2
 
 Build and run cli:
   make --silent -j cli && ./build/cli/bin/cli
