@@ -221,3 +221,19 @@ int stdnet_sockaddr_cp(struct sockaddr* out, const struct sockaddr* in) {
   }
   return 0;
 }
+
+void stdnet_sockaddr_ip4(struct sockaddr* sa, const char* ip, uint16_t port) {
+  sa->sa_family = AF_INET;
+
+  struct sockaddr_in* sa_in = (void*)sa;
+  sa_in->sin_port           = port;
+  inet_pton(AF_INET, ip, &sa_in->sin_addr);
+}
+
+void stdnet_sockaddr_ip6(struct sockaddr* sa, const char* ip, uint16_t port) {
+  sa->sa_family = AF_INET6;
+
+  struct sockaddr_in6* sa_in = (void*)sa;
+  sa_in->sin6_port           = port;
+  inet_pton(AF_INET6, ip, &sa_in->sin6_addr);
+}

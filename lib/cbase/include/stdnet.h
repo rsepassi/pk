@@ -72,3 +72,6 @@ uint16_t stdnet_getport(const struct sockaddr* in);
 int      stdnet_sockaddr_cp(struct sockaddr* out, const struct sockaddr* in);
 bool     stdnet_sockaddr_eq(const struct sockaddr* a, const struct sockaddr* b);
 int      stdnet_port_parse(uint16_t* port, Str port_str);
+
+void stdnet_sockaddr_ip4(struct sockaddr* sa, const char* ip, uint16_t port);
+void stdnet_sockaddr_ip6(struct sockaddr* sa, const char* ip, uint16_t port);
