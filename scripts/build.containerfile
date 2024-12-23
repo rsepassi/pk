@@ -4,5 +4,5 @@
 # ./build/cli/bin/cli
 
 FROM alpine:3.21
-RUN apk add make pkgconf clang19 clang19-extra-tools llvm19 lld
+RUN apk add clang19 clang19-extra-tools llvm19 lld
 WORKDIR /root/pk

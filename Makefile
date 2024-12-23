@@ -1,3 +1,5 @@
+SHELL := yash
+
 # ==============================================================================
 # VARIABLES
 # ==============================================================================
@@ -16,7 +18,6 @@ BROOT_HOST := $(BROOT_ALL)/$(HOST)
 BCACHE := $(ROOTDIR)/.build-cache
 PATH := $(CURDIR)/scripts:$(PATH)
 ROOTTIME := $(shell date +%s)
-SHELL := $(BROOT_HOST)/vendor/yash/bin/yash
 
 USE_CLANG := 1
 ifeq ($(USE_CLANG), 1)
@@ -49,6 +50,7 @@ endif
 
 ifneq ($(OPT), 0)
 CFLAGS += \
+	-DNDEBUG \
 	-flto \
 	-fstack-protector-strong -fstack-clash-protection
 LDFLAGS += -flto

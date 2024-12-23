@@ -1,11 +1,12 @@
 pk
 ---
 
-Setup:
-  make vendor/yash SHELL=/bin/sh OPT=2
+Builds depend on:
+  yash make pkg-config clang-19
+  ./scripts/bootstrap.sh builds yash make pkg-config
 
 Build and run cli:
-  make --silent -j cli && ./build/cli/bin/cli
+  make --silent -j cli && ./build/out/bin/cli
 
 Build a library:
   make --silent -j vendor/sodium
