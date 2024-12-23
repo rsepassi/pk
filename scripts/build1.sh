@@ -11,7 +11,7 @@ then
   exit 0
 fi
 
-make -C $ROOTDIR/$target deps DEPS_ARG=
-make -C $ROOTDIR/$target DEPS_ARG=
+$MAKE -C $ROOTDIR/$target deps DEPS_ARG=
+$MAKE -C $ROOTDIR/$target DEPS_ARG=
 
 touch $updatef

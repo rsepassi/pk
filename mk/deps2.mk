@@ -54,7 +54,7 @@ $(DEPS_OK_ARG): $(DEPS_BUILDS)
 $(DEPS_ARG):
 		@mkdir -p $(BROOT)/$@; \
 		if [ ! -f $(BROOT)/$@/.lock ]; then touch $(BROOT)/$@/.lock; fi; \
-		flock $(BROOT)/$@/.lock -c "build1.sh $@"
+		MAKE=$(MAKE) flock $(BROOT)/$@/.lock -c "build1.sh $@"
 
 DEPS_CLEAN := $(addsuffix -clean, $(DEPS_ARG))
 .PHONY: clean-deps $(DEPS_CLEAN)
