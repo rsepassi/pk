@@ -12,7 +12,7 @@ void addup(void* arg) {
 void test_coco_pool(void) {
   Allocator al = allocator_libc();
   CocoPool  pool;
-  CHECK0(CocoPool_init(&pool, 8, 1024 * 32, al));
+  CHECK0(CocoPool_init(&pool, 8, 1024 * 32, al, Str("pool")));
 
   sum = 0;
   u64 nums[64];

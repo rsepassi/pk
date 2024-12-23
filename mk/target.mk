@@ -20,6 +20,10 @@ ifndef TARGET
 TARGET := $(HOST)
 endif
 
+ifneq ($(TARGET), $(HOST))
+XCOMP := 1
+endif
+
 TARGET_ARCH := $(word 1, $(subst -, ,$(TARGET)))
 TARGET_OS   := $(word 2, $(subst -, ,$(TARGET)))
 HOST_ARCH := $(word 1, $(subst -, ,$(HOST)))

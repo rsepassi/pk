@@ -49,7 +49,7 @@ endif
 ifeq ($(TARGET_OS), macos)
 
 MACTARGET := $(TARGET)
-ifeq ($(USE_CLANG), 1)
+ifeq ($(CC), clang-19)
 	MACTARGET := $(TARGET_ARCH)-apple-macosx13
 endif
 
@@ -61,8 +61,20 @@ platform:
 
 else ifeq ($(TARGET_OS), linux)
 
-CFLAGS += -target $(TARGET) `need --cflags platform/linux`
-PLATFORM_LDFLAGS += -target $(TARGET) `need --libs platform/linux`
+CFLAGS += `need --cflags platform/linux`
+PLATFORM_LDFLAGS += `need --libs platform/linux`
+
+ifeq ($(XCOMP), 1)
+CFLAGS += -target $(TARGET) 
+PLATFORM_LDFLAGS += -target $(TARGET) 
+endif
+
+ifneq ($(CC), tcc)
+CFLAGS += --sysroot=$(BROOT)/platform/linux/sysroot 
+PLATFORM_LDFLAGS += --sysroot=$(BROOT)/platform/linux/sysroot \
+  -resource-dir=$(BROOT)/platform/linux/linux_alpine/compiler-rt \
+  -static-pie -z relro -z now -z noexecstack
+endif
 
 platform:
 	$(MAKE) -C platform/linux $(PLATFORM_T)
@@ -70,7 +82,7 @@ platform:
 else ifeq ($(TARGET_OS), freebsd)
 
 BSDTARGET := $(TARGET)
-ifeq ($(USE_CLANG), 1)
+ifeq ($(CC), clang-19)
 	BSDTARGET := $(TARGET_ARCH)-unknown-freebsd
 endif
 
@@ -83,7 +95,7 @@ platform:
 else ifeq ($(TARGET_OS), windows)
 
 WINTARGET := $(TARGET)
-ifeq ($(USE_CLANG), 1)
+ifeq ($(CC), clang-19)
 	WINTARGET := $(TARGET_ARCH)-w64-mingw32
 endif
 

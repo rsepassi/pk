@@ -1,12 +1,10 @@
 Name: Linux musl libc
 Version: 1.2.5
 Description: Linux libc
-Cflags: --sysroot=${build_prefix}/sysroot \
+Cflags: \
   -isystem ${build_prefix}/sysroot/usr/include \
   -isystem ${build_prefix}/linux_alpine/usr/include \
   -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -D_POSIX_C_SOURCE=200809L
-Libs: --sysroot=${build_prefix}/sysroot \
+Libs: \
   -L${build_prefix}/sysroot/usr/lib \
-  -L${build_prefix}/linux_alpine/usr/lib \
-  -resource-dir=${build_prefix}/linux_alpine/compiler-rt \
-  -static-pie -z relro -z now -z noexecstack
+  -L${build_prefix}/linux_alpine/usr/lib

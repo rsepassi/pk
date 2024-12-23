@@ -7,8 +7,7 @@
 #include "qrcodegen.h"
 #include "uv.h"
 
-#define PEER2_URL           "https://peer2.xyz"
-#define PEER2_URLKEY_PREFIX (PEER2_URL "?key=")
+#define PEER2_URLKEY_PREFIX "https://peer2.xyz?key="
 
 // =============================================================================
 // DATA

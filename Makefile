@@ -8,7 +8,7 @@ include mk/target.mk
 export \
 	TARGET TARGET_OS TARGET_ARCH HOST HOST_OS HOST_ARCH \
 	ROOTDIR BROOT_ALL BROOT BROOT_HOST BCACHE PATH ROOTTIME \
-	SHELL CC CCLD AR CFLAGS LDFLAGS OPT \
+	SHELL CC CCLD AR CFLAGS LDFLAGS OPT XCOMP \
 	O EXE VALGRIND ASAN MSAN EXEC_PREFIX PLATFORM_LDFLAGS
 
 ROOTDIR := $(CURDIR)
@@ -19,15 +19,18 @@ BCACHE := $(ROOTDIR)/.build-cache
 PATH := $(CURDIR)/scripts:$(PATH)
 ROOTTIME := $(shell date +%s)
 
-USE_CLANG := 1
-ifeq ($(USE_CLANG), 1)
 CC := clang-19
 CCLD := clang-19
 AR := llvm-ar
-else
-CC := zig cc
+
+ifeq ($(CC), zig cc)
 CCLD := zig cc
 AR := zig ar
+endif
+
+ifeq ($(CC), tcc)
+CCLD := tcc
+AR := tcc -ar
 endif
 
 OPT := 0
@@ -43,7 +46,7 @@ CFLAGS += \
 	-fPIE
 LDFLAGS += -O$(OPT) -fuse-ld=lld
 
-ifeq ($(USE_CLANG), 1)
+ifeq ($(CC), clang-19)
 CFLAGS += --rtlib=compiler-rt
 LDFLAGS += --rtlib=compiler-rt
 endif
