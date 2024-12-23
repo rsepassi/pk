@@ -1,8 +1,20 @@
 include $(ROOTDIR)/mk/bdir.mk
 
-DEPS_PATHS := $(wildcard $(ROOTDIR)/lib/*)
 DEPS := \
-	$(DEPS_PATHS:$(ROOTDIR)/%=%) \
+	lib/allocatormi \
+	lib/base64 \
+	lib/bip39 \
+	lib/cbase \
+	lib/coco \
+	lib/crypto \
+	lib/dataenc \
+	lib/getpass \
+	lib/keyio \
+	lib/nik \
+	lib/signal \
+	lib/tcp2 \
+	lib/uvco \
+	lib/xshmem \
 	vendor/base58 \
 	vendor/fastrange \
 	vendor/lmdb \

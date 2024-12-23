@@ -288,6 +288,7 @@ extern void ct_unpoison(const void *, size_t);
 #ifdef HAVE_GCC_MEMORY_FENCES
 # define ACQUIRE_FENCE __atomic_thread_fence(__ATOMIC_ACQUIRE)
 #elif defined(HAVE_C11_MEMORY_FENCES)
+#include <stdatomic.h>
 # define ACQUIRE_FENCE atomic_thread_fence(memory_order_acquire)
 #else
 # define ACQUIRE_FENCE (void) 0

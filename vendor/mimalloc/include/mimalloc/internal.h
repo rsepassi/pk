@@ -38,7 +38,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak            __attribute__((weak))
 #else
 #define mi_decl_noinline
-#define mi_decl_thread          __thread        // hope for the best :-)
+#define mi_decl_thread
 #define mi_decl_cache_align
 #define mi_decl_weak
 #endif

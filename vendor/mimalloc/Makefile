@@ -25,6 +25,10 @@ LOCAL_CFLAGS += \
 	-Wno-conversion \
 	-Wno-unknown-pragmas
 
+ifeq ($(TARGET_OS), linux)
+LOCAL_CFLAGS += -DMI_LIBC_MUSL
+endif
+
 ifdef ASAN
 LOCAL_CFLAGS += -DMI_TRACK_ASAN=ON
 endif

@@ -845,14 +845,23 @@ __asm__(
 #ifdef __MACH__ /* Mac OS X assembler */
   ".globl __mco_wrap_main\n"
   "__mco_wrap_main:\n"
-#else /* Linux assembler */
+#else
+#ifdef __TINYC__
+  ".globl _mco_wrap_main\n"
+  "_mco_wrap_main:\n"
+#else  /* Linux assembler */
   ".globl _mco_wrap_main\n"
   ".type _mco_wrap_main @function\n"
   ".hidden _mco_wrap_main\n"
   "_mco_wrap_main:\n"
 #endif
+#endif
   "  movq %r13, %rdi\n"
+#ifdef __TINYC__
+  "  jmp *%r12\n"
+#else
   "  jmpq *%r12\n"
+#endif
 #ifndef __MACH__
   ".size _mco_wrap_main, .-_mco_wrap_main\n"
 #endif
@@ -863,11 +872,16 @@ __asm__(
 #ifdef __MACH__ /* Mac OS assembler */
   ".globl __mco_switch\n"
   "__mco_switch:\n"
+#else
+#ifdef __TINYC__
+  ".globl _mco_switch\n"
+  "_mco_switch:\n"
 #else /* Linux assembler */
   ".globl _mco_switch\n"
   ".type _mco_switch @function\n"
   ".hidden _mco_switch\n"
   "_mco_switch:\n"
+#endif
 #endif
   "  leaq 0x3d(%rip), %rax\n"
   "  movq %rax, (%rdi)\n"
@@ -885,7 +899,11 @@ __asm__(
   "  movq 24(%rsi), %rbx\n"
   "  movq 16(%rsi), %rbp\n"
   "  movq 8(%rsi), %rsp\n"
+#ifdef __TINYC__
+  "  jmp *(%rsi)\n"
+#else
   "  jmpq *(%rsi)\n"
+#endif
   "  ret\n"
 #ifndef __MACH__
   ".size _mco_switch, .-_mco_switch\n"

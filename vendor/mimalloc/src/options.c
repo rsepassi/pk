@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <stdio.h>      // stdin/stdout
 #include <stdlib.h>     // abort
+#include <limits.h>     // LONG_MAX
 
 
 

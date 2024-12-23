@@ -56,6 +56,10 @@ CFLAGS += \
 LDFLAGS += -flto
 endif
 
+ifeq ($(CC), tcc)
+CFLAGS += -Wno-error
+endif
+
 TEST_DIRS := $(wildcard lib/*) vendor/base58 vendor/qrcodegen vendor/sss
 ALL_LIBS := cli $(wildcard lib/*) $(wildcard vendor/*)
 ALL_LIBS_NOLINK := $(addsuffix .nolink, $(ALL_LIBS))

@@ -14,7 +14,6 @@ LOCAL_CFLAGS := \
 	-DHAVE_ATOMIC_OPS=1 \
 	-DHAVE_C11_MEMORY_FENCES=1 \
 	-DHAVE_CET_H=1 \
-	-DHAVE_GCC_MEMORY_FENCES=1 \
 	-DHAVE_INLINE_ASM=1 \
 	-DHAVE_INTTYPES_H=1 \
 	-DHAVE_STDINT_H=1 \
@@ -29,9 +28,14 @@ LOCAL_CFLAGS := \
 	-Wno-unused-but-set-variable
 
 ifeq ($(TARGET_OS), linux)
+ifeq ($(CC), tcc)
+	LOCAL_CFLAGS += -DTLS=
+else
+	LOCAL_CFLAGS += -DTLS=_Thread_local
+endif
+	
 	LOCAL_CFLAGS += \
 		-DASM_HIDE_SYMBOL=.hidden \
-		-DTLS=_Thread_local \
 		-DHAVE_CATCHABLE_ABRT=1 \
 		-DHAVE_CATCHABLE_SEGV=1 \
 		-DHAVE_CLOCK_GETTIME=1 \
@@ -107,6 +111,7 @@ else ifeq ($(TARGET_OS), freebsd)
 		-DHAVE_WEAK_SYMBOLS=1
 endif
 
+ifneq ($(CC), tcc)
 ifeq ($(TARGET_ARCH), x86_64)
 	ifneq ($(TARGET_OS), windows)
 		LOCAL_CFLAGS += -DHAVE_AMD64_ASM=1 -DHAVE_AVX_ASM=1
@@ -125,6 +130,7 @@ ifeq ($(TARGET_ARCH), x86_64)
 		-DHAVE_RDRAND=1
 else ifeq ($(TARGET_ARCH), aarch64)
 	LOCAL_CFLAGS += -DHAVE_ARMCRYPTO=1
+endif
 endif
 
 include $(ROOTDIR)/mk/cc.mk
